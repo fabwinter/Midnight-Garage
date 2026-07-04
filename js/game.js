@@ -1,0 +1,1095 @@
+/* Midnight Garage — main app.
+   Phase 0 + v1.0 of docs/SEQUENCING-PLAN.md: rebrand, chapters, game feel
+   (weight/flick/dust), onboarding, session flow, accessibility, analytics,
+   daily puzzle + share card, Pro Garage gating. */
+
+import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
+import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
+import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
+import { load, store, todayStr } from './storage.js';
+import { sfx, setSfxVolume, setMusicVolume } from './audio.js';
+import { haptic, setHapticsEnabled } from './haptics.js';
+import { initAnalytics, track, flush } from './analytics.js';
+import { initI18n, t } from './i18n.js';
+import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
+import { dailyShareText, shareText } from './share.js';
+import { setStreakReminder } from './notify.js';
+
+const $ = id => document.getElementById(id);
+const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
+const SKIP_AFTER_MS = 8 * 60 * 1000;         // quiet skip valve (plan 0.7)
+const HINT_TOKENS_PER_DAY = 3;
+
+/* ================== STATE ================== */
+let mode = { type: 'campaign' };             // or {type:'daily', date, level}
+let cur = 0;                                  // campaign level index
+let curLevel = null;                          // {m, p} for whatever is on the board
+let pieces = [];
+let history = [];
+let moves = 0;
+let undos = 0, hintsUsed = 0;
+let solvedAnim = false;
+let levelStart = Date.now();
+let skipShown = false;
+
+let save = {
+  unlocked: 1,
+  stars: {}, best: {},
+  pro: false,
+  streak3: 0,
+  hints: { day: '', left: HINT_TOKENS_PER_DAY },
+  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false },
+};
+let memOnly = false;
+
+async function persist(){
+  if(memOnly) return;
+  if(!await store('save_v1', save)){
+    memOnly = true;
+    toast(t('toast.saveoff'));
+  }
+}
+
+/* ================== PALETTE / CAR ART ================== */
+const PALETTE = [ // [base, dark, glass] — 0 reserved for hero red
+  ['#ff4d5e','#b3111f','#41151d'],
+  ['#37c8ab','#177a67','#0e2f2b'],
+  ['#5b8dff','#2a4fc4','#14203f'],
+  ['#ffb340','#c47a10','#3c2a0c'],
+  ['#b07cff','#6f3ad0','#291743'],
+  ['#7ed957','#3f9427','#1d3313'],
+  ['#ff8a5c','#c9502a','#3d1c10'],
+  ['#4fd2f0','#1f8fb0','#0f2c37'],
+  ['#f26fb1','#bb3679','#3a1229'],
+  ['#c9d36a','#8b9430','#2d3113'],
+  ['#8fa2bd','#57687f','#1e2530'],
+  ['#ffd84d','#d1a213','#3b3106'],
+  ['#67e0c2','#2b9c82','#123128'],
+  ['#d98cff','#9b45d6','#2f1440'],
+];
+
+function lighten(hex, amt){
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.round(r + (255 - r) * amt); g = Math.round(g + (255 - g) * amt); b = Math.round(b + (255 - b) * amt);
+  return `rgb(${r},${g},${b})`;
+}
+
+/* Roof decals (plan 0.8): color-blind mode gives every paint color a
+   distinct pattern — reads as art variety, not an accessibility toggle. */
+function decalSVG(idx, L, H){
+  if(!save.settings.colorblind || idx === 0) return '';
+  const cx = L * 0.30, cy = H / 2, ink = 'rgba(255,255,255,.5)';
+  switch((idx - 1) % 5){
+    case 0: // twin stripes
+      return `<rect x="${cx-9}" y="${H*0.24}" width="7" height="${H*0.52}" rx="3" fill="${ink}"/>
+              <rect x="${cx+4}" y="${H*0.24}" width="7" height="${H*0.52}" rx="3" fill="${ink}"/>`;
+    case 1: // dots
+      return `<circle cx="${cx-8}" cy="${cy}" r="5.5" fill="${ink}"/><circle cx="${cx+8}" cy="${cy-9}" r="5.5" fill="${ink}"/><circle cx="${cx+8}" cy="${cy+9}" r="5.5" fill="${ink}"/>`;
+    case 2: // chevron
+      return `<path d="M ${cx-10} ${cy-11} L ${cx+2} ${cy} L ${cx-10} ${cy+11}" fill="none" stroke="${ink}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M ${cx+2} ${cy-11} L ${cx+14} ${cy} L ${cx+2} ${cy+11}" fill="none" stroke="${ink}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case 3: // ring
+      return `<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="${ink}" stroke-width="6"/>`;
+    default: // cross
+      return `<rect x="${cx-3.5}" y="${cy-12}" width="7" height="24" rx="3" fill="${ink}"/>
+              <rect x="${cx-12}" y="${cy-3.5}" width="24" height="7" rx="3" fill="${ink}"/>`;
+  }
+}
+
+const U = 100;
+function carSVG(idx, len, dir, isHero){
+  const [base, dark, glass] = isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)];
+  const L = len * U, H = U;
+  const gid = 'g' + idx + '-' + Math.random().toString(36).slice(2, 7);
+  const truck = len === 3;
+  let inner = `
+  <defs>
+    <linearGradient id="${gid}b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${lighten(base, .28)}"/>
+      <stop offset=".45" stop-color="${base}"/>
+      <stop offset="1" stop-color="${dark}"/>
+    </linearGradient>
+    <linearGradient id="${gid}r" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${lighten(base, .45)}"/>
+      <stop offset="1" stop-color="${base}"/>
+    </linearGradient>
+    <linearGradient id="${gid}g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${lighten(glass, .7)}"/>
+      <stop offset="1" stop-color="${glass}"/>
+    </linearGradient>
+  </defs>`;
+  const wheel = x => `<rect x="${x}" y="4" width="26" height="13" rx="6" fill="#0c0f15"/><rect x="${x}" y="${H - 17}" width="26" height="13" rx="6" fill="#0c0f15"/>
+    <rect x="${x + 4}" y="6" width="18" height="4" rx="2" fill="#2a3140"/><rect x="${x + 4}" y="${H - 10}" width="18" height="4" rx="2" fill="#2a3140"/>`;
+  if(!truck){
+    inner += `
+    ${wheel(26)} ${wheel(L - 54)}
+    <rect x="8" y="12" width="${L - 16}" height="${H - 24}" rx="26" fill="url(#${gid}b)"/>
+    <rect x="8" y="12" width="${L - 16}" height="${H - 24}" rx="26" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>
+    <rect x="12" y="15" width="${L - 24}" height="14" rx="10" fill="rgba(255,255,255,.20)" opacity=".8"/>
+    <path d="M ${L * 0.30} 18 L ${L * 0.42} 26 L ${L * 0.42} ${H - 26} L ${L * 0.30} ${H - 18} Z" fill="url(#${gid}g)"/>
+    <path d="M ${L * 0.78} 20 L ${L * 0.68} 27 L ${L * 0.68} ${H - 27} L ${L * 0.78} ${H - 20} Z" fill="url(#${gid}g)" opacity=".92"/>
+    <rect x="${L * 0.44}" y="20" width="${L * 0.22}" height="${H - 40}" rx="12" fill="url(#${gid}r)"/>
+    <rect x="${L * 0.44}" y="23" width="${L * 0.22}" height="9" rx="5" fill="rgba(255,255,255,.35)"/>
+    <circle cx="${L - 16}" cy="30" r="5.5" fill="#fff6d8"/><circle cx="${L - 16}" cy="${H - 30}" r="5.5" fill="#fff6d8"/>
+    <circle cx="${L - 16}" cy="30" r="5.5" fill="none" stroke="rgba(0,0,0,.2)"/><circle cx="${L - 16}" cy="${H - 30}" r="5.5" fill="none" stroke="rgba(0,0,0,.2)"/>
+    <rect x="10" y="26" width="5" height="10" rx="2.5" fill="#ff6a4d"/><rect x="10" y="${H - 36}" width="5" height="10" rx="2.5" fill="#ff6a4d"/>
+    ${decalSVG(idx, L, H)}`;
+    if(isHero){
+      inner += `<g opacity=".55"><path d="M ${L - 12} 24 L ${L + 46} 8 L ${L + 46} 44 Z" fill="#fff3c9" opacity=".28"/>
+      <path d="M ${L - 12} ${H - 24} L ${L + 46} ${H - 8} L ${L + 46} ${H - 44} Z" fill="#fff3c9" opacity=".28"/></g>`;
+    }
+  } else {
+    inner += `
+    ${wheel(24)} ${wheel(L * 0.42)} ${wheel(L - 52)}
+    <rect x="8" y="14" width="${L * 0.66}" height="${H - 28}" rx="12" fill="url(#${gid}b)"/>
+    <rect x="8" y="14" width="${L * 0.66}" height="${H - 28}" rx="12" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>
+    <rect x="12" y="17" width="${L * 0.66 - 8}" height="11" rx="6" fill="rgba(255,255,255,.16)"/>
+    ${[0.16, 0.32, 0.48].map(f => `<line x1="${8 + L * 0.66 * f}" y1="20" x2="${8 + L * 0.66 * f}" y2="${H - 20}" stroke="rgba(0,0,0,.22)" stroke-width="2"/>`).join('')}
+    <rect x="${L * 0.68}" y="12" width="${L * 0.29}" height="${H - 24}" rx="20" fill="url(#${gid}b)"/>
+    <rect x="${L * 0.68}" y="12" width="${L * 0.29}" height="${H - 24}" rx="20" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>
+    <path d="M ${L * 0.80} 19 L ${L * 0.74} 26 L ${L * 0.74} ${H - 26} L ${L * 0.80} ${H - 19} Z" fill="url(#${gid}g)"/>
+    <rect x="${L * 0.82}" y="21" width="${L * 0.10}" height="${H - 42}" rx="9" fill="url(#${gid}r)"/>
+    <circle cx="${L - 15}" cy="29" r="5" fill="#fff6d8"/><circle cx="${L - 15}" cy="${H - 29}" r="5" fill="#fff6d8"/>
+    <rect x="10" y="27" width="5" height="9" rx="2.5" fill="#ff6a4d"/><rect x="10" y="${H - 36}" width="5" height="9" rx="2.5" fill="#ff6a4d"/>
+    ${decalSVG(idx, L, H)}`;
+  }
+  const W = dir === 'h' ? L : U, Ht = dir === 'h' ? U : L;
+  const g = dir === 'h' ? `<g>${inner}</g>` : `<g transform="translate(${U},0) rotate(90)">${inner}</g>`;
+  return `<svg viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">${g}</svg>`;
+}
+
+/* ================== BOARD RENDER ================== */
+const board = $('board');
+const gate = $('gate');
+let CELL = 64;
+
+function layout(){
+  const vw = Math.min(window.innerWidth, 560) - 28 - 32;
+  const vh = window.innerHeight - 320;
+  CELL = Math.floor(Math.max(40, Math.min(vw, Math.max(vh, 240))) / 6);
+  document.documentElement.style.setProperty('--cell', CELL + 'px');
+  gate.style.top = (16 + EXIT_ROW * CELL - 4) + 'px';
+  gate.style.height = (CELL + 8) + 'px';
+  drawGrid();
+  renderPositions(false);
+}
+function drawGrid(){
+  const s = CELL * 6;
+  const svg = $('gridlines');
+  svg.setAttribute('viewBox', `0 0 ${s} ${s}`);
+  let h = '';
+  for(let i = 1; i < 6; i++){
+    h += `<line x1="${i * CELL}" y1="0" x2="${i * CELL}" y2="${s}"/>`;
+    h += `<line x1="0" y1="${i * CELL}" x2="${s}" y2="${i * CELL}"/>`;
+  }
+  const tick = Math.max(6, CELL * 0.14), o = Math.max(3, CELL * 0.075);
+  for(let r = 0; r < 6; r++) for(let c = 0; c < 6; c++){
+    const x = c * CELL, y = r * CELL;
+    h += `<path d="M ${x + o + tick} ${y + o} h ${-tick} v ${tick} M ${x + CELL - o - tick} ${y + o} h ${tick} v ${tick}
+           M ${x + o + tick} ${y + CELL - o} h ${-tick} v ${-tick} M ${x + CELL - o - tick} ${y + CELL - o} h ${tick} v ${-tick}"
+           fill="none" stroke="rgba(255,255,255,.055)" stroke-width="2" stroke-linecap="round"/>`;
+  }
+  svg.innerHTML = h;
+}
+
+function grid(exclude = -1){
+  const g = Array.from({ length: N }, () => Array(N).fill(-1));
+  pieces.forEach((p, i) => {
+    if(i === exclude) return;
+    for(let k = 0; k < p.len; k++){
+      g[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] = i;
+    }
+  });
+  return g;
+}
+
+/* Weight (plan 0.5): trucks settle slower and heavier than cars. */
+function easingFor(len, distCells){
+  const base = len === 3 ? 0.26 : 0.18;
+  const dur = Math.min(0.42, base + distCells * 0.028);
+  const curve = len === 3 ? 'cubic-bezier(.3,.75,.35,1.06)' : 'cubic-bezier(.22,.9,.3,1.15)';
+  return `transform ${dur}s ${curve}`;
+}
+
+function buildPieces(){
+  board.querySelectorAll('.piece').forEach(el => el.remove());
+  pieces.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = 'piece' + (i === 0 ? ' hero' : '');
+    el.dataset.idx = i;
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    el.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
+    el.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
+    el.innerHTML = carSVG(i, p.len, p.dir, i === 0);
+    el.classList.add('enter');
+    el.style.animationDelay = (i * 0.028) + 's';
+    el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
+    board.appendChild(el);
+    attachDrag(el, i);
+  });
+  updatePieceAria();
+  renderPositions(false);
+}
+function updatePieceAria(){
+  board.querySelectorAll('.piece').forEach(el => {
+    const i = +el.dataset.idx, p = pieces[i];
+    if(!p) return;
+    el.setAttribute('aria-label',
+      (i === 0 ? 'Red car — escape this one' : `Vehicle ${i}, ${p.len === 3 ? 'truck' : 'car'}`) +
+      `, row ${p.r + 1}, column ${p.c + 1}, ` +
+      (p.dir === 'h' ? 'moves left and right' : 'moves up and down'));
+  });
+}
+function renderPositions(animate = true){
+  board.querySelectorAll('.piece').forEach(el => {
+    const i = +el.dataset.idx, p = pieces[i];
+    if(!p) return;
+    el.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
+    el.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
+    if(!animate) el.style.transition = 'none';
+    el.style.transform = `translate(${p.c * CELL}px, ${p.r * CELL}px)`;
+    if(!animate){ void el.offsetWidth; el.style.transition = ''; }
+  });
+}
+
+/* ================== DRAG + FLICK ================== */
+function rangeFor(i){
+  const p = pieces[i], g = grid(i);
+  let lo, hi;
+  if(p.dir === 'h'){
+    lo = p.c; while(lo > 0 && g[p.r][lo - 1] === -1) lo--;
+    hi = p.c; while(hi + p.len < N && g[p.r][hi + p.len] === -1) hi++;
+  } else {
+    lo = p.r; while(lo > 0 && g[lo - 1][p.c] === -1) lo--;
+    hi = p.r; while(hi + p.len < N && g[hi + p.len][p.c] === -1) hi++;
+  }
+  return [lo, hi];
+}
+
+function attachDrag(el, i){
+  let startX = 0, startY = 0, startPos = 0, lo = 0, hi = 0;
+  let dragging = false, lastSlideT = 0, lastCell = 0, hitWall = false;
+  let samples = [];
+  const p = () => pieces[i];
+
+  el.addEventListener('pointerdown', e => {
+    if(solvedAnim) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    dragging = true; hitWall = false;
+    el.classList.add('drag');
+    startX = e.clientX; startY = e.clientY;
+    startPos = p().dir === 'h' ? p().c : p().r;
+    lastCell = startPos;
+    samples = [{ t: performance.now(), pos: startPos }];
+    [lo, hi] = rangeFor(i);
+    clearHint();
+    clearHand();
+  });
+
+  el.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    const d = p().dir === 'h' ? (e.clientX - startX) : (e.clientY - startY);
+    let pos = startPos + d / CELL;
+    if(pos < lo){ pos = lo - Math.min(0.22, (lo - pos) * 0.25); if(!hitWall){ hitWall = true; haptic(p().len === 3 ? 'thudHeavy' : 'thud'); } }
+    else if(pos > hi){ pos = hi + Math.min(0.22, (pos - hi) * 0.25); if(!hitWall){ hitWall = true; haptic(p().len === 3 ? 'thudHeavy' : 'thud'); } }
+    else hitWall = false;
+    const x = p().dir === 'h' ? pos * CELL : p().c * CELL;
+    const y = p().dir === 'v' ? pos * CELL : p().r * CELL;
+    el.style.transform = `translate(${x}px, ${y}px)`;
+    const now = performance.now();
+    samples.push({ t: now, pos });
+    if(samples.length > 8) samples.shift();
+    // light tick per cell crossed (plan 0.4)
+    const cellNow = Math.round(Math.max(lo, Math.min(hi, pos)));
+    if(cellNow !== lastCell){ haptic('tick'); lastCell = cellNow; }
+    if(Math.abs(d) > CELL * 0.4 && now - lastSlideT > 130){ sfx('slide'); lastSlideT = now; }
+  });
+
+  const finish = e => {
+    if(!dragging) return;
+    dragging = false;
+    el.classList.remove('drag');
+    const d = p().dir === 'h' ? (e.clientX - startX) : (e.clientY - startY);
+    const rawPos = startPos + d / CELL;
+
+    // flick velocity over the last ~90ms of the gesture (plan 0.5)
+    const now = performance.now();
+    const old = samples.find(s => now - s.t <= 90) ?? samples[0];
+    const last = samples[samples.length - 1] ?? { t: now, pos: rawPos };
+    const dt = Math.max(1, last.t - old.t);
+    const v = (last.pos - old.pos) / dt;          // cells per ms
+
+    let target;
+    let flicked = false;
+    if(Math.abs(v) > 0.006 && Math.abs(d) > CELL * 0.15){
+      target = v > 0 ? hi : lo;                    // flick slides to the wall
+      flicked = target !== Math.max(lo, Math.min(hi, Math.round(rawPos)));
+    } else {
+      target = Math.round(rawPos);
+    }
+    target = Math.max(lo, Math.min(hi, target));
+
+    const before = p().dir === 'h' ? p().c : p().r;
+    if(target !== before){
+      pushHistory();
+      if(p().dir === 'h') p().c = target; else p().r = target;
+      const dist = Math.abs(target - before);
+      if(flicked){
+        el.style.transition = `transform ${Math.min(0.45, 0.12 + dist * 0.055)}s cubic-bezier(.18,.7,.3,1.12)`;
+        el.addEventListener('transitionend', () => {
+          el.style.transition = '';
+          if(target === lo || target === hi){
+            haptic(p().len === 3 ? 'thudHeavy' : 'thud');
+            sfx('thud');
+            dustAt(i, target === hi);
+          }
+        }, { once: true });
+      } else {
+        el.style.transition = easingFor(p().len, dist);
+        el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+      }
+      commitMove(i);
+    } else {
+      renderPositions(true);
+      if(Math.abs(d) > CELL * 0.35) sfx('deny');
+    }
+  };
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+
+  el.addEventListener('keydown', e => {
+    if(solvedAnim) return;
+    const map = { ArrowLeft: [-1, 'h'], ArrowRight: [1, 'h'], ArrowUp: [-1, 'v'], ArrowDown: [1, 'v'] };
+    const m = map[e.key];
+    if(!m) return;
+    e.preventDefault();
+    const pp = p();
+    if(pp.dir !== m[1]){ sfx('deny'); return; }
+    const [klo, khi] = rangeFor(i);
+    const at = pp.dir === 'h' ? pp.c : pp.r;
+    const to = at + m[0];
+    if(to < klo || to > khi){ sfx('deny'); return; }
+    pushHistory();
+    if(pp.dir === 'h') pp.c = to; else pp.r = to;
+    commitMove(i);
+  });
+}
+
+function pushHistory(){
+  history.push(pieces.map(p => ({ r: p.r, c: p.c })));
+  if(history.length > 500) history.shift();
+  updateHud();
+}
+function commitMove(i){
+  moves++;
+  sfx('snap');
+  renderPositions(true);
+  updateHud();
+  updatePieceAria();
+  const p = pieces[i];
+  $('srLive').textContent = (i === 0 ? 'Red car' : 'Vehicle ' + i) + ` to row ${p.r + 1}, column ${p.c + 1}`;
+  if(i === 0 && pieces[0].c === N - pieces[0].len){
+    winSequence();
+  } else {
+    scheduleHand();
+  }
+}
+
+/* ================== HUD ================== */
+function parOf(){ return curLevel.m; }
+function starCountFor(par, usedMoves){
+  if(usedMoves <= par) return 3;
+  if(usedMoves <= par + Math.max(3, Math.ceil(par * 0.35))) return 2;
+  return 1;
+}
+function starStr(n, size = 3){
+  let s = '';
+  for(let i = 0; i < size; i++) s += i < n ? '★' : '<span class="off">★</span>';
+  return s;
+}
+function chapterOf(idx){ return Math.floor(idx / CHAPTER_SIZE); }
+
+function applyChapterAccent(){
+  const accent = mode.type === 'daily' ? '#ffb454' : CHAPTERS[chapterOf(cur)].accent;
+  document.documentElement.style.setProperty('--accent', accent);
+}
+
+function updateHud(){
+  if(mode.type === 'daily'){
+    $('hudLevel').textContent = '#' + mode.number;
+    $('hudTier').textContent = t('hud.daily');
+    $('hudStars').innerHTML = isDone(mode.date) ? starStr(daily().done[mode.date].stars) : starStr(0);
+  } else {
+    $('hudLevel').textContent = cur + 1;
+    $('hudTier').textContent = CHAPTERS[chapterOf(cur)].name;
+    $('hudStars').innerHTML = starStr(save.stars[cur] || 0);
+  }
+  $('hudMoves').textContent = moves;
+  $('hudPar').textContent = parOf();
+  $('undoBtn').disabled = history.length === 0 || solvedAnim;
+  const s3 = $('hudStreak3');
+  s3.textContent = `🔥 ${save.streak3}×3★`;
+  s3.classList.toggle('on', save.streak3 >= 2 && mode.type === 'campaign');
+  updateControlsVisibility();
+  updateHintBadge();
+  $('dailyDot').classList.toggle('on', !isDone(todayStr()));
+}
+
+/* Onboarding (plan 0.6): hint appears at level 4, undo at level 6. */
+function updateControlsVisibility(){
+  const onboarding = mode.type === 'campaign';
+  const hideHint = onboarding && cur < 3;
+  const hideUndo = onboarding && cur < 5;
+  $('hintBtn').classList.toggle('hidden', hideHint);
+  $('undoBtn').classList.toggle('hidden', hideUndo);
+  const visible = 3 - (hideHint ? 1 : 0) - (hideUndo ? 1 : 0);
+  $('controls').classList.toggle('two', visible === 2);
+  $('controls').classList.toggle('one', visible === 1);
+}
+
+function updateHintBadge(){
+  const b = $('hintBadge');
+  if(save.pro){ b.hidden = true; return; }
+  refreshHintTokens();
+  b.hidden = $('hintBtn').classList.contains('hidden');
+  b.textContent = save.hints.left;
+}
+function refreshHintTokens(){
+  const today = todayStr();
+  if(save.hints.day !== today){
+    save.hints = { day: today, left: HINT_TOKENS_PER_DAY };
+  }
+}
+
+/* ================== LEVEL LOAD ================== */
+function abandonIfMidLevel(){
+  if(moves > 0 && !solvedAnim){
+    track('level_abandon', {
+      mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1,
+      moves, time_s: Math.round((Date.now() - levelStart) / 1000),
+    });
+  }
+}
+
+function loadLevel(idx){
+  abandonIfMidLevel();
+  mode = { type: 'campaign' };
+  cur = idx;
+  curLevel = LEVELS[idx];
+  startBoard();
+  track('level_start', { level: idx + 1, par: curLevel.m, chapter: chapterOf(idx) + 1 });
+}
+
+function loadDailyLevel(dateStr){
+  abandonIfMidLevel();
+  const lv = dailyLevel(dateStr);
+  mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
+  curLevel = lv;
+  startBoard();
+  track('daily_start', { date: dateStr, number: mode.number, par: lv.m });
+}
+
+function startBoard(){
+  pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  history = []; moves = 0; undos = 0; hintsUsed = 0;
+  solvedAnim = false;
+  levelStart = Date.now();
+  skipShown = false;
+  $('skipRow').classList.remove('show');
+  clearHint(); clearHand();
+  applyChapterAccent();
+  buildPieces();
+  updateHud();
+  updateCoach();
+  scheduleHand();
+}
+
+function undo(){
+  if(!history.length || solvedAnim) return;
+  const s = history.pop();
+  s.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
+  moves = Math.max(0, moves - 1);
+  undos++;
+  sfx('ui'); haptic('ui');
+  track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  renderPositions(true);
+  updateHud();
+  updatePieceAria();
+}
+
+/* ================== HINTS ================== */
+let hintTimer = null;
+function clearHint(){
+  document.querySelectorAll('.hint-glow').forEach(el => el.classList.remove('hint-glow'));
+  document.querySelectorAll('.hint-arrow').forEach(el => el.remove());
+  if(hintTimer){ clearTimeout(hintTimer); hintTimer = null; }
+}
+function showHint(){
+  if(solvedAnim) return;
+  if(!save.pro){
+    refreshHintTokens();
+    if(save.hints.left <= 0){
+      toast(t('toast.nohints'));
+      showOverlay('proOverlay');
+      track('iap_view', { source: 'hints' });
+      return;
+    }
+  }
+  clearHint();
+  const mv = firstOptimalMove(pieces);
+  if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
+  if(!save.pro){
+    save.hints.left--;
+    persist();
+    updateHintBadge();
+  }
+  hintsUsed++;
+  sfx('ui');
+  track('hint_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  const el = board.querySelector(`.piece[data-idx="${mv.idx}"]`);
+  el.classList.add('hint-glow');
+  const p = pieces[mv.idx];
+  const dr = mv.r - p.r, dc = mv.c - p.c;
+  const arrow = document.createElement('div');
+  arrow.className = 'hint-arrow';
+  arrow.textContent = dc > 0 ? '→' : dc < 0 ? '←' : dr > 0 ? '↓' : '↑';
+  const cx = (p.dir === 'h' ? (dc > 0 ? p.c + p.len : p.c - 1) : p.c);
+  const cyr = (p.dir === 'v' ? (dr > 0 ? p.r + p.len : p.r - 1) : p.r);
+  arrow.style.left = cx * CELL + 'px';
+  arrow.style.top = cyr * CELL + 'px';
+  arrow.style.width = CELL + 'px';
+  arrow.style.height = CELL + 'px';
+  board.appendChild(arrow);
+  hintTimer = setTimeout(clearHint, 3200);
+}
+
+/* ================== ONBOARDING (plan 0.6) ================== */
+function updateCoach(){
+  const el = $('coach');
+  if(mode.type === 'campaign' && cur < 3){
+    el.textContent = t('coach.' + (cur + 1));
+    el.classList.add('on');
+  } else {
+    el.textContent = '';
+    el.classList.remove('on');
+  }
+}
+
+let handTimer = null;
+function clearHand(){
+  document.querySelectorAll('.hand').forEach(el => el.remove());
+  if(handTimer){ clearTimeout(handTimer); handTimer = null; }
+}
+function scheduleHand(){
+  clearHand();
+  if(!(mode.type === 'campaign' && cur < 3) || solvedAnim) return;
+  handTimer = setTimeout(showHand, moves === 0 ? 900 : 3500);
+}
+function showHand(){
+  if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
+  const mv = firstOptimalMove(pieces);
+  if(!mv) return;
+  const p = pieces[mv.idx];
+  const hand = document.createElement('div');
+  hand.className = 'hand';
+  hand.textContent = '👆';
+  const midR = p.r + (p.dir === 'v' ? Math.min(p.len - 1, 1) * 0.5 : 0);
+  const midC = p.c + (p.dir === 'h' ? Math.min(p.len - 1, 1) * 0.5 : 0);
+  hand.style.left = (midC * CELL + CELL * 0.2) + 'px';
+  hand.style.top = (midR * CELL + CELL * 0.25) + 'px';
+  hand.style.setProperty('--hx', (mv.c - p.c) * CELL + 'px');
+  hand.style.setProperty('--hy', (mv.r - p.r) * CELL + 'px');
+  board.appendChild(hand);
+}
+
+/* ================== SKIP VALVE (plan 0.7) ================== */
+setInterval(() => {
+  if(mode.type !== 'campaign' || solvedAnim || skipShown) return;
+  if(Date.now() - levelStart >= SKIP_AFTER_MS){
+    skipShown = true;
+    $('skipRow').classList.add('show');
+  }
+}, 15000);
+
+function skipLevel(){
+  track('level_skip', { level: cur + 1, time_s: Math.round((Date.now() - levelStart) / 1000) });
+  save.stars[cur] = Math.max(save.stars[cur] || 0, 1);
+  save.streak3 = 0;
+  save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, cur + 2));
+  persist();
+  toast(t('toast.skip'));
+  advance();
+}
+
+/* ================== WIN ================== */
+let autoTimer = null;
+function winSequence(){
+  solvedAnim = true;
+  clearHint(); clearHand();
+  updateHud();
+  sfx('win');
+  haptic('success');
+  const hero = board.querySelector('.piece[data-idx="0"]');
+  hero.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
+  hero.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
+  gate.style.filter = 'brightness(1.6)';
+  burst();
+
+  const par = parOf();
+  const stars = starCountFor(par, moves);
+  const timeS = Math.round((Date.now() - levelStart) / 1000);
+
+  if(mode.type === 'campaign'){
+    save.stars[cur] = Math.max(save.stars[cur] || 0, stars);
+    save.best[cur] = Math.min(save.best[cur] || Infinity, moves);
+    save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, cur + 2));
+    save.streak3 = stars === 3 ? save.streak3 + 1 : 0;
+    persist();
+    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed });
+  } else {
+    const res = recordDailyWin(mode.date, moves, par, stars);
+    if(res.usedFreeze) toast(t('toast.freeze'));
+    track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
+    if(save.settings.reminder) setStreakReminder(true, daily().streak);
+  }
+
+  setTimeout(() => {
+    showWinSheet(stars);
+    gate.style.filter = '';
+  }, 780);
+}
+
+function showWinSheet(stars){
+  const par = parOf();
+  $('winFlag').textContent = t('win.flag');
+  $('winTitle').textContent = mode.type === 'daily'
+    ? t('win.daily', { n: mode.number })
+    : t('win.title', { n: cur + 1 });
+  $('winMoves').textContent = moves;
+  $('winPar').textContent = par;
+  $('winBest').textContent = mode.type === 'daily'
+    ? (daily().done[mode.date]?.moves ?? moves)
+    : save.best[cur];
+  const ws = $('winStars');
+  ws.innerHTML = '';
+  for(let i = 0; i < 3; i++){
+    const sp = document.createElement('span');
+    sp.textContent = '★';
+    if(i >= stars) sp.className = 'off';
+    ws.appendChild(sp);
+    if(i < stars) setTimeout(() => sfx('star'), 500 + i * 160);
+  }
+
+  const isDaily = mode.type === 'daily';
+  $('peek').hidden = true;
+  $('sharePre').hidden = true;
+  $('autobar').classList.remove('run');
+
+  if(isDaily){
+    const text = dailyShareText({ number: mode.number, moves, par, streak: daily().streak, level: curLevel });
+    const pre = $('sharePre');
+    pre.textContent = text;
+    pre.hidden = false;
+    $('nextLabel').textContent = t('btn.share');
+    $('nextBtn').dataset.action = 'share';
+    $('nextBtn').dataset.share = text;
+  } else {
+    const next = nextPlayableIndex();
+    if(next !== -1){
+      renderPeek(LEVELS[next]);
+      $('peek').hidden = false;
+      $('peekLab').textContent = t('win.next');
+      $('nextLabel').textContent = t('btn.next');
+    } else {
+      $('nextLabel').textContent = t('btn.levels');
+    }
+    $('nextBtn').dataset.action = 'next';
+    // zero-tap flow (plan 0.7): auto-advance unless the player opts out
+    if(save.settings.autoAdvance && next !== -1 && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      $('autobar').style.setProperty('--automs', '2600ms');
+      requestAnimationFrame(() => $('autobar').classList.add('run'));
+      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); advance(); }, 2600);
+    }
+  }
+  showOverlay('winOverlay');
+}
+
+function cancelAuto(){
+  if(autoTimer){ clearTimeout(autoTimer); autoTimer = null; }
+  $('autobar').classList.remove('run');
+}
+
+function nextPlayableIndex(){
+  const next = cur + 1;
+  if(next >= LEVELS.length) return -1;
+  if(next >= FREE_LEVELS && !save.pro) return -1;
+  return next;
+}
+
+function advance(){
+  cancelAuto();
+  const next = nextPlayableIndex();
+  if(next !== -1){ loadLevel(next); return; }
+  if(cur + 1 >= FREE_LEVELS && !save.pro && cur + 1 < LEVELS.length){
+    // paywall sits at the end of chapter 2 (plan 1.3; final position tuned in v1.1)
+    showOverlay('proOverlay');
+    track('iap_view', { source: 'chapter_gate' });
+    return;
+  }
+  buildLevelList(); showOverlay('levelsOverlay');
+}
+
+function renderPeek(lv){
+  const holder = $('peekBoard');
+  holder.innerHTML = '';
+  const u = 96 / 6;
+  lv.p.forEach((a, i) => {
+    const [r, c, len, dir] = a;
+    const d = document.createElement('i');
+    d.style.left = (c * u + 1.5) + 'px';
+    d.style.top = (r * u + 1.5) + 'px';
+    d.style.width = ((dir === 'h' ? len : 1) * u - 3) + 'px';
+    d.style.height = ((dir === 'v' ? len : 1) * u - 3) + 'px';
+    d.style.background = i === 0 ? PALETTE[0][0] : PALETTE[1 + (i - 1) % (PALETTE.length - 1)][0];
+    holder.appendChild(d);
+  });
+}
+
+/* ================== PARTICLES ================== */
+const fx = $('fx');
+const fxc = fx.getContext('2d');
+let parts = [], fxRun = false;
+function resizeFx(){ fx.width = innerWidth * devicePixelRatio; fx.height = innerHeight * devicePixelRatio; }
+function pump(){
+  if(!fxRun){ fxRun = true; requestAnimationFrame(tickFx); }
+}
+function burst(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  resizeFx();
+  const rect = board.getBoundingClientRect();
+  const x = (rect.right + 4) * devicePixelRatio;
+  const y = (rect.top + (EXIT_ROW + 0.5) * CELL) * devicePixelRatio;
+  const cols = ['#ffb454', '#ff3b4e', '#ffe9c2', '#5ee6a8', '#5b8dff'];
+  for(let i = 0; i < 90; i++){
+    const a = (Math.random() - 0.5) * 1.9;
+    const sp = (3 + Math.random() * 9) * devicePixelRatio;
+    parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2 * devicePixelRatio,
+      g: 0.25 * devicePixelRatio, life: 60 + Math.random() * 40,
+      c: cols[i % cols.length], s: (2 + Math.random() * 3.5) * devicePixelRatio, rot: Math.random() * 6, vr: (Math.random() - .5) * .3 });
+  }
+  pump();
+}
+/* Dust puff on collision stop (plan 0.5) — same system, small gray emission. */
+function dustAt(i, atHi){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  resizeFx();
+  const p = pieces[i];
+  const rect = board.getBoundingClientRect();
+  let cx, cy;
+  if(p.dir === 'h'){
+    cx = rect.left + (atHi ? (p.c + p.len) : p.c) * CELL;
+    cy = rect.top + (p.r + 0.5) * CELL;
+  } else {
+    cx = rect.left + (p.c + 0.5) * CELL;
+    cy = rect.top + (atHi ? (p.r + p.len) : p.r) * CELL;
+  }
+  const cols = ['#8a93a6', '#5d6675', '#b9c1d0'];
+  for(let k = 0; k < 10; k++){
+    const a = Math.random() * Math.PI * 2;
+    const sp = (0.6 + Math.random() * 2.2) * devicePixelRatio;
+    parts.push({ x: cx * devicePixelRatio, y: cy * devicePixelRatio,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6 * devicePixelRatio,
+      g: 0.04 * devicePixelRatio, life: 22 + Math.random() * 16,
+      c: cols[k % cols.length], s: (1.5 + Math.random() * 2.5) * devicePixelRatio, rot: Math.random() * 6, vr: (Math.random() - .5) * .2 });
+  }
+  pump();
+}
+function tickFx(){
+  fxc.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter(p => p.life > 0);
+  for(const p of parts){
+    p.x += p.vx; p.y += p.vy; p.vy += p.g; p.vx *= 0.985; p.life--; p.rot += p.vr;
+    fxc.save();
+    fxc.globalAlpha = Math.min(1, p.life / 40);
+    fxc.translate(p.x, p.y); fxc.rotate(p.rot);
+    fxc.fillStyle = p.c;
+    fxc.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
+    fxc.restore();
+  }
+  if(parts.length){ requestAnimationFrame(tickFx); } else { fxRun = false; fxc.clearRect(0, 0, fx.width, fx.height); }
+}
+
+/* ================== OVERLAYS / TOAST ================== */
+function showOverlay(id){ $(id).classList.add('show'); }
+function hideOverlay(id){ $(id).classList.remove('show'); }
+let toastT = null;
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ================== LEVEL SELECT ================== */
+let tabChapter = 0;
+const ROMAN = ['I', 'II', 'III', 'IV'];
+
+function buildChapterTabs(){
+  const holder = $('chapterTabs');
+  holder.innerHTML = '';
+  CHAPTERS.forEach((ch, i) => {
+    const b = document.createElement('button');
+    const locked = i >= 2 && !save.pro;
+    b.className = 'tab' + (i === tabChapter ? ' cur' : '') + (locked ? ' locked' : '');
+    b.style.setProperty('--tabaccent', ch.accent);
+    b.innerHTML = `<span class="roman">${ROMAN[i]}</span><span>${ch.name}</span>` +
+      (locked ? `<span class="lock">🔒 ${t('chapter.locked')}</span>` : '');
+    b.addEventListener('click', () => { sfx('ui'); tabChapter = i; buildLevelList(); });
+    holder.appendChild(b);
+  });
+}
+
+function buildLevelList(){
+  buildChapterTabs();
+  const holder = $('levelList');
+  holder.innerHTML = '';
+  const chLocked = tabChapter >= 2 && !save.pro;
+  const g = document.createElement('div');
+  g.className = 'lvl-grid';
+  const from = tabChapter * CHAPTER_SIZE, to = from + CHAPTER_SIZE;
+  for(let i = from; i < to; i++){
+    const b = document.createElement('button');
+    const locked = chLocked || i + 1 > save.unlocked;
+    const st = save.stars[i] || 0;
+    b.className = 'lvl' + (locked ? ' locked' : '') + (i === cur && mode.type === 'campaign' ? ' cur' : '') + (st > 0 ? ' done' : '');
+    b.innerHTML = locked
+      ? `<span class="n">🔒</span>`
+      : `<span class="n">${i + 1}</span><span class="s">${starStr(st)}</span>`;
+    if(!locked){
+      b.addEventListener('click', () => {
+        sfx('ui'); hideOverlay('levelsOverlay'); loadLevel(i);
+      });
+    } else if(chLocked){
+      b.addEventListener('click', () => {
+        toast(t('toast.locked'));
+        showOverlay('proOverlay');
+        track('iap_view', { source: 'level_grid' });
+      });
+    }
+    b.setAttribute('aria-label', `Level ${i + 1}` + (locked ? ' locked' : ''));
+    g.appendChild(b);
+  }
+  holder.appendChild(g);
+  if(chLocked){
+    const teaser = document.createElement('div');
+    teaser.className = 'pro-teaser';
+    teaser.innerHTML = `<b>${t('pro.title')}</b> — ${t('pro.f1')}`;
+    holder.appendChild(teaser);
+  }
+}
+
+/* ================== DAILY SHEET + CALENDAR ================== */
+let calYear, calMonth;   // displayed month
+
+function openDaily(){
+  const d = new Date();
+  calYear = d.getFullYear(); calMonth = d.getMonth();
+  renderDailySheet();
+  showOverlay('dailyOverlay');
+}
+
+function renderDailySheet(){
+  $('dailyStreak').textContent = daily().streak;
+  $('dailyFreezes').textContent = daily().freezes;
+  const today = todayStr();
+  const done = isDone(today);
+  $('dailyPlayLabel').textContent = done
+    ? t('daily.done', { n: daily().done[today].moves }) + ' ✓'
+    : t('daily.today');
+  renderCalendar();
+}
+
+function renderCalendar(){
+  const grid = $('calGrid');
+  grid.innerHTML = '';
+  const monthName = new Date(calYear, calMonth, 1).toLocaleDateString(document.documentElement.lang, { month: 'long', year: 'numeric' });
+  $('calMonth').textContent = monthName;
+  const dows = [0, 1, 2, 3, 4, 5, 6].map(d =>
+    new Date(2026, 1, 1 + d).toLocaleDateString(document.documentElement.lang, { weekday: 'narrow' }));
+  dows.forEach(w => {
+    const el = document.createElement('div');
+    el.className = 'cal-dow'; el.textContent = w;
+    grid.appendChild(el);
+  });
+  const first = new Date(calYear, calMonth, 1);
+  const startDow = first.getDay();
+  const daysIn = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = todayStr();
+  for(let i = 0; i < startDow; i++){
+    const pad = document.createElement('div');
+    pad.className = 'cal-day out';
+    grid.appendChild(pad);
+  }
+  for(let day = 1; day <= daysIn; day++){
+    const ds = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const el = document.createElement('button');
+    el.className = 'cal-day';
+    el.textContent = day;
+    if(ds > today) el.classList.add('future');
+    else if(ds < DAILY_EPOCH) el.classList.add('pre');
+    if(isDone(ds)) el.classList.add('done');
+    if(ds === today) el.classList.add('today');
+    if(isPlayable(ds)){
+      el.addEventListener('click', () => {
+        sfx('ui');
+        hideOverlay('dailyOverlay');
+        loadDailyLevel(ds);
+      });
+    }
+    grid.appendChild(el);
+  }
+}
+
+/* ================== SETTINGS ================== */
+function applySettings(){
+  const s = save.settings;
+  setSfxVolume(s.sfx);
+  setMusicVolume(s.music);
+  setHapticsEnabled(s.haptics);
+  $('sfxRange').value = s.sfx;
+  $('musicRange').value = s.music;
+  $('hapticsChk').checked = s.haptics;
+  $('colorblindChk').checked = s.colorblind;
+  $('autoAdvanceChk').checked = s.autoAdvance;
+  $('reminderChk').checked = s.reminder;
+}
+
+function wireSettings(){
+  $('sfxRange').addEventListener('input', e => { save.settings.sfx = +e.target.value; setSfxVolume(save.settings.sfx); sfx('ui'); persist(); });
+  $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
+  $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
+  $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
+  $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
+  $('reminderChk').addEventListener('change', e => {
+    save.settings.reminder = e.target.checked; persist();
+    setStreakReminder(e.target.checked, daily().streak);
+  });
+  const restore = () => { toast(save.pro ? t('toast.pro') : t('btn.restore') + ' …'); };
+  $('restoreBtn').addEventListener('click', restore);
+  $('restoreBtn2').addEventListener('click', restore);
+}
+
+/* ================== PRO GARAGE (plan 1.3) ================== */
+function wirePro(){
+  $('buyBtn').addEventListener('click', () => {
+    /* StoreKit hook point: in the native shell this calls the purchase
+       plugin; the web build sandbox-unlocks so the full flow is testable. */
+    save.pro = true;
+    persist();
+    track('iap_purchase', { product: 'pro_garage' });
+    toast(t('toast.pro'));
+    hideOverlay('proOverlay');
+    updateHud();
+  });
+}
+
+/* ================== STATIC STRINGS ================== */
+function applyStrings(){
+  $('brandSub').textContent = t('sub');
+  $('labLevel').textContent = t('hud.level');
+  $('labMoves').textContent = t('hud.moves');
+  $('labPar').textContent = t('hud.par');
+  $('labUndo').textContent = t('btn.undo');
+  $('labHint').textContent = t('btn.hint');
+  $('labReset').textContent = t('btn.reset');
+  $('skipBtn').textContent = t('btn.skip');
+  $('levelsTitle').textContent = t('levels.title');
+  $('levelsSub').textContent = t('levels.sub');
+  $('labWinMoves').textContent = t('win.moves');
+  $('labWinPar').textContent = t('win.par');
+  $('labWinBest').textContent = t('win.best');
+  $('replayBtn').textContent = t('btn.replay');
+  $('dailyTitle').textContent = t('daily.title');
+  $('dailySub').textContent = t('daily.sub');
+  $('labStreak').textContent = t('daily.streak');
+  $('labFreezes').textContent = t('daily.freezes');
+  $('dailyNote').textContent = t('daily.backfill');
+  $('settingsTitle').textContent = t('settings.title');
+  $('labSfx').textContent = t('settings.sfx');
+  $('labMusic').textContent = t('settings.music');
+  $('labHaptics').textContent = t('settings.haptics');
+  $('labColorblind').textContent = t('settings.colorblind');
+  $('labAutoAdvance').textContent = t('settings.autoadvance');
+  $('labReminder').textContent = t('settings.reminder');
+  $('labRestore').textContent = t('btn.restore');
+  $('proTitle').textContent = t('pro.title');
+  $('proPitch').textContent = t('pro.pitch');
+  $('proF1').textContent = t('pro.f1');
+  $('proF2').textContent = t('pro.f2');
+  $('proF3').textContent = t('pro.f3');
+  $('proNone').textContent = t('pro.none');
+  $('restoreBtn2').textContent = t('btn.restore');
+}
+
+/* ================== GLOBAL WIRING ================== */
+function wire(){
+  $('levelsBtn').addEventListener('click', () => { sfx('ui'); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
+  $('dailyBtn').addEventListener('click', () => { sfx('ui'); openDaily(); });
+  $('settingsBtn').addEventListener('click', () => { sfx('ui'); showOverlay('settingsOverlay'); });
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
+    e.target.closest('.overlay').classList.remove('show'); sfx('ui');
+  }));
+  document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
+    if(e.target === o && o.id !== 'winOverlay'){ o.classList.remove('show'); }
+  }));
+  $('undoBtn').addEventListener('click', undo);
+  $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
+  $('hintBtn').addEventListener('click', showHint);
+  $('skipBtn').addEventListener('click', skipLevel);
+  $('replayBtn').addEventListener('click', () => { cancelAuto(); hideOverlay('winOverlay'); sfx('ui'); startBoard(); });
+  $('nextBtn').addEventListener('click', async () => {
+    if($('nextBtn').dataset.action === 'share'){
+      const res = await shareText($('nextBtn').dataset.share);
+      track('share_daily', { result: res, date: mode.date });
+      if(res === 'copied') toast(t('toast.copied'));
+      return;
+    }
+    cancelAuto(); hideOverlay('winOverlay'); sfx('ui'); advance();
+  });
+  $('dailyPlayBtn').addEventListener('click', () => {
+    sfx('ui'); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
+  });
+  $('calPrev').addEventListener('click', () => { calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; } renderCalendar(); });
+  $('calNext').addEventListener('click', () => { calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; } renderCalendar(); });
+
+  document.addEventListener('keydown', e => {
+    if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
+    if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
+    if(e.key === 'Escape'){ ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay'].forEach(hideOverlay); }
+  });
+  window.addEventListener('resize', layout);
+  window.addEventListener('pagehide', () => { abandonIfMidLevel(); flush(); });
+  board.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+/* ================== BOOT ================== */
+(async function boot(){
+  initI18n();
+  applyStrings();
+  const loaded = await load('save_v1');
+  if(loaded){
+    save = Object.assign(save, loaded);
+    save.settings = Object.assign({ sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false }, loaded.settings);
+    save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
+  }
+  await loadDaily();
+  await initAnalytics();
+  applySettings();
+  wire();
+  wireSettings();
+  wirePro();
+  layout();
+  const startAt = Math.min(Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS), LEVELS.length) - 1;
+  loadLevel(Math.max(0, startAt));
+})();

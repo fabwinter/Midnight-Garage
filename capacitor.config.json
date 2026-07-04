@@ -1,0 +1,16 @@
+{
+  "appId": "app.midnightgarage",
+  "appName": "Midnight Garage",
+  "webDir": ".",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0b0e14"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#0b0e14",
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 250
+    }
+  }
+}
