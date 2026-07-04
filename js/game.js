@@ -283,6 +283,7 @@ function attachDrag(el, i){
     startX = e.clientX; startY = e.clientY;
     startPos = p().dir === 'h' ? p().c : p().r;
     lastCell = startPos;
+    kbRun = -1;
     samples = [{ t: performance.now(), pos: startPos }];
     [lo, hi] = rangeFor(i);
     clearHint();
@@ -372,19 +373,29 @@ function attachDrag(el, i){
     const at = pp.dir === 'h' ? pp.c : pp.r;
     const to = at + m[0];
     if(to < klo || to > khi){ sfx('deny'); return; }
-    pushHistory();
+    /* Consecutive key-steps of the same piece merge into ONE move — a
+       keyboard slide scores the same as the equivalent drag, so keyboard
+       and VoiceOver players can still hit par (plan 0.8). */
+    const merge = kbRun === i;
+    if(!merge) pushHistory();
     if(pp.dir === 'h') pp.c = to; else pp.r = to;
-    commitMove(i);
+    commitMove(i, merge);
+    kbRun = i;
+    clearTimeout(kbRunT);
+    kbRunT = setTimeout(() => { kbRun = -1; }, 1200);   // pause ends the slide
   });
 }
+
+let kbRun = -1;   // piece index of an in-progress keyboard slide, -1 = none
+let kbRunT = null;
 
 function pushHistory(){
   history.push(pieces.map(p => ({ r: p.r, c: p.c })));
   if(history.length > 500) history.shift();
   updateHud();
 }
-function commitMove(i){
-  moves++;
+function commitMove(i, mergedKeyStep = false){
+  if(!mergedKeyStep) moves++;
   sfx('snap');
   renderPositions(true);
   updateHud();
@@ -496,6 +507,7 @@ function startBoard(){
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   solvedAnim = false;
+  kbRun = -1;
   levelStart = Date.now();
   skipShown = false;
   $('skipRow').classList.remove('show');
@@ -509,6 +521,7 @@ function startBoard(){
 
 function undo(){
   if(!history.length || solvedAnim) return;
+  kbRun = -1;
   const s = history.pop();
   s.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
   moves = Math.max(0, moves - 1);

@@ -71,7 +71,8 @@ export function tryGenerate(rng, opts = {}){
    the mutation when it lengthens the optimal solution (composite score as
    tie-break). Deterministic given the RNG, like everything else here. */
 
-export function harden(level, rng, steps = 120){
+export function harden(level, rng, steps = 120, opts = {}){
+  const maxStates = opts.maxStates ?? 250000;
   let best = level;
   for(let s = 0; s < steps; s++){
     const pieces = best.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
@@ -120,7 +121,7 @@ export function harden(level, rng, steps = 120){
       pieces[i] = q;
     }
 
-    const sol = solve(pieces, { maxStates: 250000 });
+    const sol = solve(pieces, { maxStates });
     if(!sol.solvable || sol.optimal < 2) continue;
     if(sol.optimal < best.m) continue;
     const stats = rate(pieces, sol);
