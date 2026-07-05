@@ -35,9 +35,10 @@ LEVELS.forEach((lv, i) => {
   else if(sol.optimal !== lv.m) bad(`level ${i + 1}: par ${lv.m} but optimal ${sol.optimal}`);
 });
 
-// difficulty progression: only the intro ramp may need fewer than 5 moves
+// difficulty progression: only the intro ramp may fall below chapter 1's floor
+const FLOOR = CHAPTERS[0].minM;
 LEVELS.forEach((lv, i) => {
-  if(i >= INTRO && lv.m < 5) bad(`level ${i + 1}: par ${lv.m} — nothing below par 5 is allowed after level ${INTRO}`);
+  if(i >= INTRO && lv.m < FLOOR) bad(`level ${i + 1}: par ${lv.m} — nothing below par ${FLOOR} is allowed after level ${INTRO}`);
 });
 
 // every level's par must sit inside its chapter's declared band (intro exempt)

@@ -155,9 +155,9 @@ export function dailyLevel(dateStr){
   for(let i = 0; i < 400; i++){
     const rng = mulberry32(hashStr('mg-daily:' + dateStr + '#' + i));
     const relax = Math.floor(i / 100);       // widen the band every 100 misses
-    const lv = tryGenerate(rng, { minOptimal: Math.max(6, 10 - 2 * relax) });
+    const lv = tryGenerate(rng, { minOptimal: Math.max(8, 13 - 2 * relax) });
     if(!lv) continue;
-    if(lv.m >= 10 - 2 * relax && lv.m <= 30 + 4 * relax && lv.d >= 16 - 3 * relax){
+    if(lv.m >= 13 - 2 * relax && lv.m <= 30 + 4 * relax && lv.d >= 19 - 3 * relax){
       return { ...lv, date: dateStr, number: dailyNumber(dateStr) };
     }
   }

@@ -27,8 +27,8 @@ const opt = (name, dflt) => {
 const TARGET_CANDIDATES = opt('candidates', 5000);
 const cacheIdx = args.indexOf('--cache');
 const POOL_CACHE = cacheIdx >= 0 ? args[cacheIdx + 1] : null;   // pool takes ~20min; cache it while tuning the curve
-const HARDEN_SEEDS = opt('harden', 300);
-const HARDEN_STEPS = opt('steps', 140);
+const HARDEN_SEEDS = opt('harden', 350);
+const HARDEN_STEPS = opt('steps', 320);
 const BASE_SEED = opt('seed', 1);
 const LEVEL_COUNT = 200;
 const PER_CHAPTER = 50;
@@ -39,12 +39,12 @@ const PER_CHAPTER = 50;
    model score. Levels 1–3 are the intro ramp (INTRO_PARS) and are the ONLY
    levels allowed below par 5. */
 const BANDS = [
-  { name: 'Night Shift',    accent: '#ffb454', minM: 5,  maxM: 8 },
-  { name: 'Neon District',  accent: '#4fd2f0', minM: 8,  maxM: 13 },
-  { name: 'Harbor Freight', accent: '#37c8ab', minM: 13, maxM: 18 },
-  { name: 'Gridlock',       accent: '#f26fb1', minM: 19, maxM: 60 },
+  { name: 'Night Shift',    accent: '#ffb454', minM: 10, maxM: 16 },
+  { name: 'Neon District',  accent: '#4fd2f0', minM: 16, maxM: 26 },
+  { name: 'Harbor Freight', accent: '#37c8ab', minM: 26, maxM: 36 },
+  { name: 'Gridlock',       accent: '#f26fb1', minM: 38, maxM: 90 },
 ];
-const INTRO_PARS = [3, 4, 4];   // levels 1–3 teach the mechanic, then par ≥ 5 forever
+const INTRO_PARS = [6, 8, 8];   // levels 1–3 teach the mechanic, then par ≥ 10 forever
 
 const t0 = Date.now();
 const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1) + 's';
