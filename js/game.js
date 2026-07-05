@@ -23,8 +23,9 @@ const HINT_TOKENS_PER_DAY = 3;
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
-let curLevel = null;                          // {m, p} for whatever is on the board
+let curLevel = null;                          // {m, p, w?} for whatever is on the board
 let pieces = [];
+let walls = [];                               // immovable roadworks cells [[r,c],…]
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
@@ -159,6 +160,28 @@ function carSVG(idx, len, dir, isHero){
   return `<svg viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">${g}</svg>`;
 }
 
+/* Roadworks tile: hazard-striped frame + traffic cone. Clearly not a
+   vehicle — flat, squarish, amber on asphalt — so "can't move" reads at
+   a glance. */
+function wallSVG(i){
+  const gid = 'w' + i + '-' + Math.random().toString(36).slice(2, 7);
+  return `<svg viewBox="0 0 ${U} ${U}" preserveAspectRatio="none" aria-hidden="true">
+  <defs>
+    <pattern id="${gid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="16" height="16" fill="#26210f"/>
+      <rect width="8" height="16" fill="#ffb454"/>
+    </pattern>
+  </defs>
+  <rect x="6" y="6" width="88" height="88" rx="13" fill="#141924"/>
+  <rect x="6" y="6" width="88" height="88" rx="13" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="2"/>
+  <rect x="12" y="12" width="76" height="76" rx="9" fill="none" stroke="url(#${gid})" stroke-width="9" opacity=".85"/>
+  <path d="M50 28 L63 72 L37 72 Z" fill="#e8762e"/>
+  <path d="M50 28 L63 72 L37 72 Z" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="2"/>
+  <rect x="42" y="50" width="16" height="7" rx="3" fill="#f5ede0"/>
+  <rect x="30" y="70" width="40" height="8" rx="4" fill="#c95f22"/>
+  </svg>`;
+}
+
 /* ================== BOARD RENDER ================== */
 const board = $('board');
 const gate = $('gate');
@@ -195,6 +218,7 @@ function drawGrid(){
 
 function grid(exclude = -1){
   const g = Array.from({ length: N }, () => Array(N).fill(-1));
+  for(const [wr, wc] of walls) g[wr][wc] = -2;   // roadworks: never empty
   pieces.forEach((p, i) => {
     if(i === exclude) return;
     for(let k = 0; k < p.len; k++){
@@ -213,7 +237,18 @@ function easingFor(len, distCells){
 }
 
 function buildPieces(){
-  board.querySelectorAll('.piece').forEach(el => el.remove());
+  board.querySelectorAll('.piece, .wall').forEach(el => el.remove());
+  walls.forEach(([r, c], i) => {
+    const el = document.createElement('div');
+    el.className = 'wall';
+    el.dataset.r = r; el.dataset.c = c;
+    el.style.width = CELL + 'px';
+    el.style.height = CELL + 'px';
+    el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
+    el.innerHTML = wallSVG(i);
+    el.setAttribute('aria-hidden', 'true');
+    board.appendChild(el);
+  });
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
     el.className = 'piece' + (i === 0 ? ' hero' : '');
@@ -243,6 +278,11 @@ function updatePieceAria(){
   });
 }
 function renderPositions(animate = true){
+  board.querySelectorAll('.wall').forEach(el => {
+    el.style.width = CELL + 'px';
+    el.style.height = CELL + 'px';
+    el.style.transform = `translate(${el.dataset.c * CELL}px, ${el.dataset.r * CELL}px)`;
+  });
   board.querySelectorAll('.piece').forEach(el => {
     const i = +el.dataset.idx, p = pieces[i];
     if(!p) return;
@@ -494,6 +534,7 @@ function loadDailyLevel(dateStr){
 
 function startBoard(){
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   solvedAnim = false;
   levelStart = Date.now();
@@ -539,7 +580,7 @@ function showHint(){
     }
   }
   clearHint();
-  const mv = firstOptimalMove(pieces);
+  const mv = firstOptimalMove(pieces, { walls });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
   if(!save.pro){
     save.hints.left--;
@@ -590,7 +631,7 @@ function scheduleHand(){
 }
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
-  const mv = firstOptimalMove(pieces);
+  const mv = firstOptimalMove(pieces, { walls });
   if(!mv) return;
   const p = pieces[mv.idx];
   const hand = document.createElement('div');
@@ -746,6 +787,15 @@ function renderPeek(lv){
   const holder = $('peekBoard');
   holder.innerHTML = '';
   const u = 96 / 6;
+  (lv.w ?? []).forEach(([r, c]) => {
+    const d = document.createElement('i');
+    d.className = 'rw';
+    d.style.left = (c * u + 1.5) + 'px';
+    d.style.top = (r * u + 1.5) + 'px';
+    d.style.width = (u - 3) + 'px';
+    d.style.height = (u - 3) + 'px';
+    holder.appendChild(d);
+  });
   lv.p.forEach((a, i) => {
     const [r, c, len, dir] = a;
     const d = document.createElement('i');

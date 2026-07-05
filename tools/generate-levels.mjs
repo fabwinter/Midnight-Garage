@@ -66,7 +66,8 @@ let attempts = 0;
 for(let seed = BASE_SEED; pool.length < TARGET_CANDIDATES && attempts < TARGET_CANDIDATES * 60; seed++){
   attempts++;
   const rng = mulberry32(hashStr('mg-batch:' + seed));
-  const lv = tryGenerate(rng, { minOptimal: 2 });
+  // Deterministic roadworks mix: a quarter of seeds each try 0/1/2/3 walls.
+  const lv = tryGenerate(rng, { minOptimal: 2, walls: seed % 4 });
   if(!lv || seen.has(lv.key)) continue;
   seen.add(lv.key);
   pool.push(lv);
@@ -79,9 +80,9 @@ const hardSeeds = [...pool].sort((a, b) => b.m - a.m || b.d - a.d).slice(0, HARD
 hardSeeds.forEach((lv, i) => {
   const trail = [];   // every improvement along the climb — fills the mid bands
   const rng = mulberry32(hashStr('mg-harden:' + i));
-  let hard = harden(lv, rng, HARDEN_STEPS, trail);
+  let hard = harden(lv, rng, HARDEN_STEPS, trail, 3);
   if(hard.m < BANDS[3].minM){  // stuck climb — restart with a different mutation stream
-    hard = harden(hard, mulberry32(hashStr('mg-harden2:' + i)), HARDEN_STEPS, trail);
+    hard = harden(hard, mulberry32(hashStr('mg-harden2:' + i)), HARDEN_STEPS, trail, 3);
   }
   for(const t of trail){
     if(!seen.has(t.key)){
@@ -101,7 +102,7 @@ console.log(`Pool: ${pool.length} boards, par up to ${maxPar}.`);
 const used = new Set();
 const intro = INTRO_PARS.map(par => {
   const cand = pool
-    .filter(lv => !used.has(lv.key) && lv.m === par)
+    .filter(lv => !used.has(lv.key) && lv.m === par && !(lv.w && lv.w.length))
     .sort((a, b) => a.d - b.d)[0];
   if(!cand) throw new Error(`No intro board with par ${par}. Increase --candidates.`);
   used.add(cand.key);
@@ -152,7 +153,7 @@ if(chosen.length !== LEVEL_COUNT) throw new Error(`Selected ${chosen.length} lev
 console.log('Re-verifying 200 shipped levels…');
 chosen.forEach((lv, i) => {
   const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
-  const sol = solve(pieces);
+  const sol = solve(pieces, { walls: lv.w });
   if(!sol.solvable || sol.optimal !== lv.m){
     throw new Error(`Level ${i + 1} failed verification (par ${lv.m}, solved ${sol.optimal})`);
   }
@@ -176,7 +177,7 @@ export const CHAPTERS = ${JSON.stringify(
   BANDS.map((b, i) => ({ name: b.name, accent: b.accent, from: i * PER_CHAPTER, minM: b.minM, maxM: b.maxM })), null, 2)};
 
 export const LEVELS = [
-${chosen.map(lv => JSON.stringify({ m: lv.m, d: lv.d, p: lv.p })).join(',\n')}
+${chosen.map(lv => JSON.stringify({ m: lv.m, d: lv.d, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}) })).join(',\n')}
 ];
 `;
 
