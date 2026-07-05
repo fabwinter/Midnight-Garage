@@ -25,7 +25,7 @@ const opt = (name, dflt) => {
   return i >= 0 ? Number(args[i + 1]) : dflt;
 };
 const TARGET_CANDIDATES = opt('candidates', 5000);
-const HARDEN_SEEDS = opt('harden', 220);
+const HARDEN_SEEDS = opt('harden', 300);
 const HARDEN_STEPS = opt('steps', 140);
 const BASE_SEED = opt('seed', 1);
 const LEVEL_COUNT = 200;
@@ -39,7 +39,7 @@ const PER_CHAPTER = 50;
 const BANDS = [
   { name: 'Night Shift',    accent: '#ffb454', minM: 5,  maxM: 8 },
   { name: 'Neon District',  accent: '#4fd2f0', minM: 8,  maxM: 13 },
-  { name: 'Harbor Freight', accent: '#37c8ab', minM: 13, maxM: 19 },
+  { name: 'Harbor Freight', accent: '#37c8ab', minM: 13, maxM: 18 },
   { name: 'Gridlock',       accent: '#f26fb1', minM: 19, maxM: 60 },
 ];
 const INTRO_PARS = [3, 4, 4];   // levels 1–3 teach the mechanic, then par ≥ 5 forever
