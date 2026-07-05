@@ -3,7 +3,7 @@
    respect board invariants, and the daily puzzle must generate for the next
    two weeks. Run with `npm run verify`. */
 
-import { LEVELS, CHAPTERS, CHAPTER_SIZE } from '../js/levels.data.js';
+import { LEVELS, CHAPTERS, CHAPTER_SIZE, INTRO } from '../js/levels.data.js';
 import { solve, N, EXIT_ROW } from '../js/solver.js';
 import { dailyLevel } from '../js/generate.js';
 import { todayStr } from '../js/storage.js';
@@ -34,6 +34,25 @@ LEVELS.forEach((lv, i) => {
   if(!sol.solvable) bad(`level ${i + 1}: unsolvable`);
   else if(sol.optimal !== lv.m) bad(`level ${i + 1}: par ${lv.m} but optimal ${sol.optimal}`);
 });
+
+// difficulty progression: only the intro ramp may need fewer than 5 moves
+LEVELS.forEach((lv, i) => {
+  if(i >= INTRO && lv.m < 5) bad(`level ${i + 1}: par ${lv.m} — nothing below par 5 is allowed after level ${INTRO}`);
+});
+
+// every level's par must sit inside its chapter's declared band (intro exempt)
+LEVELS.forEach((lv, i) => {
+  if(i < INTRO) return;
+  const ch = CHAPTERS[Math.floor(i / CHAPTER_SIZE)];
+  if(lv.m < ch.minM || lv.m > ch.maxM){
+    bad(`level ${i + 1}: par ${lv.m} outside ${ch.name} band ${ch.minM}–${ch.maxM}`);
+  }
+});
+
+// chapter par floors must strictly increase so each stage is genuinely harder
+for(let c = 1; c < CHAPTERS.length; c++){
+  if(CHAPTERS[c].minM <= CHAPTERS[c - 1].minM) bad(`chapter ${c + 1}: par floor ${CHAPTERS[c].minM} does not exceed chapter ${c}'s ${CHAPTERS[c - 1].minM}`);
+}
 
 // difficulty must never regress across chapter boundaries' scores
 for(let i = 1; i < LEVELS.length; i++){
