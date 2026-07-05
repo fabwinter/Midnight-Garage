@@ -38,11 +38,16 @@ const PER_CHAPTER = 50;
    a band the ordering — and the choice of which 50 ship — comes from the
    model score. Levels 1–3 are the intro ramp (INTRO_PARS) and are the ONLY
    levels allowed below par 5. */
+/* NOTE: par >= 21 is genuinely rare for this generator (6x6 board, single
+   hero, hill-climb hardening) — only 180 of ~7850 pooled boards from a
+   350-seed x 320-step hardening pass reach it, and just a handful exceed
+   par 30. Bands below are sized against the measured pool distribution,
+   not a round-number target, so generation doesn't silently starve. */
 const BANDS = [
-  { name: 'Night Shift',    accent: '#ffb454', minM: 10, maxM: 16 },
-  { name: 'Neon District',  accent: '#4fd2f0', minM: 16, maxM: 26 },
-  { name: 'Harbor Freight', accent: '#37c8ab', minM: 26, maxM: 36 },
-  { name: 'Gridlock',       accent: '#f26fb1', minM: 38, maxM: 90 },
+  { name: 'Night Shift',    accent: '#ffb454', minM: 9,  maxM: 12 },
+  { name: 'Neon District',  accent: '#4fd2f0', minM: 13, maxM: 16 },
+  { name: 'Harbor Freight', accent: '#37c8ab', minM: 17, maxM: 20 },
+  { name: 'Gridlock',       accent: '#f26fb1', minM: 21, maxM: 90 },
 ];
 const INTRO_PARS = [6, 8, 8];   // levels 1–3 teach the mechanic, then par ≥ 10 forever
 
