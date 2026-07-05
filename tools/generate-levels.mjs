@@ -12,7 +12,7 @@
 
    Usage: node tools/generate-levels.mjs [--candidates 5000] [--seed 1] */
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mulberry32, hashStr } from '../js/rng.js';
@@ -25,6 +25,8 @@ const opt = (name, dflt) => {
   return i >= 0 ? Number(args[i + 1]) : dflt;
 };
 const TARGET_CANDIDATES = opt('candidates', 5000);
+const cacheIdx = args.indexOf('--cache');
+const POOL_CACHE = cacheIdx >= 0 ? args[cacheIdx + 1] : null;   // pool takes ~20min; cache it while tuning the curve
 const HARDEN_SEEDS = opt('harden', 300);
 const HARDEN_STEPS = opt('steps', 140);
 const BASE_SEED = opt('seed', 1);
@@ -47,9 +49,14 @@ const INTRO_PARS = [3, 4, 4];   // levels 1–3 teach the mechanic, then par ≥
 const t0 = Date.now();
 const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1) + 's';
 
+let pool = [];
+if(POOL_CACHE && existsSync(POOL_CACHE)){
+  pool = JSON.parse(readFileSync(POOL_CACHE, 'utf8'));
+  console.log(`Loaded ${pool.length} pooled boards from ${POOL_CACHE}`);
+} else {
+
 console.log(`Sampling candidates (target ${TARGET_CANDIDATES})…`);
 const seen = new Set();
-const pool = [];
 let attempts = 0;
 for(let seed = BASE_SEED; pool.length < TARGET_CANDIDATES && attempts < TARGET_CANDIDATES * 60; seed++){
   attempts++;
@@ -79,6 +86,8 @@ hardSeeds.forEach((lv, i) => {
   }
   if((i + 1) % 50 === 0) console.log(`  ${i + 1}/${hardSeeds.length} hardened (${elapsed()})`);
 });
+if(POOL_CACHE) writeFileSync(POOL_CACHE, JSON.stringify(pool));
+}
 const maxPar = Math.max(...pool.map(l => l.m));
 console.log(`Pool: ${pool.length} boards, par up to ${maxPar}.`);
 
@@ -95,14 +104,21 @@ const intro = INTRO_PARS.map(par => {
 });
 
 /* Band fill: prefer the top of each band's score range for later chapters,
-   an even spread for earlier ones, and never reuse a board. */
-const chapters = BANDS.map((band, ci) => {
+   an even spread for earlier ones, and never reuse a board. Chapters fill
+   LAST-first so each earlier chapter can cap its scores just below where
+   the next chapter starts — no "level 51 feels easier than level 50". */
+const BOUNDARY_SLACK = 3;   // must match the verify-levels.mjs boundary check
+const chapters = [];
+let nextStartScore = Infinity;
+for(let ci = BANDS.length - 1; ci >= 0; ci--){
+  const band = BANDS[ci];
   const slots = PER_CHAPTER - (ci === 0 ? intro.length : 0);
   const inBand = pool
-    .filter(lv => !used.has(lv.key) && lv.m >= band.minM && lv.m <= band.maxM)
+    .filter(lv => !used.has(lv.key) && lv.m >= band.minM && lv.m <= band.maxM
+                  && lv.d <= nextStartScore + BOUNDARY_SLACK)
     .sort((a, b) => a.d - b.d || a.m - b.m);
   if(inBand.length < slots){
-    throw new Error(`Chapter ${ci + 1} (${band.name}): only ${inBand.length} boards in par band ${band.minM}–${band.maxM}. Increase --candidates/--harden.`);
+    throw new Error(`Chapter ${ci + 1} (${band.name}): only ${inBand.length} boards in par band ${band.minM}–${band.maxM} under score ${nextStartScore + BOUNDARY_SLACK}. Increase --candidates/--harden.`);
   }
   // Later chapters take the hardest of the band; earlier ones spread evenly.
   const picks = [];
@@ -121,8 +137,9 @@ const chapters = BANDS.map((band, ci) => {
   distinct.sort((a, b) => a.d - b.d || a.m - b.m);
   const final = (ci === 0 ? [...intro, ...distinct.slice(0, slots)] : distinct.slice(0, slots));
   final.forEach(l => used.add(l.key));
-  return final;
-});
+  nextStartScore = final[ci === 0 ? intro.length : 0].d;   // where this chapter's curve begins
+  chapters[ci] = final;
+}
 
 const chosen = chapters.flat();
 if(chosen.length !== LEVEL_COUNT) throw new Error(`Selected ${chosen.length} levels, expected ${LEVEL_COUNT}`);
