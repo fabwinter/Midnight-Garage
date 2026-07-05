@@ -17,8 +17,14 @@ LEVELS.forEach((lv, i) => {
   const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   const hero = pieces[0];
   if(hero.dir !== 'h' || hero.r !== EXIT_ROW) bad(`level ${i + 1}: hero must be horizontal on row ${EXIT_ROW}`);
-  // overlap / bounds check
+  // overlap / bounds check — roadworks (immovable walls) claim cells first
   const g = Array.from({ length: N }, () => Array(N).fill(false));
+  for(const [r, c] of (lv.w ?? [])){
+    if(r < 0 || c < 0 || r >= N || c >= N){ bad(`level ${i + 1}: roadworks out of bounds`); continue; }
+    if(r === EXIT_ROW){ bad(`level ${i + 1}: roadworks in exit row (unwinnable)`); continue; }
+    if(g[r][c]){ bad(`level ${i + 1}: overlapping roadworks`); continue; }
+    g[r][c] = true;
+  }
   for(const p of pieces){
     for(let k = 0; k < p.len; k++){
       const r = p.r + (p.dir === 'v' ? k : 0), c = p.c + (p.dir === 'h' ? k : 0);
@@ -30,14 +36,15 @@ LEVELS.forEach((lv, i) => {
   pieces.slice(1).forEach(p => {
     if(p.dir === 'h' && p.r === EXIT_ROW) bad(`level ${i + 1}: non-hero horizontal piece in exit row (unwinnable)`);
   });
-  const sol = solve(pieces);
+  const sol = solve(pieces, { walls: lv.w });
   if(!sol.solvable) bad(`level ${i + 1}: unsolvable`);
   else if(sol.optimal !== lv.m) bad(`level ${i + 1}: par ${lv.m} but optimal ${sol.optimal}`);
 });
 
-// difficulty progression: only the intro ramp may need fewer than 5 moves
+// difficulty progression: only the intro ramp may fall below chapter 1's floor
+const FLOOR = CHAPTERS[0].minM;
 LEVELS.forEach((lv, i) => {
-  if(i >= INTRO && lv.m < 5) bad(`level ${i + 1}: par ${lv.m} — nothing below par 5 is allowed after level ${INTRO}`);
+  if(i >= INTRO && lv.m < FLOOR) bad(`level ${i + 1}: par ${lv.m} — nothing below par ${FLOOR} is allowed after level ${INTRO}`);
 });
 
 // every level's par must sit inside its chapter's declared band (intro exempt)

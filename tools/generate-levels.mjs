@@ -27,8 +27,8 @@ const opt = (name, dflt) => {
 const TARGET_CANDIDATES = opt('candidates', 5000);
 const cacheIdx = args.indexOf('--cache');
 const POOL_CACHE = cacheIdx >= 0 ? args[cacheIdx + 1] : null;   // pool takes ~20min; cache it while tuning the curve
-const HARDEN_SEEDS = opt('harden', 300);
-const HARDEN_STEPS = opt('steps', 140);
+const HARDEN_SEEDS = opt('harden', 350);
+const HARDEN_STEPS = opt('steps', 320);
 const BASE_SEED = opt('seed', 1);
 const LEVEL_COUNT = 200;
 const PER_CHAPTER = 50;
@@ -38,13 +38,19 @@ const PER_CHAPTER = 50;
    a band the ordering — and the choice of which 50 ship — comes from the
    model score. Levels 1–3 are the intro ramp (INTRO_PARS) and are the ONLY
    levels allowed below par 5. */
+/* NOTE: the deep end is genuinely rare for this generator (6x6 board,
+   single hero, hill-climb hardening, roadworks mixed in): a 350-seed x
+   320-step pass yields ~90 boards at par >= 22 out of ~8000, and only a
+   handful past par 30. Bands below are sized against the measured pool
+   distribution, not a round-number target, so generation doesn't
+   silently starve. */
 const BANDS = [
-  { name: 'Night Shift',    accent: '#ffb454', minM: 5,  maxM: 8 },
-  { name: 'Neon District',  accent: '#4fd2f0', minM: 8,  maxM: 13 },
-  { name: 'Harbor Freight', accent: '#37c8ab', minM: 13, maxM: 18 },
-  { name: 'Gridlock',       accent: '#f26fb1', minM: 19, maxM: 60 },
+  { name: 'Night Shift',    accent: '#ffb454', minM: 9,  maxM: 12 },
+  { name: 'Neon District',  accent: '#4fd2f0', minM: 13, maxM: 16 },
+  { name: 'Harbor Freight', accent: '#37c8ab', minM: 17, maxM: 20 },
+  { name: 'Gridlock',       accent: '#f26fb1', minM: 22, maxM: 90 },
 ];
-const INTRO_PARS = [3, 4, 4];   // levels 1–3 teach the mechanic, then par ≥ 5 forever
+const INTRO_PARS = [6, 8, 8];   // levels 1–3 teach the mechanic, then par ≥ 10 forever
 
 const t0 = Date.now();
 const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1) + 's';
@@ -61,7 +67,8 @@ let attempts = 0;
 for(let seed = BASE_SEED; pool.length < TARGET_CANDIDATES && attempts < TARGET_CANDIDATES * 60; seed++){
   attempts++;
   const rng = mulberry32(hashStr('mg-batch:' + seed));
-  const lv = tryGenerate(rng, { minOptimal: 2 });
+  // Deterministic roadworks mix: a quarter of seeds each try 0/1/2/3 walls.
+  const lv = tryGenerate(rng, { minOptimal: 2, walls: seed % 4 });
   if(!lv || seen.has(lv.key)) continue;
   seen.add(lv.key);
   pool.push(lv);
@@ -74,9 +81,9 @@ const hardSeeds = [...pool].sort((a, b) => b.m - a.m || b.d - a.d).slice(0, HARD
 hardSeeds.forEach((lv, i) => {
   const trail = [];   // every improvement along the climb — fills the mid bands
   const rng = mulberry32(hashStr('mg-harden:' + i));
-  let hard = harden(lv, rng, HARDEN_STEPS, trail);
+  let hard = harden(lv, rng, HARDEN_STEPS, trail, 3);
   if(hard.m < BANDS[3].minM){  // stuck climb — restart with a different mutation stream
-    hard = harden(hard, mulberry32(hashStr('mg-harden2:' + i)), HARDEN_STEPS, trail);
+    hard = harden(hard, mulberry32(hashStr('mg-harden2:' + i)), HARDEN_STEPS, trail, 3);
   }
   for(const t of trail){
     if(!seen.has(t.key)){
@@ -96,7 +103,7 @@ console.log(`Pool: ${pool.length} boards, par up to ${maxPar}.`);
 const used = new Set();
 const intro = INTRO_PARS.map(par => {
   const cand = pool
-    .filter(lv => !used.has(lv.key) && lv.m === par)
+    .filter(lv => !used.has(lv.key) && lv.m === par && !(lv.w && lv.w.length))
     .sort((a, b) => a.d - b.d)[0];
   if(!cand) throw new Error(`No intro board with par ${par}. Increase --candidates.`);
   used.add(cand.key);
@@ -147,7 +154,7 @@ if(chosen.length !== LEVEL_COUNT) throw new Error(`Selected ${chosen.length} lev
 console.log('Re-verifying 200 shipped levels…');
 chosen.forEach((lv, i) => {
   const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
-  const sol = solve(pieces);
+  const sol = solve(pieces, { walls: lv.w });
   if(!sol.solvable || sol.optimal !== lv.m){
     throw new Error(`Level ${i + 1} failed verification (par ${lv.m}, solved ${sol.optimal})`);
   }
@@ -171,7 +178,7 @@ export const CHAPTERS = ${JSON.stringify(
   BANDS.map((b, i) => ({ name: b.name, accent: b.accent, from: i * PER_CHAPTER, minM: b.minM, maxM: b.maxM })), null, 2)};
 
 export const LEVELS = [
-${chosen.map(lv => JSON.stringify({ m: lv.m, d: lv.d, p: lv.p })).join(',\n')}
+${chosen.map(lv => JSON.stringify({ m: lv.m, d: lv.d, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}) })).join(',\n')}
 ];
 `;
 

@@ -21,8 +21,21 @@ export function piecesToState(pieces){
   };
 }
 
-function occupy(len, dir, fixed, offs){
+/* Immovable roadworks: walls = [[r,c],…] occupy cells but never move, so
+   they live outside the BFS state entirely — just a static occupancy mask.
+   WALL is the sentinel they carry in the occupancy grid (≠ -1 empty). */
+export const WALL = -2;
+
+export function wallMask(walls){
+  if(!walls || !walls.length) return null;
+  const m = new Int8Array(N * N);
+  for(const [r, c] of walls) m[r * N + c] = 1;
+  return m;
+}
+
+function occupy(len, dir, fixed, offs, wm){
   const g = new Int8Array(N * N).fill(-1);
+  if(wm) for(let i = 0; i < N * N; i++) if(wm[i]) g[i] = WALL;
   for(let i = 0; i < offs.length; i++){
     for(let k = 0; k < len[i]; k++){
       const r = dir[i] === 'h' ? fixed[i] : offs[i] + k;
@@ -34,8 +47,8 @@ function occupy(len, dir, fixed, offs){
 }
 
 /* All legal moves from a state: [pieceIdx, newOffset] per slide target. */
-export function legalMoves(len, dir, fixed, offs){
-  const g = occupy(len, dir, fixed, offs);
+export function legalMoves(len, dir, fixed, offs, wm){
+  const g = occupy(len, dir, fixed, offs, wm);
   const out = [];
   for(let i = 0; i < offs.length; i++){
     for(const step of [-1, 1]){
@@ -54,10 +67,10 @@ export function legalMoves(len, dir, fixed, offs){
 
 /* Heuristic distance-to-freedom for the hero: cells left to reach the exit
    plus vehicles parked in its path. Used to flag "counterintuitive" moves. */
-function heroDistance(len, dir, fixed, offs){
+function heroDistance(len, dir, fixed, offs, wm){
   const winOff = N - len[0];
   let d = winOff - offs[0];
-  const g = occupy(len, dir, fixed, offs);
+  const g = occupy(len, dir, fixed, offs, wm);
   for(let c = offs[0] + len[0]; c < N; c++){
     if(g[EXIT_ROW * N + c] !== -1) d++;
   }
@@ -74,6 +87,7 @@ const PATH_CAP = 1e9;
 
 export function solve(pieces, opts = {}){
   const maxStates = opts.maxStates ?? 400000;
+  const wm = wallMask(opts.walls);
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
   const winOff = N - len[0];
   const key = s => s.join(',');
@@ -97,7 +111,7 @@ export function solve(pieces, opts = {}){
     const sKey = key(s);
     const d = dist.get(sKey);
     if(optimal !== -1 && d >= optimal) break;   // finished the last useful layer
-    for(const [i, o] of legalMoves(len, dir, fixed, s)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm)){
       const ns = s.slice(); ns[i] = o;
       const nKey = key(ns);
       if(!dist.has(nKey)){
@@ -163,18 +177,19 @@ export function firstOptimalMove(pieces, opts){
    Composite score is the sort key for the 200-level curve and the editor's
    future auto-rating. Weights are v1; re-fit in v1.1 from live funnel data. */
 
-export function rate(pieces, solved){
-  const sol = solved ?? solve(pieces);
+export function rate(pieces, solved, walls){
+  const sol = solved ?? solve(pieces, { walls });
   if(!sol.solvable) return null;
+  const wm = wallMask(walls);
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
 
   let s = start.slice();
   let branchSum = 0, counter = 0;
-  let hPrev = heroDistance(len, dir, fixed, s);
+  let hPrev = heroDistance(len, dir, fixed, s, wm);
   for(const mv of sol.path){
-    branchSum += legalMoves(len, dir, fixed, s).length;
+    branchSum += legalMoves(len, dir, fixed, s, wm).length;
     s = s.slice(); s[mv.i] = mv.to;
-    const h = heroDistance(len, dir, fixed, s);
+    const h = heroDistance(len, dir, fixed, s, wm);
     if(h > hPrev) counter++;
     hPrev = h;
   }
@@ -202,10 +217,14 @@ export function rate(pieces, solved){
 }
 
 /* Canonical key for de-duplicating generated boards. */
-export function levelKey(pieces){
-  return pieces
+export function levelKey(pieces, walls){
+  const base = pieces
     .map(p => `${p.r},${p.c},${p.len},${p.dir}`)
     .slice(0, 1)
     .concat(pieces.slice(1).map(p => `${p.r},${p.c},${p.len},${p.dir}`).sort())
     .join('|');
+  const w = walls && walls.length
+    ? '|W:' + walls.map(([r, c]) => r + ',' + c).sort().join(';')
+    : '';
+  return base + w;
 }
