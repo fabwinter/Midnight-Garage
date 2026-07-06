@@ -41,7 +41,7 @@ const opt = (name, dflt) => {
 };
 const STAGE = opt('stage', 'all');
 const TARGET_CANDIDATES = Number(opt('candidates', 6000));
-const HARDEN_SEEDS = Number(opt('harden', 900));   // breadth beats depth here — see header
+const HARDEN_SEEDS = Number(opt('harden', 900));   // ~40 min sharded across 4 cores — see header
 const HARDEN_STEPS = Number(opt('steps', 380));
 const HARVEST_MAX_STATES = Number(opt('harveststates', 600000));
 const BASE_SEED = Number(opt('seed', 1));
@@ -53,19 +53,28 @@ const WORK = opt('work', join(ROOT, '.genwork'));
 const LEVEL_COUNT = 200;
 const PER_CHAPTER = 50;
 
-/* Chapter difficulty bands, recalibrated dramatically upward (2026-07):
-   the old curve (9–12 / 13–16 / 17–20 / 22–90, actual max 36) left even
-   chapter 3 feeling easy. Empirically, this generator's realistic ceiling
-   with hardening + exact-shape harvesting lands in the 45–65 range (wider
-   search finds rarer, harder shapes; going deeper per-seed does not) — so
-   Gridlock's band is set to reach for that ceiling rather than a
-   fictional round number, and every earlier chapter is shifted up to
-   match: nothing after the 3-level intro ramp is easy anymore. */
+/* Chapter difficulty bands, recalibrated upward (2026-07) against MEASURED
+   supply, not a target number. Calibration runs (300 and 1500 test seeds
+   through harden+harvestShape) found the ceiling for this generator's
+   regime sits around par 40, and — critically — the tail above ~24 is
+   thin and barely grows with more seeds (5x the seeds only bought ~1.3x
+   more boards past par 30): this generator's mutation-based hill-climb
+   plus exact-shape harvesting is not going to reproduce the famous ~93-
+   move result some specific hand-studied 16-piece Rush Hour boards reach
+   in exhaustive research — that number comes from a fully enumerated
+   configuration space for one particular piece set, not a stochastic
+   search. Bands below are sized so `select()` doesn't starve: every band
+   has a comfortable multiple of the 50 boards it needs, even in the
+   scarce top tier. Still a real, evidence-based jump over the old curve
+   (9–12 / 13–16 / 17–20 / 22–90-nominally-but-36-actual): every chapter's
+   floor moves up, and Gridlock's floor moves from 22 to 23 with a MUCH
+   better-populated 23–40 range backing it, instead of an unreachable
+   "maxM: 90" that nothing ever actually filled. */
 const BANDS = [
-  { name: 'Night Shift',    accent: '#ffb454', minM: 12, maxM: 20 },
-  { name: 'Neon District',  accent: '#4fd2f0', minM: 20, maxM: 30 },
-  { name: 'Harbor Freight', accent: '#37c8ab', minM: 30, maxM: 42 },
-  { name: 'Gridlock',       accent: '#f26fb1', minM: 40, maxM: 120 },
+  { name: 'Night Shift',    accent: '#ffb454', minM: 10, maxM: 14 },
+  { name: 'Neon District',  accent: '#4fd2f0', minM: 15, maxM: 18 },
+  { name: 'Harbor Freight', accent: '#37c8ab', minM: 19, maxM: 22 },
+  { name: 'Gridlock',       accent: '#f26fb1', minM: 23, maxM: 40 },
 ];
 const INTRO_PARS = [6, 8, 8];   // levels 1–3 teach the mechanic, then par ≥ 12 forever
 
