@@ -52,7 +52,22 @@ screen in R5).
 
 (Unchanged from v1 except set-dressing — full detail preserved.)
 
-### 3.1 Renderer upgrade (the enabler — do first)
+### 3.0 Art timing: vehicle SVGs first, renderer second
+The current in-game vehicle art is placeholder-grade. It gets rebuilt
+**immediately (start of R1), before the WebGL work**, for three reasons:
+1. **It's renderer-portable.** Vehicle art stays authored as SVG; the
+   future WebGL layer rasterizes those same SVGs into its sprite atlas.
+   Nothing drawn now is thrown away.
+2. **Every screenshot between now and launch uses it** — store shots, the
+   share card, TestFlight first impressions. Art pays rent from day one;
+   the lighting engine only pays once R1 ships.
+3. The city-scene mockup already proved the target quality is reachable in
+   pure SVG (body types, glass, wheels outside the body, roofline
+   highlights, working lights).
+Order inside R1: vehicle art set + board set-dressing (DOM, cheap glows) →
+then the WebGL lighting layer underneath it.
+
+### 3.1 Renderer upgrade (the enabler — do second)
 - WebGL canvas under DOM input (Pixi.js or hand-rolled; ~20 quads). DOM
   keeps hit-testing and the accessibility tree; WebGL owns pixels.
 - 120Hz on iPhone 13+, 60Hz floor on SE. Frame budget asserted in the
@@ -116,14 +131,21 @@ solver** so the generator, verifier, hints, daily, difficulty model and
 future editor inherit it automatically.
 
 ### 5.1 Hitches (from review: keep decoupling) — the marquee
+- **The core rule: trailers are dead weight.** A trailer, caravan or
+  broken-down car *cannot move by itself* — it only moves while hitched,
+  and it can be dropped anywhere (a legal, sometimes necessary, sometimes
+  disastrous parking spot). This is what makes the mechanic a *puzzle*
+  rather than a toy: an unhitched trailer is a wall you placed yourself.
 - **Rigs** ship coupled (cab + trailer as one heavy piece). Tap the glowing
   hitch to drop the trailer; re-align and tap to re-hitch. Uncoupling costs
   a move.
 - **Tow truck** — the special piece: it can hitch to *any* car it lines up
   behind, then drag it. Diegetic, instantly understood, and mechanically
-  the "couple to anything" upgrade.
-- Solver: pieces carry a coupled-set id; sets move as one. State space
-  grows but stays BFS-able on 6×6.
+  the "move the immovable" tool — the broken-down car (hazard lights
+  blinking) can ONLY be moved by the tow truck.
+- Solver: pieces carry a coupled-set id plus an `inert` flag (inert pieces
+  generate no moves of their own; they move only as part of a coupled
+  set). Sets move as one. State space grows but stays BFS-able on 6×6.
 
 ### 5.2 Interlocks (from review: triggers) — the sleeper hit
 - **Bay sensors and boom gates:** a marked bay, when occupied by *any*

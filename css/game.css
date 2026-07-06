@@ -46,7 +46,7 @@ body::before{
 header{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
 .brand{display:flex;flex-direction:column;line-height:1}
 .brand .t1{
-  font-family:var(--disp);font-weight:700;font-size:clamp(21px,5.6vw,29px);letter-spacing:.05em;
+  font-family:var(--disp);font-weight:700;font-size:clamp(17px,4.6vw,26px);letter-spacing:.04em;
   color:var(--ink);
   text-shadow:0 0 18px rgba(255,180,84,.35), 0 0 2px rgba(255,180,84,.6);
   white-space:nowrap;
@@ -59,7 +59,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .brand .t2{font-size:9px;letter-spacing:.34em;color:var(--muted);text-transform:uppercase;margin-top:5px;padding-left:2px}
 .hbtns{display:flex;gap:8px}
 .icon-btn{
-  width:42px;height:42px;border-radius:12px;border:1px solid var(--line);
+  width:40px;height:40px;border-radius:12px;border:1px solid var(--line);flex:none;
   background:linear-gradient(180deg,#1c2230,#141925);
   color:var(--ink);display:grid;place-items:center;cursor:pointer;
   box-shadow:0 2px 8px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
@@ -247,6 +247,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   border-radius:10px;background:var(--amber);color:#241503;
   font-size:11px;font-weight:700;display:grid;place-items:center;letter-spacing:0;
 }
+.btn .badge[hidden]{display:none}
 .skip-row{width:100%;display:none;justify-content:center;margin-top:-2px}
 .skip-row.show{display:flex}
 .skip-row .btn{padding:9px 22px;font-size:12px;color:var(--muted);border-style:dashed;background:none;box-shadow:none}
