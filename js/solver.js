@@ -167,6 +167,81 @@ export function firstOptimalMove(pieces, opts){
   };
 }
 
+/* ---------- exact hardest-configuration analysis ----------
+   The real "how hard can a Rush Hour board possibly get" numbers (the
+   Wikipedia-cited 93-move result) don't come from mutate-and-hillclimb —
+   they come from mapping the FULL configuration graph for a fixed set of
+   pieces (lengths/directions/lanes fixed, only offsets vary) and finding
+   the state furthest from any exit. Because every slide is reversible,
+   that graph is undirected, so "distance from the hardest state to its
+   nearest exit" equals "distance from every exit state outward" — one
+   multi-source BFS seeded from ALL goal states at once, instead of one
+   solve() per candidate. This is exact (a true BFS distance, not a
+   heuristic score) and — as a side effect — hands back the optimal-move
+   count for EVERY reachable configuration of that shape in one pass, not
+   just the hardest one, which is what makes it cheap to harvest whole
+   difficulty tiers from a single good shape (see generate.js's
+   harvestShape). Hill-climbing still matters upstream: most random shapes
+   have goal states scattered everywhere and a tiny true maximum — it's
+   how a shape with real "traffic jam" entanglement gets found at all. */
+
+export function analyzeShape(pieces, opts = {}){
+  const maxStates = opts.maxStates ?? 400000;
+  const wm = wallMask(opts.walls);
+  const { len, dir, fixed, offs: start } = piecesToState(pieces);
+  const winOff = N - len[0];
+  const key = s => s.join(',');
+
+  // Map the full component reachable from `start` (ignoring win condition —
+  // pure connectivity) so every legal configuration of this shape is known.
+  const seen = new Set([key(start)]);
+  const queue = [start];
+  let head = 0;
+  while(head < queue.length){
+    const s = queue[head++];
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm)){
+      const ns = s.slice(); ns[i] = o;
+      const k = key(ns);
+      if(!seen.has(k)){ seen.add(k); queue.push(ns); }
+    }
+    if(seen.size > maxStates) return { aborted: true, size: seen.size };
+  }
+
+  // Multi-source BFS from every state in that component where the hero has
+  // already escaped: distGoal[state] = true optimal move count from state.
+  const distGoal = new Map();
+  const frontier = [];
+  for(const k of seen){
+    const s = k.split(',').map(Number);
+    if(s[0] === winOff){ distGoal.set(k, 0); frontier.push(s); }
+  }
+  if(!frontier.length) return { noGoal: true, size: seen.size };
+  let h2 = 0;
+  while(h2 < frontier.length){
+    const s = frontier[h2++];
+    const d = distGoal.get(key(s));
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm)){
+      const ns = s.slice(); ns[i] = o;
+      const k = key(ns);
+      if(!distGoal.has(k)){ distGoal.set(k, d + 1); frontier.push(ns); }
+    }
+  }
+
+  let maxD = 0, maxKey = key(start);
+  for(const [k, d] of distGoal) if(d > maxD){ maxD = d; maxKey = k; }
+  return { size: seen.size, goals: frontier.length, maxD, maxKey, distGoal, len, dir, fixed };
+}
+
+/* Rebuild a pieces array from an analyzeShape() state key + its shape. */
+export function stateToPieces(stateKey, len, dir, fixed){
+  return stateKey.split(',').map(Number).map((o, i) => ({
+    r: dir[i] === 'h' ? fixed[i] : o,
+    c: dir[i] === 'h' ? o : fixed[i],
+    len: len[i],
+    dir: dir[i],
+  }));
+}
+
 /* ---------- difficulty model v1 (plan item 0.2) ----------
    Signals per level:
      • optimal      — solution length
