@@ -14,6 +14,7 @@ import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG } from './art.js';
 
 const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
@@ -51,137 +52,6 @@ async function persist(){
   }
 }
 
-/* ================== PALETTE / CAR ART ================== */
-const PALETTE = [ // [base, dark, glass] — 0 reserved for hero red
-  ['#ff4d5e','#b3111f','#41151d'],
-  ['#37c8ab','#177a67','#0e2f2b'],
-  ['#5b8dff','#2a4fc4','#14203f'],
-  ['#ffb340','#c47a10','#3c2a0c'],
-  ['#b07cff','#6f3ad0','#291743'],
-  ['#7ed957','#3f9427','#1d3313'],
-  ['#ff8a5c','#c9502a','#3d1c10'],
-  ['#4fd2f0','#1f8fb0','#0f2c37'],
-  ['#f26fb1','#bb3679','#3a1229'],
-  ['#c9d36a','#8b9430','#2d3113'],
-  ['#8fa2bd','#57687f','#1e2530'],
-  ['#ffd84d','#d1a213','#3b3106'],
-  ['#67e0c2','#2b9c82','#123128'],
-  ['#d98cff','#9b45d6','#2f1440'],
-];
-
-function lighten(hex, amt){
-  const n = parseInt(hex.slice(1), 16);
-  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  r = Math.round(r + (255 - r) * amt); g = Math.round(g + (255 - g) * amt); b = Math.round(b + (255 - b) * amt);
-  return `rgb(${r},${g},${b})`;
-}
-
-/* Roof decals (plan 0.8): color-blind mode gives every paint color a
-   distinct pattern — reads as art variety, not an accessibility toggle. */
-function decalSVG(idx, L, H){
-  if(!save.settings.colorblind || idx === 0) return '';
-  const cx = L * 0.30, cy = H / 2, ink = 'rgba(255,255,255,.5)';
-  switch((idx - 1) % 5){
-    case 0: // twin stripes
-      return `<rect x="${cx-9}" y="${H*0.24}" width="7" height="${H*0.52}" rx="3" fill="${ink}"/>
-              <rect x="${cx+4}" y="${H*0.24}" width="7" height="${H*0.52}" rx="3" fill="${ink}"/>`;
-    case 1: // dots
-      return `<circle cx="${cx-8}" cy="${cy}" r="5.5" fill="${ink}"/><circle cx="${cx+8}" cy="${cy-9}" r="5.5" fill="${ink}"/><circle cx="${cx+8}" cy="${cy+9}" r="5.5" fill="${ink}"/>`;
-    case 2: // chevron
-      return `<path d="M ${cx-10} ${cy-11} L ${cx+2} ${cy} L ${cx-10} ${cy+11}" fill="none" stroke="${ink}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M ${cx+2} ${cy-11} L ${cx+14} ${cy} L ${cx+2} ${cy+11}" fill="none" stroke="${ink}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case 3: // ring
-      return `<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="${ink}" stroke-width="6"/>`;
-    default: // cross
-      return `<rect x="${cx-3.5}" y="${cy-12}" width="7" height="24" rx="3" fill="${ink}"/>
-              <rect x="${cx-12}" y="${cy-3.5}" width="24" height="7" rx="3" fill="${ink}"/>`;
-  }
-}
-
-const U = 100;
-function carSVG(idx, len, dir, isHero){
-  const [base, dark, glass] = isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)];
-  const L = len * U, H = U;
-  const gid = 'g' + idx + '-' + Math.random().toString(36).slice(2, 7);
-  const truck = len === 3;
-  let inner = `
-  <defs>
-    <linearGradient id="${gid}b" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(base, .28)}"/>
-      <stop offset=".45" stop-color="${base}"/>
-      <stop offset="1" stop-color="${dark}"/>
-    </linearGradient>
-    <linearGradient id="${gid}r" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(base, .45)}"/>
-      <stop offset="1" stop-color="${base}"/>
-    </linearGradient>
-    <linearGradient id="${gid}g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(glass, .7)}"/>
-      <stop offset="1" stop-color="${glass}"/>
-    </linearGradient>
-  </defs>`;
-  const wheel = x => `<rect x="${x}" y="4" width="26" height="13" rx="6" fill="#0c0f15"/><rect x="${x}" y="${H - 17}" width="26" height="13" rx="6" fill="#0c0f15"/>
-    <rect x="${x + 4}" y="6" width="18" height="4" rx="2" fill="#2a3140"/><rect x="${x + 4}" y="${H - 10}" width="18" height="4" rx="2" fill="#2a3140"/>`;
-  if(!truck){
-    inner += `
-    ${wheel(26)} ${wheel(L - 54)}
-    <rect x="8" y="12" width="${L - 16}" height="${H - 24}" rx="26" fill="url(#${gid}b)"/>
-    <rect x="8" y="12" width="${L - 16}" height="${H - 24}" rx="26" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>
-    <rect x="12" y="15" width="${L - 24}" height="14" rx="10" fill="rgba(255,255,255,.20)" opacity=".8"/>
-    <path d="M ${L * 0.30} 18 L ${L * 0.42} 26 L ${L * 0.42} ${H - 26} L ${L * 0.30} ${H - 18} Z" fill="url(#${gid}g)"/>
-    <path d="M ${L * 0.78} 20 L ${L * 0.68} 27 L ${L * 0.68} ${H - 27} L ${L * 0.78} ${H - 20} Z" fill="url(#${gid}g)" opacity=".92"/>
-    <rect x="${L * 0.44}" y="20" width="${L * 0.22}" height="${H - 40}" rx="12" fill="url(#${gid}r)"/>
-    <rect x="${L * 0.44}" y="23" width="${L * 0.22}" height="9" rx="5" fill="rgba(255,255,255,.35)"/>
-    <circle cx="${L - 16}" cy="30" r="5.5" fill="#fff6d8"/><circle cx="${L - 16}" cy="${H - 30}" r="5.5" fill="#fff6d8"/>
-    <circle cx="${L - 16}" cy="30" r="5.5" fill="none" stroke="rgba(0,0,0,.2)"/><circle cx="${L - 16}" cy="${H - 30}" r="5.5" fill="none" stroke="rgba(0,0,0,.2)"/>
-    <rect x="10" y="26" width="5" height="10" rx="2.5" fill="#ff6a4d"/><rect x="10" y="${H - 36}" width="5" height="10" rx="2.5" fill="#ff6a4d"/>
-    ${decalSVG(idx, L, H)}`;
-    if(isHero){
-      inner += `<g opacity=".55"><path d="M ${L - 12} 24 L ${L + 46} 8 L ${L + 46} 44 Z" fill="#fff3c9" opacity=".28"/>
-      <path d="M ${L - 12} ${H - 24} L ${L + 46} ${H - 8} L ${L + 46} ${H - 44} Z" fill="#fff3c9" opacity=".28"/></g>`;
-    }
-  } else {
-    inner += `
-    ${wheel(24)} ${wheel(L * 0.42)} ${wheel(L - 52)}
-    <rect x="8" y="14" width="${L * 0.66}" height="${H - 28}" rx="12" fill="url(#${gid}b)"/>
-    <rect x="8" y="14" width="${L * 0.66}" height="${H - 28}" rx="12" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>
-    <rect x="12" y="17" width="${L * 0.66 - 8}" height="11" rx="6" fill="rgba(255,255,255,.16)"/>
-    ${[0.16, 0.32, 0.48].map(f => `<line x1="${8 + L * 0.66 * f}" y1="20" x2="${8 + L * 0.66 * f}" y2="${H - 20}" stroke="rgba(0,0,0,.22)" stroke-width="2"/>`).join('')}
-    <rect x="${L * 0.68}" y="12" width="${L * 0.29}" height="${H - 24}" rx="20" fill="url(#${gid}b)"/>
-    <rect x="${L * 0.68}" y="12" width="${L * 0.29}" height="${H - 24}" rx="20" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="2"/>
-    <path d="M ${L * 0.80} 19 L ${L * 0.74} 26 L ${L * 0.74} ${H - 26} L ${L * 0.80} ${H - 19} Z" fill="url(#${gid}g)"/>
-    <rect x="${L * 0.82}" y="21" width="${L * 0.10}" height="${H - 42}" rx="9" fill="url(#${gid}r)"/>
-    <circle cx="${L - 15}" cy="29" r="5" fill="#fff6d8"/><circle cx="${L - 15}" cy="${H - 29}" r="5" fill="#fff6d8"/>
-    <rect x="10" y="27" width="5" height="9" rx="2.5" fill="#ff6a4d"/><rect x="10" y="${H - 36}" width="5" height="9" rx="2.5" fill="#ff6a4d"/>
-    ${decalSVG(idx, L, H)}`;
-  }
-  const W = dir === 'h' ? L : U, Ht = dir === 'h' ? U : L;
-  const g = dir === 'h' ? `<g>${inner}</g>` : `<g transform="translate(${U},0) rotate(90)">${inner}</g>`;
-  return `<svg viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">${g}</svg>`;
-}
-
-/* Roadworks tile: hazard-striped frame + traffic cone. Clearly not a
-   vehicle — flat, squarish, amber on asphalt — so "can't move" reads at
-   a glance. */
-function wallSVG(i){
-  const gid = 'w' + i + '-' + Math.random().toString(36).slice(2, 7);
-  return `<svg viewBox="0 0 ${U} ${U}" preserveAspectRatio="none" aria-hidden="true">
-  <defs>
-    <pattern id="${gid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="16" height="16" fill="#26210f"/>
-      <rect width="8" height="16" fill="#ffb454"/>
-    </pattern>
-  </defs>
-  <rect x="6" y="6" width="88" height="88" rx="13" fill="#141924"/>
-  <rect x="6" y="6" width="88" height="88" rx="13" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="2"/>
-  <rect x="12" y="12" width="76" height="76" rx="9" fill="none" stroke="url(#${gid})" stroke-width="9" opacity=".85"/>
-  <path d="M50 28 L63 72 L37 72 Z" fill="#e8762e"/>
-  <path d="M50 28 L63 72 L37 72 Z" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="2"/>
-  <rect x="42" y="50" width="16" height="7" rx="3" fill="#f5ede0"/>
-  <rect x="30" y="70" width="40" height="8" rx="4" fill="#c95f22"/>
-  </svg>`;
-}
-
 /* ================== BOARD RENDER ================== */
 const board = $('board');
 const gate = $('gate');
@@ -213,6 +83,7 @@ function drawGrid(){
            M ${x + o + tick} ${y + CELL - o} h ${-tick} v ${-tick} M ${x + CELL - o - tick} ${y + CELL - o} h ${tick} v ${-tick}"
            fill="none" stroke="rgba(255,255,255,.055)" stroke-width="2" stroke-linecap="round"/>`;
   }
+  h += dressingSVG(CELL, EXIT_ROW, '#ffd9a0');
   svg.innerHTML = h;
 }
 
@@ -257,7 +128,7 @@ function buildPieces(){
     el.setAttribute('role', 'button');
     el.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
     el.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
-    el.innerHTML = carSVG(i, p.len, p.dir, i === 0);
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, { colorblind: save.settings.colorblind });
     el.classList.add('enter');
     el.style.animationDelay = (i * 0.028) + 's';
     el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
@@ -323,6 +194,7 @@ function attachDrag(el, i){
     startX = e.clientX; startY = e.clientY;
     startPos = p().dir === 'h' ? p().c : p().r;
     lastCell = startPos;
+    kbRun = -1;
     samples = [{ t: performance.now(), pos: startPos }];
     [lo, hi] = rangeFor(i);
     clearHint();
@@ -412,19 +284,29 @@ function attachDrag(el, i){
     const at = pp.dir === 'h' ? pp.c : pp.r;
     const to = at + m[0];
     if(to < klo || to > khi){ sfx('deny'); return; }
-    pushHistory();
+    /* Consecutive key-steps of the same piece merge into ONE move — a
+       keyboard slide scores the same as the equivalent drag, so keyboard
+       and VoiceOver players can still hit par (plan 0.8). */
+    const merge = kbRun === i;
+    if(!merge) pushHistory();
     if(pp.dir === 'h') pp.c = to; else pp.r = to;
-    commitMove(i);
+    commitMove(i, merge);
+    kbRun = i;
+    clearTimeout(kbRunT);
+    kbRunT = setTimeout(() => { kbRun = -1; }, 1200);   // pause ends the slide
   });
 }
+
+let kbRun = -1;   // piece index of an in-progress keyboard slide, -1 = none
+let kbRunT = null;
 
 function pushHistory(){
   history.push(pieces.map(p => ({ r: p.r, c: p.c })));
   if(history.length > 500) history.shift();
   updateHud();
 }
-function commitMove(i){
-  moves++;
+function commitMove(i, mergedKeyStep = false){
+  if(!mergedKeyStep) moves++;
   sfx('snap');
   renderPositions(true);
   updateHud();
@@ -537,6 +419,7 @@ function startBoard(){
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   solvedAnim = false;
+  kbRun = -1;
   levelStart = Date.now();
   skipShown = false;
   $('skipRow').classList.remove('show');
@@ -550,6 +433,7 @@ function startBoard(){
 
 function undo(){
   if(!history.length || solvedAnim) return;
+  kbRun = -1;
   const s = history.pop();
   s.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
   moves = Math.max(0, moves - 1);
