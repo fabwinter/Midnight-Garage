@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Midnight Yard — concept scene (R0)</title>
+<style>
+:root{
+  --night:#080b12; --ink:#e8ecf4; --muted:#8a93a6; --line:#2c3442;
+  --amber:#ffb454; --red:#ff3b4e;
+  --disp:'Avenir Next Condensed','Arial Narrow',system-ui,sans-serif;
+  --body:-apple-system,'Inter',system-ui,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  font-family:var(--body);color:var(--ink);
+  background:
+    radial-gradient(1100px 600px at 50% -8%, #141c2e 0%, transparent 62%),
+    radial-gradient(800px 480px at 88% 108%, rgba(255,180,84,.06) 0%, transparent 55%),
+    var(--night);
+  min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+  overflow:hidden;user-select:none;
+}
+.wrap{width:100%;max-width:470px;padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:13px}
+header{width:100%;display:flex;align-items:flex-end;justify-content:space-between}
+.brand .t1{
+  font-family:var(--disp);font-weight:700;font-size:30px;letter-spacing:.055em;line-height:1;
+  text-shadow:0 0 20px rgba(255,180,84,.32),0 0 2px rgba(255,180,84,.55);
+  white-space:nowrap;
+}
+.brand .t1 b{color:var(--red);font-weight:700;text-shadow:0 0 18px rgba(255,59,78,.6)}
+.brand .t2{font-size:9.5px;letter-spacing:.4em;color:var(--muted);text-transform:uppercase;margin-top:7px}
+.hbtns{display:flex;gap:8px}
+.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);
+  background:linear-gradient(180deg,#1a2130,#131824);color:var(--muted);display:grid;place-items:center}
+.icon-btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto;gap:8px}
+.chip{border:1px solid var(--line);border-radius:12px;padding:7px 12px;
+  background:linear-gradient(180deg,#151b28cc,#111623cc)}
+.chip .lab{font-size:8.5px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase}
+.chip .val{font-family:var(--disp);font-weight:600;font-size:19px;margin-top:1px}
+.chip.lv .val{color:var(--amber)}
+.chip .stars{color:var(--amber);font-size:12px;letter-spacing:1px}
+.chip .stars .off{color:#39415299}
+.frame{
+  position:relative;padding:15px;border-radius:26px;
+  background:linear-gradient(160deg,#1d2534 0%,#141a26 45%,#0f131c 100%);
+  box-shadow:0 30px 70px -18px rgba(0,0,0,.85),0 4px 14px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.07),inset 0 -2px 0 rgba(0,0,0,.5);
+}
+.scene{display:block;width:402px;height:402px;border-radius:13px}
+.controls{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.btn{font-family:var(--disp);font-weight:600;font-size:14px;letter-spacing:.1em;text-transform:uppercase;
+  border-radius:14px;border:1px solid var(--line);padding:13px 8px;color:var(--ink);
+  background:linear-gradient(180deg,#1b2230,#131a26);display:flex;align-items:center;justify-content:center;gap:8px}
+.btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn.accent{border-color:rgba(255,180,84,.4);color:var(--amber)}
+.coach{font-size:12.5px;color:#a9b3c6;letter-spacing:.02em;text-align:center}
+.coach b{color:var(--amber);font-weight:600}
+.bodyrain{position:fixed;inset:0;pointer-events:none;opacity:.13}
+@keyframes fall{to{transform:translateY(240px)}}
+</style>
+</head>
+<body>
+
+<svg class="bodyrain" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" viewBox="0 0 470 940">
+  <g style="animation:fall .5s linear infinite">
+    <g id="brg" stroke="#bcd0ff" stroke-width="1" opacity=".5">
+      <line x1="30" y1="-40" x2="24" y2="-6"/><line x1="120" y1="-150" x2="114" y2="-116"/>
+      <line x1="210" y1="-80" x2="204" y2="-46"/><line x1="300" y1="-190" x2="294" y2="-156"/>
+      <line x1="390" y1="-30" x2="384" y2="4"/><line x1="450" y1="-130" x2="444" y2="-96"/>
+      <line x1="70" y1="-210" x2="64" y2="-176"/><line x1="260" y1="-10" x2="254" y2="24"/>
+    </g>
+    <use href="#brg" y="240"/><use href="#brg" y="480"/><use href="#brg" y="720"/><use href="#brg" y="960"/><use href="#brg" y="1200"/>
+  </g>
+</svg>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="t1">MIDNIGHT <b>YARD</b></div>
+      <div class="t2">Night freight · Shift 03</div>
+    </div>
+    <div class="hbtns">
+      <div class="icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+    </div>
+  </header>
+
+  <div class="hud">
+    <div class="chip lv"><div class="lab">Level</div><div class="val">87</div></div>
+    <div class="chip"><div class="lab">Neon District</div><div class="stars">★★<span class="off">★</span></div></div>
+    <div class="chip"><div class="lab">Moves</div><div class="val">9</div></div>
+    <div class="chip"><div class="lab">Par</div><div class="val">12</div></div>
+  </div>
+
+  <div class="frame">
+    <svg class="scene" viewBox="0 0 600 600" font-family="Arial, sans-serif">
+      <defs>
+        <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#151a25"/><stop offset=".55" stop-color="#10141e"/><stop offset="1" stop-color="#0b0e16"/>
+        </linearGradient>
+        <radialGradient id="lampCool" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#9db8e8" stop-opacity=".3"/><stop offset=".55" stop-color="#7b98cf" stop-opacity=".11"/><stop offset="1" stop-color="#7b98cf" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="gateGlow" cx="1" cy=".5" r="1">
+          <stop offset="0" stop-color="#ffb454" stop-opacity=".5"/><stop offset=".4" stop-color="#ffa63e" stop-opacity=".17"/><stop offset="1" stop-color="#ffa63e" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffe9b8" stop-opacity=".45"/><stop offset=".75" stop-color="#ffe9b8" stop-opacity=".12"/><stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="rail" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#77869f"/><stop offset=".45" stop-color="#465color" stop-opacity="0"/><stop offset=".45" stop-color="#46536b"/><stop offset="1" stop-color="#1e2534"/>
+        </linearGradient>
+        <linearGradient id="railV" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#59677f"/><stop offset="1" stop-color="#1e2534"/>
+        </linearGradient>
+        <linearGradient id="heroRed" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ff7784"/><stop offset=".45" stop-color="#e6293d"/><stop offset="1" stop-color="#8f0f1e"/>
+        </linearGradient>
+        <linearGradient id="boxTealV" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4fd6b8"/><stop offset=".45" stop-color="#1f9c82"/><stop offset="1" stop-color="#0d4a3e"/>
+        </linearGradient>
+        <linearGradient id="boxBlueV" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#7fa4ff"/><stop offset=".45" stop-color="#3f65d6"/><stop offset="1" stop-color="#1c2f70"/>
+        </linearGradient>
+        <linearGradient id="boxRust" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffa06a"/><stop offset=".45" stop-color="#c65f2e"/><stop offset="1" stop-color="#63290f"/>
+        </linearGradient>
+        <linearGradient id="tankV" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#d9c2ff"/><stop offset=".45" stop-color="#8d5fe0"/><stop offset="1" stop-color="#3b2270"/>
+        </linearGradient>
+        <linearGradient id="loco2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffd769"/><stop offset=".45" stop-color="#e0a021"/><stop offset="1" stop-color="#6e4a08"/>
+        </linearGradient>
+        <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .05 0"/></filter>
+        <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+        <filter id="soft2" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.2"/></filter>
+        <radialGradient id="vig" cx=".5" cy=".46" r=".78">
+          <stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".42"/>
+        </radialGradient>
+        <clipPath id="board"><rect width="600" height="600" rx="14"/></clipPath>
+      </defs>
+
+      <g clip-path="url(#board)">
+        <!-- ============ GROUND ============ -->
+        <rect width="600" height="600" fill="url(#ground)"/>
+        <g fill="#ffffff" opacity=".045">
+          <circle cx="34" cy="61" r="1.4"/><circle cx="88" cy="23" r="1.1"/><circle cx="141" cy="83" r="1.3"/><circle cx="197" cy="41" r="1"/>
+          <circle cx="256" cy="74" r="1.4"/><circle cx="318" cy="28" r="1.1"/><circle cx="371" cy="66" r="1.2"/><circle cx="437" cy="35" r="1.4"/>
+          <circle cx="493" cy="79" r="1"/><circle cx="551" cy="47" r="1.3"/><circle cx="41" cy="169" r="1.2"/><circle cx="109" cy="141" r="1.4"/>
+          <circle cx="166" cy="177" r="1"/><circle cx="228" cy="136" r="1.3"/><circle cx="284" cy="171" r="1.1"/><circle cx="349" cy="143" r="1.4"/>
+          <circle cx="412" cy="178" r="1"/><circle cx="468" cy="139" r="1.2"/><circle cx="527" cy="173" r="1.4"/><circle cx="61" cy="342" r="1.2"/>
+          <circle cx="123" cy="371" r="1.4"/><circle cx="187" cy="338" r="1"/><circle cx="243" cy="376" r="1.3"/><circle cx="308" cy="344" r="1.1"/>
+          <circle cx="366" cy="379" r="1.4"/><circle cx="429" cy="341" r="1"/><circle cx="488" cy="373" r="1.2"/><circle cx="544" cy="347" r="1.4"/>
+          <circle cx="37" cy="466" r="1.1"/><circle cx="98" cy="437" r="1.3"/><circle cx="159" cy="472" r="1"/><circle cx="221" cy="441" r="1.4"/>
+          <circle cx="279" cy="477" r="1.2"/><circle cx="341" cy="446" r="1"/><circle cx="404" cy="481" r="1.3"/><circle cx="463" cy="443" r="1.1"/>
+          <circle cx="522" cy="478" r="1.4"/><circle cx="52" cy="561" r="1.2"/><circle cx="117" cy="533" r="1"/><circle cx="181" cy="568" r="1.3"/>
+          <circle cx="242" cy="537" r="1.1"/><circle cx="303" cy="571" r="1.4"/><circle cx="367" cy="539" r="1"/><circle cx="431" cy="574" r="1.2"/>
+          <circle cx="496" cy="541" r="1.3"/><circle cx="557" cy="576" r="1.1"/><circle cx="74" cy="262" r="1.3"/><circle cx="139" cy="238" r="1.1"/>
+        </g>
+
+        <!-- puddles -->
+        <g opacity=".55">
+          <ellipse cx="130" cy="448" rx="54" ry="12" fill="#0a1220"/>
+          <ellipse cx="130" cy="448" rx="54" ry="12" fill="url(#lampCool)" opacity=".8"/>
+          <ellipse cx="472" cy="561" rx="64" ry="13" fill="#0a1220"/>
+          <ellipse cx="472" cy="561" rx="64" ry="13" fill="#ffb454" opacity=".07"/>
+          <ellipse cx="512" cy="118" rx="44" ry="10" fill="#0a1220"/>
+          <ellipse cx="60" cy="90" rx="38" ry="9" fill="#0a1220"/>
+        </g>
+
+        <!-- ============ TRACKS ============ -->
+        <!-- vertical crossovers: whisper-quiet -->
+        <g opacity=".16">
+          <g id="vlane">
+            <rect x="31" y="0" width="3.5" height="600" fill="url(#railV)"/>
+            <rect x="65" y="0" width="3.5" height="600" fill="url(#railV)"/>
+          </g>
+          <use href="#vlane" x="100"/><use href="#vlane" x="200"/><use href="#vlane" x="300"/><use href="#vlane" x="400"/><use href="#vlane" x="500"/>
+        </g>
+        <!-- horizontal lanes: the yard's grain -->
+        <g>
+          <g id="hlane">
+            <g fill="#1c2331" opacity=".9">
+              <rect x="7" y="20" width="6" height="60" rx="2"/><rect x="57" y="20" width="6" height="60" rx="2"/>
+              <rect x="107" y="20" width="6" height="60" rx="2"/><rect x="157" y="20" width="6" height="60" rx="2"/>
+              <rect x="207" y="20" width="6" height="60" rx="2"/><rect x="257" y="20" width="6" height="60" rx="2"/>
+              <rect x="307" y="20" width="6" height="60" rx="2"/><rect x="357" y="20" width="6" height="60" rx="2"/>
+              <rect x="407" y="20" width="6" height="60" rx="2"/><rect x="457" y="20" width="6" height="60" rx="2"/>
+              <rect x="507" y="20" width="6" height="60" rx="2"/><rect x="557" y="20" width="6" height="60" rx="2"/>
+            </g>
+            <rect x="0" y="27" width="600" height="3.5" fill="#333e54"/>
+            <rect x="0" y="69" width="600" height="3.5" fill="#333e54"/>
+            <rect x="0" y="27" width="600" height="1.3" fill="#94a5c2" opacity=".5"/>
+            <rect x="0" y="69" width="600" height="1.3" fill="#94a5c2" opacity=".5"/>
+          </g>
+          <use href="#hlane" y="100"/><use href="#hlane" y="200"/><use href="#hlane" y="300"/><use href="#hlane" y="400"/><use href="#hlane" y="500"/>
+        </g>
+
+        <!-- departure lane (row 2) -->
+        <rect x="0" y="200" width="600" height="100" fill="url(#gateGlow)" opacity=".5"/>
+        <rect x="0" y="227" width="600" height="1.4" fill="#ffd9a0" opacity=".55"/>
+        <rect x="0" y="269" width="600" height="1.4" fill="#ffd9a0" opacity=".55"/>
+        <text x="290" y="256" text-anchor="middle" font-size="20" letter-spacing="7" fill="#ffb454" opacity=".5" font-weight="bold">DEPART</text>
+        <path d="M 364 244 l 13 6 l -13 6 z" fill="#ffb454" opacity=".75"/>
+
+        <!-- cool lamp pools -->
+        <ellipse cx="255" cy="60" rx="185" ry="140" fill="url(#lampCool)"/>
+        <ellipse cx="470" cy="510" rx="205" ry="155" fill="url(#lampCool)" opacity=".75"/>
+
+        <!-- ============ WET-GROUND REFLECTIONS ============ -->
+        <g opacity=".18" filter="url(#soft)">
+          <rect x="16" y="298" width="96" height="20" rx="10" fill="#ff4d5e"/>
+          <rect x="322" y="212" width="24" height="130" rx="10" fill="#4fd6b8"/>
+          <rect x="422" y="412" width="24" height="140" rx="10" fill="#7fa4ff"/>
+          <rect x="122" y="512" width="24" height="80" rx="10" fill="#8d5fe0"/>
+          <rect x="216" y="586" width="170" height="16" rx="8" fill="#e0a021"/>
+        </g>
+
+        <!-- ============ ROLLING STOCK ============ -->
+
+        <!-- rust boxcar · row 0 · cols 0-1 (horizontal) -->
+        <g transform="translate(8,8)">
+          <rect x="4" y="14" width="176" height="58" rx="9" fill="url(#boxRust)" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+          <rect x="4" y="14" width="176" height="10" rx="5" fill="#fff" opacity=".15"/>
+          <g stroke="#3a1608" stroke-width="1.6" opacity=".6"><line x1="28" y1="16" x2="28" y2="70"/><line x1="56" y1="16" x2="56" y2="70"/><line x1="112" y1="16" x2="112" y2="70"/><line x1="140" y1="16" x2="140" y2="70"/><line x1="162" y1="16" x2="162" y2="70"/></g>
+          <rect x="76" y="24" width="26" height="38" rx="2" fill="#4a1d0a" stroke="#7a3517" stroke-width="1.4"/>
+          <text x="12" y="66" font-size="11" fill="#ffd9bd" opacity=".7" font-weight="bold">MG-41</text>
+          <circle cx="7" cy="30" r="2.6" fill="#ff5b47"/><circle cx="177" cy="56" r="2.6" fill="#ffd2a1"/>
+        </g>
+
+        <!-- coupled teal 2-cut · col 3 · rows 0-1 (vertical, native) -->
+        <g transform="translate(300,0)">
+          <rect x="14" y="6" width="72" height="88" rx="9" fill="url(#boxTealV)" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+          <rect x="14" y="6" width="11" height="88" rx="5" fill="#fff" opacity=".13"/>
+          <g stroke="#06281f" stroke-width="1.6" opacity=".6"><line x1="16" y1="26" x2="84" y2="26"/><line x1="16" y1="46" x2="84" y2="46"/><line x1="16" y1="66" x2="84" y2="66"/></g>
+          <text x="50" y="86" font-size="10" fill="#c8fff0" opacity=".75" font-weight="bold" text-anchor="middle">MG-88</text>
+          <circle cx="30" cy="9" r="2.6" fill="#ff5b47"/><circle cx="70" cy="9" r="2.6" fill="#ff5b47"/>
+          <!-- knuckle coupler — the mechanic teaser -->
+          <rect x="46.5" y="94" width="7" height="12" rx="3" fill="#7c6a4b"/>
+          <circle cx="50" cy="100" r="7.5" fill="#12161f" stroke="#ffb454" stroke-width="1.8">
+            <animate attributeName="stroke-opacity" values="1;.45;1" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="50" cy="100" r="13" fill="#ffb454" opacity=".18" filter="url(#soft2)"/>
+          <rect x="14" y="106" width="72" height="88" rx="9" fill="url(#boxTealV)" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+          <rect x="14" y="106" width="11" height="88" rx="5" fill="#fff" opacity=".13"/>
+          <g stroke="#06281f" stroke-width="1.6" opacity=".6"><line x1="16" y1="128" x2="84" y2="128"/><line x1="16" y1="148" x2="84" y2="148"/><line x1="16" y1="168" x2="84" y2="168"/></g>
+          <text x="50" y="188" font-size="10" fill="#c8fff0" opacity=".75" font-weight="bold" text-anchor="middle">MG-89</text>
+          <circle cx="30" cy="191" r="2.6" fill="#ffd2a1"/><circle cx="70" cy="191" r="2.6" fill="#ffd2a1"/>
+        </g>
+
+        <!-- blue boxcar 3-length · col 4 · rows 1-3 (vertical) — THE blocker -->
+        <g transform="translate(400,100)">
+          <rect x="14" y="6" width="72" height="288" rx="10" fill="url(#boxBlueV)" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+          <rect x="14" y="6" width="11" height="288" rx="5" fill="#fff" opacity=".14"/>
+          <g stroke="#101c46" stroke-width="1.6" opacity=".6">
+            <line x1="16" y1="40" x2="84" y2="40"/><line x1="16" y1="76" x2="84" y2="76"/><line x1="16" y1="112" x2="84" y2="112"/>
+            <line x1="16" y1="150" x2="84" y2="150"/><line x1="16" y1="188" x2="84" y2="188"/><line x1="16" y1="224" x2="84" y2="224"/><line x1="16" y1="258" x2="84" y2="258"/>
+          </g>
+          <rect x="30" y="130" width="40" height="40" rx="3" fill="#16255c" stroke="#2c4491" stroke-width="1.4"/>
+          <text x="50" y="282" font-size="10" fill="#cfe0ff" opacity=".8" font-weight="bold" text-anchor="middle">MG-17</text>
+          <circle cx="30" cy="9" r="2.6" fill="#ff5b47"/><circle cx="70" cy="9" r="2.6" fill="#ff5b47"/>
+          <circle cx="30" cy="291" r="2.6" fill="#ffd2a1"/><circle cx="70" cy="291" r="2.6" fill="#ffd2a1"/>
+          <!-- headlight splash on its flank where the hero's beam lands -->
+          <rect x="14" y="104" width="10" height="92" rx="5" fill="#ffe9b8" opacity=".24" filter="url(#soft2)"/>
+        </g>
+
+        <!-- purple tank car · col 1 · rows 3-4 (vertical) -->
+        <g transform="translate(100,300)">
+          <rect x="18" y="8" width="64" height="184" rx="30" fill="url(#tankV)" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+          <rect x="23" y="12" width="12" height="176" rx="6" fill="#fff" opacity=".2"/>
+          <circle cx="50" cy="100" r="13" fill="#2c1a52" stroke="#b79aef" stroke-width="2"/>
+          <rect x="46" y="24" width="4" height="152" rx="2" fill="#2c1a52" opacity=".7" transform="rotate(90 50 100)"/>
+          <text x="50" y="180" font-size="9" fill="#e6d6ff" opacity=".7" font-weight="bold" text-anchor="middle">HAZ·3</text>
+          <circle cx="36" cy="11" r="2.6" fill="#ff5b47"/><circle cx="64" cy="189" r="2.6" fill="#ffd2a1"/>
+        </g>
+
+        <!-- yellow switcher · row 5 · cols 2-3 (horizontal) -->
+        <g transform="translate(208,508)">
+          <rect x="4" y="6" width="176" height="58" rx="10" fill="url(#loco2)" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+          <rect x="4" y="6" width="176" height="10" rx="5" fill="#fff" opacity=".18"/>
+          <rect x="118" y="0" width="52" height="70" rx="8" fill="url(#loco2)" stroke="#000" stroke-opacity=".45" stroke-width="1.5"/>
+          <rect x="126" y="8" width="36" height="14" rx="4" fill="#1a2634" opacity=".9"/>
+          <rect x="126" y="48" width="36" height="14" rx="4" fill="#1a2634" opacity=".9"/>
+          <circle cx="52" cy="35" r="11" fill="#8f6a12" stroke="#5e430a" stroke-width="2"/>
+          <circle cx="86" cy="35" r="11" fill="#8f6a12" stroke="#5e430a" stroke-width="2"/>
+          <g stroke="#5e430a" stroke-width="2"><line x1="44" y1="27" x2="60" y2="43"/><line x1="78" y1="27" x2="94" y2="43"/></g>
+          <g fill="#141a24"><rect x="8" y="12" width="7" height="46" rx="2"/><rect x="19" y="16" width="4" height="38" rx="2"/></g>
+          <text x="132" y="40" font-size="12" fill="#332204" font-weight="bold">04</text>
+          <circle cx="181" cy="22" r="3" fill="#fff6d8"/><circle cx="181" cy="48" r="3" fill="#fff6d8"/>
+        </g>
+
+        <!-- ============ HERO: red loco · row 2 · cols 0-1 ============ -->
+        <g transform="translate(8,208)">
+          <!-- headlight beam: reaches the blue blocker at x=400 (scene), fades before it -->
+          <path d="M 186 28 L 400 12 L 400 74 L 186 58 Z" fill="url(#beam)"/>
+          <rect x="4" y="12" width="182" height="62" rx="12" fill="url(#heroRed)" stroke="#000" stroke-opacity=".45" stroke-width="1.6"/>
+          <rect x="4" y="12" width="182" height="11" rx="5" fill="#fff" opacity=".22"/>
+          <g fill="#7d0d1a" opacity=".8"><rect x="16" y="22" width="66" height="42" rx="5"/></g>
+          <g stroke="#5e0813" stroke-width="1.6" opacity=".8"><line x1="28" y1="24" x2="28" y2="62"/><line x1="42" y1="24" x2="42" y2="62"/><line x1="56" y1="24" x2="56" y2="62"/><line x1="70" y1="24" x2="70" y2="62"/></g>
+          <circle cx="106" cy="43" r="12" fill="#a01527" stroke="#5e0813" stroke-width="2"/>
+          <g stroke="#5e0813" stroke-width="2"><line x1="98" y1="35" x2="114" y2="51"/><line x1="114" y1="35" x2="98" y2="51"/></g>
+          <rect x="128" y="8" width="50" height="70" rx="9" fill="url(#heroRed)" stroke="#000" stroke-opacity=".5" stroke-width="1.6"/>
+          <rect x="136" y="15" width="34" height="15" rx="4" fill="#dff1ff" opacity=".85"/>
+          <rect x="136" y="56" width="34" height="15" rx="4" fill="#9fc4dd" opacity=".7"/>
+          <rect x="136" y="38" width="34" height="10" rx="3" fill="#ffb9c1" opacity=".5"/>
+          <text x="141" y="46.5" font-size="9.5" fill="#3d030b" font-weight="bold" letter-spacing="1">M70</text>
+          <circle cx="182" cy="28" r="4.4" fill="#fff8dd"/><circle cx="182" cy="58" r="4.4" fill="#fff8dd"/>
+          <circle cx="182" cy="28" r="8" fill="#fff3c2" opacity=".4" filter="url(#soft2)"/>
+          <circle cx="182" cy="58" r="8" fill="#fff3c2" opacity=".4" filter="url(#soft2)"/>
+          <circle cx="8" cy="30" r="2.8" fill="#ff5b47"/><circle cx="8" cy="56" r="2.8" fill="#ff5b47"/>
+          <circle cx="152" cy="6" r="3.2" fill="#ff3b4e">
+            <animate attributeName="opacity" values="1;.25;1" dur="1.6s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="152" cy="6" r="8" fill="#ff3b4e" opacity=".35" filter="url(#soft2)">
+            <animate attributeName="opacity" values=".35;.08;.35" dur="1.6s" repeatCount="indefinite"/>
+          </circle>
+        </g>
+
+        <!-- ============ SIGNALS ============ -->
+        <!-- red signal guarding the depart lane, planted beside the blocker's lane -->
+        <g transform="translate(392,308)">
+          <rect x="-2" y="0" width="4" height="16" fill="#39435a"/>
+          <rect x="-7" y="-16" width="14" height="20" rx="4" fill="#151b28" stroke="#39435a" stroke-width="1.4"/>
+          <circle cx="0" cy="-6" r="4" fill="#ff4444">
+            <animate attributeName="opacity" values="1;.5;1" dur="2.2s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="0" cy="-6" r="10" fill="#ff4444" opacity=".3" filter="url(#soft2)"/>
+          <ellipse cx="0" cy="20" rx="17" ry="5" fill="#ff4444" opacity=".13"/>
+        </g>
+        <!-- green signal on a clear lane -->
+        <g transform="translate(196,396)">
+          <rect x="-2" y="0" width="4" height="16" fill="#39435a"/>
+          <rect x="-7" y="-16" width="14" height="20" rx="4" fill="#151b28" stroke="#39435a" stroke-width="1.4"/>
+          <circle cx="0" cy="-6" r="4" fill="#54e69a"/>
+          <circle cx="0" cy="-6" r="10" fill="#54e69a" opacity=".3" filter="url(#soft2)"/>
+          <ellipse cx="0" cy="20" rx="17" ry="5" fill="#54e69a" opacity=".11"/>
+        </g>
+
+        <!-- yard lamps on free ground -->
+        <g transform="translate(252,12)">
+          <rect x="-2.5" y="0" width="5" height="28" fill="#2b3345"/>
+          <circle cx="0" cy="2" r="5.5" fill="#cfe0ff" opacity=".95"/>
+          <circle cx="0" cy="2" r="15" fill="#9db8e8" opacity=".4" filter="url(#soft)"/>
+        </g>
+        <g transform="translate(470,586)">
+          <rect x="-2.5" y="-28" width="5" height="28" fill="#2b3345"/>
+          <circle cx="0" cy="-28" r="5.5" fill="#cfe0ff" opacity=".9"/>
+          <circle cx="0" cy="-28" r="15" fill="#9db8e8" opacity=".4" filter="url(#soft)"/>
+        </g>
+
+        <!-- ============ GATE ============ -->
+        <rect x="556" y="200" width="44" height="100" fill="url(#gateGlow)"/>
+        <rect x="592" y="192" width="7" height="116" rx="3.5" fill="#ffb454">
+          <animate attributeName="opacity" values=".85;1;.85" dur="2.6s" repeatCount="indefinite"/>
+        </rect>
+        <rect x="586" y="192" width="14" height="116" rx="6" fill="#ffb454" opacity=".4" filter="url(#soft)"/>
+
+        <!-- ============ RAIN ============ -->
+        <g opacity=".5">
+          <g style="animation:fall .45s linear infinite">
+            <g id="rg" stroke="#cfe0ff" stroke-width="1.3" stroke-linecap="round">
+              <line x1="60" y1="-30" x2="54" y2="2" opacity=".55"/><line x1="130" y1="-140" x2="124" y2="-108" opacity=".4"/>
+              <line x1="205" y1="-60" x2="199" y2="-28" opacity=".3"/><line x1="280" y1="-180" x2="274" y2="-148" opacity=".45"/>
+              <line x1="352" y1="-90" x2="346" y2="-58" opacity=".3"/><line x1="425" y1="-20" x2="419" y2="12" opacity=".5"/>
+              <line x1="500" y1="-150" x2="494" y2="-118" opacity=".6"/><line x1="560" y1="-70" x2="554" y2="-38" opacity=".65"/>
+              <line x1="95" y1="-210" x2="89" y2="-178" opacity=".5"/><line x1="470" y1="-220" x2="464" y2="-188" opacity=".45"/>
+              <line x1="240" y1="-120" x2="234" y2="-88" opacity=".25"/><line x1="20" y1="-100" x2="14" y2="-68" opacity=".4"/>
+            </g>
+            <use href="#rg" y="240"/><use href="#rg" y="480"/><use href="#rg" y="720"/><use href="#rg" y="960"/>
+          </g>
+        </g>
+        <g stroke="#bcd0ff" fill="none" opacity=".35">
+          <circle cx="130" cy="449" r="5" stroke-width="1"><animate attributeName="r" values="2;12" dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity" values=".5;0" dur="1.8s" repeatCount="indefinite"/></circle>
+          <circle cx="480" cy="562" r="6" stroke-width="1"><animate attributeName="r" values="2;13" dur="2.3s" repeatCount="indefinite" begin=".7s"/><animate attributeName="opacity" values=".45;0" dur="2.3s" repeatCount="indefinite" begin=".7s"/></circle>
+          <circle cx="516" cy="119" r="4" stroke-width="1"><animate attributeName="r" values="2;10" dur="2s" repeatCount="indefinite" begin="1.2s"/><animate attributeName="opacity" values=".5;0" dur="2s" repeatCount="indefinite" begin="1.2s"/></circle>
+        </g>
+
+        <ellipse cx="300" cy="-14" rx="380" ry="70" fill="#8ea4c9" opacity=".07" filter="url(#soft)"/>
+        <rect width="600" height="600" filter="url(#grain)" opacity=".5"/>
+        <rect width="600" height="600" fill="url(#vig)"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="coach">Tap the amber coupler to split the cut — <b>coupled cars move as one</b></div>
+
+  <div class="controls">
+    <button class="btn"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Undo</button>
+    <button class="btn accent"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.6 1 2.3h6c0-.7.4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9.5 21h5"/></svg>Hint</button>
+    <button class="btn"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.3"/><path d="M3 4v5h5"/></svg>Reset</button>
+  </div>
+</div>
+</body>
+</html>
