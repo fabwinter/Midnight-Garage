@@ -7,9 +7,11 @@ import { N, EXIT_ROW } from './solver.js';
 const HERO = '🟥';
 const CARS = ['🟦', '🟩', '🟨', '🟪', '🟧', '🟫', '⬜'];
 const EMPTY = '⬛';
+const ROADWORKS = '🚧';
 
-export function boardEmoji(p){
+export function boardEmoji(p, w){
   const g = Array.from({ length: N }, () => Array(N).fill(EMPTY));
+  (w ?? []).forEach(([r, c]) => { g[r][c] = ROADWORKS; });
   p.forEach((a, i) => {
     const [r, c, len, dir] = a;
     const glyph = i === 0 ? HERO : CARS[(i - 1) % CARS.length];
@@ -23,7 +25,7 @@ export function boardEmoji(p){
 export function dailyShareText({ number, moves, par, streak, level }){
   const stars = moves <= par ? '⭐️⭐️⭐️' : moves <= par + Math.max(3, Math.ceil(par * 0.35)) ? '⭐️⭐️' : '⭐️';
   const streakBit = streak >= 2 ? `  🔥${streak}` : '';
-  return `Midnight Garage — Daily #${number}\n${stars} ${moves} moves · Par ${par}${streakBit}\n\n${boardEmoji(level.p)}\n\nmidnightgarage.app`;
+  return `Midnight Garage — Daily #${number}\n${stars} ${moves} moves · Par ${par}${streakBit}\n\n${boardEmoji(level.p, level.w)}\n\nmidnightgarage.app`;
 }
 
 export async function shareText(text){

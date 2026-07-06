@@ -10,6 +10,7 @@ import { mulberry32, hashStr, rngInt } from './rng.js';
 export function tryGenerate(rng, opts = {}){
   const minOptimal = opts.minOptimal ?? 3;
   const extras = opts.pieces ?? rngInt(rng, 6, 12);
+  const wallCount = opts.walls ?? 0;
 
   const hero = { r: EXIT_ROW, c: rngInt(rng, 0, 3), len: 2, dir: 'h' };
   const pieces = [hero];
@@ -27,6 +28,20 @@ export function tryGenerate(rng, opts = {}){
     return true;
   };
   mark(hero);
+
+  // Immovable roadworks first, so vehicles pack around them. Never in the
+  // exit row (a wall there would make the level unwinnable). This loop
+  // draws zero RNG values when wallCount is 0, keeping wall-free seeds —
+  // including every historical daily puzzle — byte-identical.
+  const walls = [];
+  let wtries = 0;
+  while(walls.length < wallCount && wtries < 60){
+    wtries++;
+    const r = rngInt(rng, 0, N - 1), c = rngInt(rng, 0, N - 1);
+    if(r === EXIT_ROW || grid[r][c]) continue;
+    grid[r][c] = true;
+    walls.push([r, c]);
+  }
 
   let placed = 0, tries = 0;
   while(placed < extras && tries < 250){
@@ -52,38 +67,62 @@ export function tryGenerate(rng, opts = {}){
   for(let c = hero.c + hero.len; c < N; c++) if(grid[EXIT_ROW][c]) blocked = true;
   if(!blocked) return null;
 
-  const sol = solve(pieces, { maxStates: 250000 });
+  const sol = solve(pieces, { maxStates: 250000, walls });
   if(!sol.solvable || sol.optimal < minOptimal) return null;
 
-  const stats = rate(pieces, sol);
+  const stats = rate(pieces, sol, walls);
   return {
     p: pieces.map(q => [q.r, q.c, q.len, q.dir]),
+    ...(walls.length ? { w: walls.map(w => [w[0], w[1]]) } : {}),
     m: sol.optimal,
     d: stats.score,
     stats,
-    key: levelKey(pieces),
+    key: levelKey(pieces, walls),
   };
 }
 
 /* ---------- Hardening (hill-climb) ----------
    Uniform random boards skew easy (p90 ≈ par 7). To reach the deep end of
-   the curve we mutate a board — add / remove / relocate a piece — and keep
-   the mutation when it lengthens the optimal solution (composite score as
-   tie-break). Deterministic given the RNG, like everything else here. */
+   the curve we mutate a board — add / remove / relocate a piece or a wall —
+   and keep the mutation when it lengthens the optimal solution (composite
+   score as tie-break). Deterministic given the RNG, like everything else
+   here. wallMax caps how many roadworks the climb may place (0 = never). */
 
-export function harden(level, rng, steps = 120, opts = {}){
-  const maxStates = opts.maxStates ?? 250000;
+export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
   let best = level;
   for(let s = 0; s < steps; s++){
     const pieces = best.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+    const walls = (best.w ?? []).map(a => [a[0], a[1]]);
     const grid = Array.from({ length: N }, () => Array(N).fill(-1));
     pieces.forEach((p, i) => {
       for(let k = 0; k < p.len; k++){
         grid[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] = i;
       }
     });
-    const op = rng();
-    if(op < 0.55 || pieces.length <= 4){
+    for(const [wr, wc] of walls) grid[wr][wc] = -2;
+    let op = rng();
+    if(wallMax > 0 && op < 0.2){
+      // mutate roadworks: add / remove / relocate one wall cell
+      const wop = rng();
+      if(wop < 0.5 && walls.length < wallMax){
+        const r = rngInt(rng, 0, N - 1), c = rngInt(rng, 0, N - 1);
+        if(r === EXIT_ROW || grid[r][c] !== -1) continue;
+        walls.push([r, c]);
+      } else if(wop < 0.75 && walls.length > 0){
+        walls.splice(rngInt(rng, 0, walls.length - 1), 1);
+      } else if(walls.length > 0){
+        const wi = rngInt(rng, 0, walls.length - 1);
+        const r = rngInt(rng, 0, N - 1), c = rngInt(rng, 0, N - 1);
+        if(r === EXIT_ROW || grid[r][c] !== -1) continue;
+        walls[wi] = [r, c];
+      } else continue;
+      op = 1;   // wall op done — skip the piece ops below
+    } else if(wallMax > 0){
+      op = (op - 0.2) / 0.8;   // rescale so piece-op odds match the wall-free path
+    }
+    if(op === 1){
+      // fall through to solve
+    } else if(op < 0.55 || pieces.length <= 4){
       // add a piece
       const len = rng() < 0.3 ? 3 : 2;
       const dir = rng() < 0.5 ? 'h' : 'v';
@@ -121,18 +160,20 @@ export function harden(level, rng, steps = 120, opts = {}){
       pieces[i] = q;
     }
 
-    const sol = solve(pieces, { maxStates });
+    const sol = solve(pieces, { maxStates: 250000, walls });
     if(!sol.solvable || sol.optimal < 2) continue;
     if(sol.optimal < best.m) continue;
-    const stats = rate(pieces, sol);
+    const stats = rate(pieces, sol, walls);
     if(sol.optimal > best.m || stats.score > best.d){
       best = {
         p: pieces.map(q => [q.r, q.c, q.len, q.dir]),
+        ...(walls.length ? { w: walls.map(w => [w[0], w[1]]) } : {}),
         m: sol.optimal,
         d: stats.score,
         stats,
-        key: levelKey(pieces),
+        key: levelKey(pieces, walls),
       };
+      if(collect) collect.push(best);   // intermediates feed the mid-difficulty bands
     }
   }
   return best;
@@ -155,9 +196,9 @@ export function dailyLevel(dateStr){
   for(let i = 0; i < 400; i++){
     const rng = mulberry32(hashStr('mg-daily:' + dateStr + '#' + i));
     const relax = Math.floor(i / 100);       // widen the band every 100 misses
-    const lv = tryGenerate(rng, { minOptimal: Math.max(6, 10 - 2 * relax) });
+    const lv = tryGenerate(rng, { minOptimal: Math.max(8, 13 - 2 * relax) });
     if(!lv) continue;
-    if(lv.m >= 10 - 2 * relax && lv.m <= 30 + 4 * relax && lv.d >= 16 - 3 * relax){
+    if(lv.m >= 13 - 2 * relax && lv.m <= 30 + 4 * relax && lv.d >= 19 - 3 * relax){
       return { ...lv, date: dateStr, number: dailyNumber(dateStr) };
     }
   }

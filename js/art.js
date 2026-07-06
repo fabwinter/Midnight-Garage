@@ -204,6 +204,28 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   return `<svg viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" aria-hidden="true">${defs}${g}</svg>`;
 }
 
+/* Roadworks tile (immovable "wall" pieces): hazard-striped frame + traffic
+   cone. Deliberately flat and squarish — reads as "can't move" at a glance,
+   unmistakably not a vehicle. */
+export function wallSVG(i){
+  const gid = 'w' + i + '-' + Math.random().toString(36).slice(2, 7);
+  return `<svg viewBox="0 0 ${H} ${H}" preserveAspectRatio="none" aria-hidden="true">
+  <defs>
+    <pattern id="${gid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="16" height="16" fill="#26210f"/>
+      <rect width="8" height="16" fill="#ffb454"/>
+    </pattern>
+  </defs>
+  <rect x="6" y="6" width="88" height="88" rx="13" fill="#141924"/>
+  <rect x="6" y="6" width="88" height="88" rx="13" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="2"/>
+  <rect x="12" y="12" width="76" height="76" rx="9" fill="none" stroke="url(#${gid})" stroke-width="9" opacity=".85"/>
+  <path d="M50 28 L63 72 L37 72 Z" fill="#e8762e"/>
+  <path d="M50 28 L63 72 L37 72 Z" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="2"/>
+  <rect x="42" y="50" width="16" height="7" rx="3" fill="#f5ede0"/>
+  <rect x="30" y="70" width="40" height="8" rx="4" fill="#c95f22"/>
+  </svg>`;
+}
+
 /* ---------- board set-dressing (injected into the gridlines SVG) ----------
    Cheap DOM-era lighting: lamp pools, posts, manhole, painted exit dashes.
    Replaced by real point lights in the R1 WebGL layer; the geometry stays. */
