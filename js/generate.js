@@ -1,7 +1,7 @@
 /* Level generation — shared between tools/generate-levels.mjs (batch content)
    and the in-game daily puzzle (date-seeded, identical worldwide). */
 
-import { N, EXIT_ROW, solve, rate, levelKey } from './solver.js';
+import { N, EXIT_ROW, solve, rate, levelKey, analyzeShape, stateToPieces } from './solver.js';
 import { mulberry32, hashStr, rngInt } from './rng.js';
 
 /* One generation attempt from a given RNG. Returns a rated level or null.
@@ -122,8 +122,10 @@ export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
     }
     if(op === 1){
       // fall through to solve
-    } else if(op < 0.55 || pieces.length <= 4){
-      // add a piece
+    } else if((op < 0.55 && pieces.length < 16) || pieces.length <= 4){
+      // add a piece (capped — unbounded growth over long climbs measurably
+      // makes boards EASIER again past ~16, not harder, and every solve()
+      // call inside this loop gets slower as the piece count grows)
       const len = rng() < 0.3 ? 3 : 2;
       const dir = rng() < 0.5 ? 'h' : 'v';
       let p;
@@ -177,6 +179,57 @@ export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
     }
   }
   return best;
+}
+
+/* ---------- Exact-shape harvesting ----------
+   harden() finds a promising SHAPE (piece lengths/dirs/lanes + walls) by
+   hill-climbing one greedy trajectory through position-space — it rarely
+   settles on that shape's true hardest arrangement. analyzeShape() maps
+   the shape's ENTIRE reachable configuration space in one multi-source
+   BFS from every "hero escaped" state, which both (a) usually finds a
+   harder capstone than the climb's own endpoint, and (b) hands back the
+   exact optimal-move count for every other reachable configuration for
+   free — so one expensive shape analysis can seed many difficulty tiers
+   at once instead of needing a separate board per tier. */
+export function harvestShape(level, opts = {}){
+  const maxStates = opts.maxStates ?? 500000;
+  const harvestCount = opts.harvestCount ?? 6;
+  const pieces = level.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  const walls = level.w ?? [];
+
+  const shape = analyzeShape(pieces, { walls, maxStates });
+  if(shape.aborted || shape.noGoal) return [level];   // couldn't map it — keep the climbed level as-is
+
+  const targets = new Set([shape.maxD]);
+  for(let i = 1; i < harvestCount; i++) targets.add(Math.round(shape.maxD * i / harvestCount));
+
+  const keyAtDist = new Map();
+  for(const [k, d] of shape.distGoal){
+    if(targets.has(d) && !keyAtDist.has(d)) keyAtDist.set(d, k);
+  }
+
+  const out = [];
+  const seenKeys = new Set();
+  for(const d of targets){
+    const stateKey = keyAtDist.get(d);
+    if(!stateKey) continue;
+    const hPieces = stateToPieces(stateKey, shape.len, shape.dir, shape.fixed);
+    const lk = levelKey(hPieces, walls);
+    if(seenKeys.has(lk)) continue;
+    seenKeys.add(lk);
+    const sol = solve(hPieces, { walls, maxStates });
+    if(!sol.solvable || sol.optimal !== d) continue;   // BFS distance must agree with solve()
+    const stats = rate(hPieces, sol, walls);
+    out.push({
+      p: hPieces.map(q => [q.r, q.c, q.len, q.dir]),
+      ...(walls.length ? { w: walls.map(w => [w[0], w[1]]) } : {}),
+      m: sol.optimal,
+      d: stats.score,
+      stats,
+      key: lk,
+    });
+  }
+  return out.length ? out : [level];
 }
 
 /* ---------- Daily puzzle (plan item 1.1) ----------
