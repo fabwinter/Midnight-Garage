@@ -238,9 +238,19 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
     dashes += `<rect x="${x}" y="${y - CELL * 0.03}" width="${CELL * 0.34}" height="${CELL * 0.06}" rx="${CELL * 0.03}" fill="${accent}" opacity=".28"/>`;
   }
   const lamp = (x, yy, flip) => `
-    <rect x="${x - CELL * 0.025}" y="${flip ? yy - CELL * 0.28 : yy}" width="${CELL * 0.05}" height="${CELL * 0.28}" fill="#2b3345"/>
-    <circle cx="${x}" cy="${flip ? yy - CELL * 0.28 : yy}" r="${CELL * 0.055}" fill="#cfe0ff" opacity=".95"/>
-    <circle cx="${x}" cy="${flip ? yy - CELL * 0.28 : yy}" r="${CELL * 0.15}" fill="#9db8e8" opacity=".4" filter="url(#gdsoft)"/>`;
+    <rect x="${x - CELL * 0.03}" y="${flip ? yy - CELL * 0.34 : yy}" width="${CELL * 0.06}" height="${CELL * 0.34}" fill="#2b3345"/>
+    <rect x="${x - CELL * 0.09}" y="${(flip ? yy - CELL * 0.34 : yy + CELL * 0.28)}" width="${CELL * 0.18}" height="${CELL * 0.09}" rx="${CELL * 0.03}" fill="#1c2230"/>
+    <circle cx="${x}" cy="${flip ? yy - CELL * 0.34 : yy}" r="${CELL * 0.07}" fill="#cfe0ff" opacity=".95" class="mg-lamp-bulb"/>
+    <circle cx="${x}" cy="${flip ? yy - CELL * 0.34 : yy}" r="${CELL * 0.2}" fill="#9db8e8" opacity=".45" filter="url(#gdsoft)" class="mg-lamp-bulb"/>`;
+  /* Decorative only — steady green, ambiance not gameplay state. A live
+     red/green signal keyed to the exit lane is the R1 WebGL renderer's
+     job (solve-proximity lighting, AAA-PLAN.md §3.2); this cheap DOM pass
+     just needs the streetlight vocabulary on the board. */
+  const signal = (x, yy) => `
+    <rect x="${x - CELL * 0.02}" y="${yy}" width="${CELL * 0.04}" height="${CELL * 0.16}" fill="#39435a"/>
+    <rect x="${x - CELL * 0.065}" y="${yy - CELL * 0.19}" width="${CELL * 0.13}" height="${CELL * 0.2}" rx="${CELL * 0.03}" fill="#151b28" stroke="#39435a" stroke-width="${Math.max(1, CELL * 0.014)}"/>
+    <circle cx="${x}" cy="${yy - CELL * 0.09}" r="${CELL * 0.035}" fill="#54e69a" class="mg-signal-bulb"/>
+    <circle cx="${x}" cy="${yy - CELL * 0.09}" r="${CELL * 0.09}" fill="#54e69a" opacity=".35" filter="url(#gdsoft)" class="mg-signal-bulb"/>`;
   return `
   <defs>
     <radialGradient id="gdpool" cx=".5" cy=".5" r=".5">
@@ -257,6 +267,7 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
   <circle cx="${CELL * 3.52}" cy="${CELL * 4.34}" r="${CELL * 0.10}" fill="none" stroke="#242d3e" stroke-width="1.2" opacity=".7"/>
   <path d="M ${CELL * 0.5} ${CELL * 4.62} l 0 ${-CELL * 0.26} l ${-CELL * 0.08} ${CELL * 0.08} m ${CELL * 0.08} ${-CELL * 0.08} l ${CELL * 0.08} ${CELL * 0.08}"
         stroke="#ffffff" stroke-opacity=".06" stroke-width="${CELL * 0.05}" fill="none" stroke-linecap="round"/>
-  ${lamp(CELL * 2.52, CELL * 0.10, false)}
-  ${lamp(CELL * 4.72, CELL * 5.90, true)}`;
+  ${lamp(CELL * 2.52, CELL * 0.06, false)}
+  ${lamp(CELL * 4.72, CELL * 5.94, true)}
+  ${signal(CELL * 0.14, CELL * 2)}`;
 }

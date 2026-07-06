@@ -150,6 +150,10 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 .gridlines{position:absolute;inset:0;pointer-events:none}
 .gridlines line{stroke:rgba(255,255,255,.05);stroke-width:1}
+.mg-lamp-bulb{animation:lamppulse 4.2s ease-in-out infinite}
+@keyframes lamppulse{0%,100%{opacity:.85}50%{opacity:1}}
+.mg-signal-bulb{animation:signalpulse 3s ease-in-out infinite}
+@keyframes signalpulse{0%,100%{opacity:.9}50%{opacity:1}}
 .exit-lane{
   position:absolute;left:0;right:0;
   top:calc(var(--cell)*2);height:var(--cell);
