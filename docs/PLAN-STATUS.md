@@ -3,6 +3,12 @@
 Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 🔶 scaffolded (native/business step remains), ⬜ deferred by the plan itself.
 
+**Direction (2026-07):** post-launch work now follows
+[HEIST-PLAN.md](HEIST-PLAN.md) — the collection-heist meta on the **premium
+(Variant A)** business model, which supersedes/sharpens the later phases of
+[AAA-PLAN.md](AAA-PLAN.md) with a single frame and a locked, ad-clean,
+no-RNG monetization model. Next up: Phase H0 (The Garage).
+
 ## Phase 0 — Foundation
 
 | Item | Status | Notes |
