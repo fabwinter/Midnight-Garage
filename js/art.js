@@ -145,8 +145,27 @@ function tanker(g, L, gid, extra, base){
   ${taillights()}`;
 }
 
+/* Collection car trim (H0): a cosmetic-only "beltline" flourish keyed to
+   the equipped car's tier. Deliberately grounded in real collector-car
+   cues (pinstripe, chrome, an engraved plaque) rather than a fantasy glow —
+   this is a skin, not a power-up, and it should read that way. */
+function trimSVG(trim, L, H){
+  if(!trim || trim === 'none') return '';
+  if(trim === 'chrome'){
+    return `<rect x="10" y="${H * 0.66}" width="${L - 20}" height="2.6" rx="1.3" fill="#e7edf5" opacity=".85"/>
+            <rect x="10" y="${H * 0.66}" width="${L - 20}" height="1" rx=".5" fill="#fff" opacity=".6"/>`;
+  }
+  // 'plaque': chrome beltline pinstripe plus a small engraved trunk plaque
+  return `<rect x="10" y="${H * 0.66}" width="${L - 20}" height="2.6" rx="1.3" fill="#e7edf5" opacity=".85"/>
+          <rect x="10" y="${H * 0.66}" width="${L - 20}" height="1" rx=".5" fill="#fff" opacity=".6"/>
+          <rect x="${L * 0.16}" y="${H * 0.40}" width="${L * 0.09}" height="${H * 0.13}" rx="2" fill="#e7edf5" opacity=".9" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
+          <line x1="${L * 0.175}" y1="${H * 0.44}" x2="${L * 0.24}" y2="${H * 0.44}" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>
+          <line x1="${L * 0.175}" y1="${H * 0.48}" x2="${L * 0.24}" y2="${H * 0.48}" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>`;
+}
+
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
-  const [base, dark, glassTint] = isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)];
+  const skin = isHero ? opts.skin : null;
+  const [base, dark, glassTint] = skin ? [skin.base, skin.dark, skin.glass] : (isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)]);
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
@@ -190,7 +209,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
     body = variant === 0 ? boxtruck(0, L, gid, extra, dark) : tanker(0, L, gid, extra, base);
   } else if(isHero){
-    body = sedan(0, L, gid, headlights(L, soft) + heroExtra);
+    body = sedan(0, L, gid, headlights(L, soft) + heroExtra + trimSVG(skin?.trim, L, H));
   } else {
     const variant = (idx * 5 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');

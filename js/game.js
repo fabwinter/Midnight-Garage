@@ -15,6 +15,7 @@ import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG } from './art.js';
+import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
 
 const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
@@ -41,8 +42,12 @@ let save = {
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
   settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false },
+  equippedCar: DEFAULT_CAR,
+  carsSeen: [],
 };
 let memOnly = false;
+let carRevealQueue = [];
+let afterRevealAction = null;
 
 async function persist(){
   if(memOnly) return;
@@ -128,7 +133,10 @@ function buildPieces(){
     el.setAttribute('role', 'button');
     el.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
     el.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, { colorblind: save.settings.colorblind });
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
+      colorblind: save.settings.colorblind,
+      skin: i === 0 ? skinFor(save.equippedCar) : null,
+    });
     el.classList.add('enter');
     el.style.animationDelay = (i * 0.028) + 's';
     el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
@@ -581,6 +589,12 @@ function winSequence(){
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
   }
 
+  const reveals = pendingReveals(save, daily());
+  if(reveals.length){
+    carRevealQueue.push(...reveals);
+    reveals.forEach(c => track('car_unlock', { car: c.id, tier: c.tier }));
+  }
+
   setTimeout(() => {
     showWinSheet(stars);
     gate.style.filter = '';
@@ -632,8 +646,9 @@ function showWinSheet(stars){
       $('nextLabel').textContent = t('btn.levels');
     }
     $('nextBtn').dataset.action = 'next';
-    // zero-tap flow (plan 0.7): auto-advance unless the player opts out
-    if(save.settings.autoAdvance && next !== -1 && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+    // zero-tap flow (plan 0.7): auto-advance unless the player opts out —
+    // but never auto-skip past a new car reveal
+    if(save.settings.autoAdvance && next !== -1 && !carRevealQueue.length && !matchMedia('(prefers-reduced-motion: reduce)').matches){
       $('autobar').style.setProperty('--automs', '2600ms');
       requestAnimationFrame(() => $('autobar').classList.add('run'));
       autoTimer = setTimeout(() => { hideOverlay('winOverlay'); advance(); }, 2600);
@@ -645,6 +660,79 @@ function showWinSheet(stars){
 function cancelAuto(){
   if(autoTimer){ clearTimeout(autoTimer); autoTimer = null; }
   $('autobar').classList.remove('run');
+}
+
+/* Car reveals (H0): a new car earned on this win takes priority over
+   whatever the player tapped (replay/next) — shown once, then the
+   original action runs. Queue supports earning more than one car on a
+   single win (e.g. a chapter finish that also completes a streak). */
+function proceedOrReveal(action){
+  if(carRevealQueue.length){
+    afterRevealAction = action;
+    hideOverlay('winOverlay');
+    showNextCarReveal();
+  } else {
+    action();
+  }
+}
+function showNextCarReveal(){
+  const car = carRevealQueue[0];
+  if(!car){ hideOverlay('carRevealOverlay'); const fn = afterRevealAction; afterRevealAction = null; if(fn) fn(); return; }
+  $('carRevealName').textContent = car.name;
+  $('carRevealTier').textContent = t('tier.' + car.tier);
+  $('carRevealTier').className = 'car-tier tier-' + car.tier;
+  const holder = $('carRevealArt');
+  holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin });
+  sfx('win');
+  haptic('success');
+  showOverlay('carRevealOverlay');
+}
+function dismissCarReveal(){
+  const car = carRevealQueue.shift();
+  if(car){
+    save.carsSeen = [...new Set([...(save.carsSeen || []), car.id])];
+    persist();
+  }
+  if(carRevealQueue.length){ showNextCarReveal(); }
+  else { hideOverlay('carRevealOverlay'); const fn = afterRevealAction; afterRevealAction = null; if(fn) fn(); }
+}
+
+/* ================== GARAGE (collection screen) ================== */
+function buildGarageList(){
+  const owned = ownedCarIds(save, daily());
+  const holder = $('garageList');
+  holder.innerHTML = '';
+
+  const tile = (id, name, tier, skin, isOwned, hint) => {
+    const b = document.createElement('button');
+    b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '');
+    const art = document.createElement('div');
+    art.className = 'car-tile-art';
+    if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin });
+    else art.innerHTML = '<span class="car-lock">🔒</span>';
+    b.appendChild(art);
+    const label = document.createElement('div');
+    label.className = 'car-tile-label';
+    label.innerHTML = isOwned
+      ? `<span class="car-tile-name">${name}</span><span class="car-tier tier-${tier}">${t('tier.' + tier)}</span>`
+      : `<span class="car-tile-name locked-name">${hint}</span>`;
+    b.appendChild(label);
+    if(isOwned){
+      b.addEventListener('click', () => {
+        sfx('ui');
+        save.equippedCar = id;
+        persist();
+        buildPieces();
+        buildGarageList();
+      });
+    }
+    return b;
+  };
+
+  holder.appendChild(tile(DEFAULT_CAR, t('car.classic'), 'common', null, true, ''));
+  CARS.forEach(car => {
+    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), t('car.locked.' + car.id)));
+  });
 }
 
 function nextPlayableIndex(){
@@ -964,6 +1052,10 @@ function applyStrings(){
   $('proF3').textContent = t('pro.f3');
   $('proNone').textContent = t('pro.none');
   $('restoreBtn2').textContent = t('btn.restore');
+  $('garageTitle').textContent = t('garage.title');
+  $('garageSub').textContent = t('garage.sub');
+  $('carRevealFlag').textContent = t('garage.newcar');
+  $('carRevealBtn').textContent = t('btn.nice');
 }
 
 /* ================== GLOBAL WIRING ================== */
@@ -975,13 +1067,16 @@ function wire(){
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-    if(e.target === o && o.id !== 'winOverlay'){ o.classList.remove('show'); }
+    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay'){ o.classList.remove('show'); }
   }));
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
   $('hintBtn').addEventListener('click', showHint);
   $('skipBtn').addEventListener('click', skipLevel);
-  $('replayBtn').addEventListener('click', () => { cancelAuto(); hideOverlay('winOverlay'); sfx('ui'); startBoard(); });
+  $('replayBtn').addEventListener('click', () => {
+    cancelAuto(); sfx('ui');
+    proceedOrReveal(() => { hideOverlay('winOverlay'); startBoard(); });
+  });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);
@@ -989,8 +1084,11 @@ function wire(){
       if(res === 'copied') toast(t('toast.copied'));
       return;
     }
-    cancelAuto(); hideOverlay('winOverlay'); sfx('ui'); advance();
+    cancelAuto(); sfx('ui');
+    proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
   });
+  $('carRevealBtn').addEventListener('click', () => { sfx('ui'); dismissCarReveal(); });
+  $('garageBtn').addEventListener('click', () => { sfx('ui'); buildGarageList(); showOverlay('garageOverlay'); });
   $('dailyPlayBtn').addEventListener('click', () => {
     sfx('ui'); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
@@ -1000,7 +1098,7 @@ function wire(){
   document.addEventListener('keydown', e => {
     if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
     if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
-    if(e.key === 'Escape'){ ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay'].forEach(hideOverlay); }
+    if(e.key === 'Escape'){ ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay'].forEach(hideOverlay); }
   });
   window.addEventListener('resize', layout);
   window.addEventListener('pagehide', () => { abandonIfMidLevel(); flush(); });
