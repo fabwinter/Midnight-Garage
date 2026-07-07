@@ -7,7 +7,9 @@ Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 [HEIST-PLAN.md](HEIST-PLAN.md) — the collection-heist meta on the **premium
 (Variant A)** business model, which supersedes/sharpens the later phases of
 [AAA-PLAN.md](AAA-PLAN.md) with a single frame and a locked, ad-clean,
-no-RNG monetization model. Next up: Phase H0 (The Garage).
+no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c` —
+12 cosmetic hero-skin unlocks + garage screen. Next up: Phase H1 (Security
+Gates), pending go-ahead.
 
 ## Phase 0 — Foundation
 

@@ -46,8 +46,10 @@ function occupy(len, dir, fixed, offs, wm){
   return g;
 }
 
-/* All legal moves from a state: [pieceIdx, newOffset] per slide target. */
-export function legalMoves(len, dir, fixed, offs, wm){
+/* All legal moves from a state: [pieceIdx, newOffset] per slide target.
+   Optional gates: [{ sensors:[[r,c],…], gate:[r,c], polarity }].
+   A move entering a gate cell is legal iff (anySensorOccupied) XOR polarity. */
+export function legalMoves(len, dir, fixed, offs, wm, gates){
   const g = occupy(len, dir, fixed, offs, wm);
   const out = [];
   for(let i = 0; i < offs.length; i++){
@@ -57,6 +59,18 @@ export function legalMoves(len, dir, fixed, offs, wm){
         const er = dir[i] === 'h' ? fixed[i] : (step > 0 ? o + len[i] - 1 : o);
         const ec = dir[i] === 'h' ? (step > 0 ? o + len[i] - 1 : o) : fixed[i];
         if(g[er * N + ec] !== -1) break;
+
+        // Check if this entering cell is gated
+        if(gates){
+          const gate = gates.find(gate => gate.gate[0] === er && gate.gate[1] === ec);
+          if(gate){
+            // Gate cell: check if open
+            const anySensorOccupied = gate.sensors.some(([sr, sc]) => g[sr * N + sc] !== -1);
+            const isOpen = anySensorOccupied !== gate.polarity;
+            if(!isOpen) break; // Can't pass through closed gate
+          }
+        }
+
         out.push([i, o]);
         o += step;
       }
@@ -88,6 +102,7 @@ const PATH_CAP = 1e9;
 export function solve(pieces, opts = {}){
   const maxStates = opts.maxStates ?? 400000;
   const wm = wallMask(opts.walls);
+  const gates = opts.gates;
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
   const winOff = N - len[0];
   const key = s => s.join(',');
@@ -111,7 +126,7 @@ export function solve(pieces, opts = {}){
     const sKey = key(s);
     const d = dist.get(sKey);
     if(optimal !== -1 && d >= optimal) break;   // finished the last useful layer
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates)){
       const ns = s.slice(); ns[i] = o;
       const nKey = key(ns);
       if(!dist.has(nKey)){
@@ -188,6 +203,7 @@ export function firstOptimalMove(pieces, opts){
 export function analyzeShape(pieces, opts = {}){
   const maxStates = opts.maxStates ?? 400000;
   const wm = wallMask(opts.walls);
+  const gates = opts.gates;
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
   const winOff = N - len[0];
   const key = s => s.join(',');
@@ -199,7 +215,7 @@ export function analyzeShape(pieces, opts = {}){
   let head = 0;
   while(head < queue.length){
     const s = queue[head++];
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates)){
       const ns = s.slice(); ns[i] = o;
       const k = key(ns);
       if(!seen.has(k)){ seen.add(k); queue.push(ns); }
@@ -220,7 +236,7 @@ export function analyzeShape(pieces, opts = {}){
   while(h2 < frontier.length){
     const s = frontier[h2++];
     const d = distGoal.get(key(s));
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates)){
       const ns = s.slice(); ns[i] = o;
       const k = key(ns);
       if(!distGoal.has(k)){ distGoal.set(k, d + 1); frontier.push(ns); }
@@ -252,8 +268,8 @@ export function stateToPieces(stateKey, len, dir, fixed){
    Composite score is the sort key for the 200-level curve and the editor's
    future auto-rating. Weights are v1; re-fit in v1.1 from live funnel data. */
 
-export function rate(pieces, solved, walls){
-  const sol = solved ?? solve(pieces, { walls });
+export function rate(pieces, solved, walls, gates){
+  const sol = solved ?? solve(pieces, { walls, gates });
   if(!sol.solvable) return null;
   const wm = wallMask(walls);
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
@@ -262,7 +278,7 @@ export function rate(pieces, solved, walls){
   let branchSum = 0, counter = 0;
   let hPrev = heroDistance(len, dir, fixed, s, wm);
   for(const mv of sol.path){
-    branchSum += legalMoves(len, dir, fixed, s, wm).length;
+    branchSum += legalMoves(len, dir, fixed, s, wm, gates).length;
     s = s.slice(); s[mv.i] = mv.to;
     const h = heroDistance(len, dir, fixed, s, wm);
     if(h > hPrev) counter++;

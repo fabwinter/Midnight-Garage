@@ -180,7 +180,7 @@ Same discipline as the original plan: one marketable beat per phase.
 
 | Phase | Focus | Ships | New solver work? |
 |---|---|---|---|
-| **H0 — The Garage** | Re-narrativize; build garage collection screen; ~12 cosmetic cars unlocked by *existing* milestones; car-skin applies to hero | "Collect the cars" — the retention hook, zero new puzzle tech | none |
+| **H0 — The Garage** ✅ shipped | Re-narrativize; build garage collection screen; ~12 cosmetic cars unlocked by *existing* milestones; car-skin applies to hero | "Collect the cars" — the retention hook, zero new puzzle tech | none |
 | **H1 — Security Gates** | Interlocks (cameras/laser gates): solver arg, generator, verify, a themed set of levels | "The garage fights back" — first security mechanic (cheapest) | interlocks (free) |
 | **H2 — The Alarm** | Optional per-move Alarm mode, reward-gating; clean-getaway bonus; settings toggle | "Beat the alarm" — the opt-in countdown | none |
 | **H3 — The Rig** | Hitches + tow truck (inert marks): solver coupled-set/inert, generator, verify, a themed chapter | "Some cars can't drive themselves" — the marquee mechanic | hitches (~1.8× state) |
@@ -193,18 +193,25 @@ verify hardening.
 
 ---
 
-## 9. Open decisions for you (before we start H0)
+## 9. Open decisions (H0 resolved)
 
-1. **Tone/naming** — default is *stylish gentleman-thief noir* (car-as-art,
-   aspirational). OK, or prefer a "recovery agent / repo" framing?
-2. **Alarm default basis** — default is **per-move** (protects the puzzle
-   DNA); real-time "Pursuit" available as an off-by-default toggle. Keep
-   per-move as the primary?
-3. **Car cosmetic scope** — cars reskin just the hero, or also swap the whole
-   board's palette as a matched "set"? (Hero-only is cheaper for H0; sets are
-   more collectible.)
-4. **First car roster** — I'll draft ~12 marks mapped to existing milestones
-   for H0; you approve names/theme before build.
+1. **Tone/naming** — *stylish gentleman-thief noir*. Agreed.
+2. **Alarm default basis** — **per-move**, real-time "Pursuit" off by default.
+   Agreed (built when H2 starts).
+3. **Car cosmetic scope** — hero-only reskin (`{base, dark, glass, trim}`).
+   Agreed.
+4. **First car roster** — 12 marks shipped, mapped to existing milestones
+   (chapter clears, star streaks, daily streaks, par-or-under, Pro purchase,
+   full completion). See `js/collection.js`.
+
+H0 shipped `b6f001c`: garage screen, 12 cosmetic hero skins, reveal-queue
+UX that intercepts the win-sheet's Next/Replay tap so a new-car moment is
+never silently auto-advanced past. Verified end-to-end via headless
+Playwright (locked garage → solve → win → reveal → dismiss → advance →
+reopen garage → equip → hero renders new skin in gameplay), zero JS errors
+across the full smoke suite.
+
+H1 (Security Gates / interlocks) has not been started — awaiting go-ahead.
 
 ---
 
