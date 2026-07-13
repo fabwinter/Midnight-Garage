@@ -14,7 +14,7 @@ import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
 
 const $ = id => document.getElementById(id);
@@ -28,6 +28,7 @@ let cur = 0;                                  // campaign level index
 let curLevel = null;                          // {m, p, w?} for whatever is on the board
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
+let gates = [];                               // interlock gates [{sensors, gate, polarity}]
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
@@ -113,7 +114,7 @@ function easingFor(len, distCells){
 }
 
 function buildPieces(){
-  board.querySelectorAll('.piece, .wall').forEach(el => el.remove());
+  board.querySelectorAll('.piece, .wall, .gate').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
     const el = document.createElement('div');
     el.className = 'wall';
@@ -122,6 +123,22 @@ function buildPieces(){
     el.style.height = CELL + 'px';
     el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
     el.innerHTML = wallSVG(i);
+    el.setAttribute('aria-hidden', 'true');
+    board.appendChild(el);
+  });
+  gates.forEach(gate => {
+    const [r, c] = gate.gate;
+    const el = document.createElement('div');
+    el.className = 'gate';
+    el.dataset.r = r; el.dataset.c = c;
+    el.style.width = CELL + 'px';
+    el.style.height = CELL + 'px';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
+    el.style.pointerEvents = 'none';
+    el.innerHTML = gateSVG(CELL / 2, CELL / 2, CELL * 0.4);
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
@@ -425,6 +442,7 @@ function loadDailyLevel(dateStr){
 function startBoard(){
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
+  gates = curLevel.g ?? [];
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   solvedAnim = false;
   kbRun = -1;

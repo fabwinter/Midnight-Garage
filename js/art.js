@@ -290,3 +290,14 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
   ${lamp(CELL * 4.72, CELL * 5.94, true)}
   ${signal(CELL * 0.14, CELL * 2)}`;
 }
+
+/* Interlock gate (camera/laser) symbol: a simple circle with crosshair.
+   Overlaid on the board grid at gate cell positions. */
+export function gateSVG(x, y, size = 30){
+  return `<g opacity="0.85">
+    <circle cx="${x}" cy="${y}" r="${size * 0.4}" fill="none" stroke="#00ffcc" stroke-width="2"/>
+    <line x1="${x - size * 0.25}" y1="${y}" x2="${x + size * 0.25}" y2="${y}" stroke="#00ffcc" stroke-width="1.5"/>
+    <line x1="${x}" y1="${y - size * 0.25}" x2="${x}" y2="${y + size * 0.25}" stroke="#00ffcc" stroke-width="1.5"/>
+    <circle cx="${x}" cy="${y}" r="${size * 0.08}" fill="#00ffcc"/>
+  </g>`;
+}
