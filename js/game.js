@@ -25,10 +25,11 @@ const HINT_TOKENS_PER_DAY = 3;
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
-let curLevel = null;                          // {m, p, w?} for whatever is on the board
+let curLevel = null;                          // {m, p, w?, g?, h?} for whatever is on the board
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
 let gates = [];                               // interlock gates [{sensors, gate, polarity}]
+let hitches = [];                             // hitches [{tow, trailer}]
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
@@ -447,6 +448,7 @@ function startBoard(){
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
+  hitches = curLevel.h ?? [];
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   solvedAnim = false;
   kbRun = -1;
@@ -494,7 +496,7 @@ function showHint(){
     }
   }
   clearHint();
-  const mv = firstOptimalMove(pieces, { walls, gates });
+  const mv = firstOptimalMove(pieces, { walls, gates, hitches });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
   if(!save.pro){
     save.hints.left--;
@@ -545,7 +547,7 @@ function scheduleHand(){
 }
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
-  const mv = firstOptimalMove(pieces, { walls, gates });
+  const mv = firstOptimalMove(pieces, { walls, gates, hitches });
   if(!mv) return;
   const p = pieces[mv.idx];
   const hand = document.createElement('div');

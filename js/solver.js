@@ -48,11 +48,23 @@ function occupy(len, dir, fixed, offs, wm){
 
 /* All legal moves from a state: [pieceIdx, newOffset] per slide target.
    Optional gates: [{ sensors:[[r,c],…], gate:[r,c], polarity }].
-   A move entering a gate cell is legal iff (anySensorOccupied) XOR polarity. */
-export function legalMoves(len, dir, fixed, offs, wm, gates){
+   A move entering a gate cell is legal iff (anySensorOccupied) XOR polarity.
+   Optional hitches: [{ tow, trailer }, …] — tow is the vehicle index, trailer is coupled piece.
+   When tow moves, trailer can move with it (coupling). Trailer can decouple with a separate move. */
+export function legalMoves(len, dir, fixed, offs, wm, gates, hitches){
   const g = occupy(len, dir, fixed, offs, wm);
   const out = [];
+
+  // Build hitch lookup: trailerIdx -> towIdx
+  const hitchTow = new Map();
+  if(hitches){
+    for(const h of hitches) hitchTow.set(h.trailer, h.tow);
+  }
+
   for(let i = 0; i < offs.length; i++){
+    // Skip inert pieces (those with active hitches; they can only move with their tow)
+    if(hitchTow.has(i)) continue;
+
     for(const step of [-1, 1]){
       let o = offs[i] + step;
       while(o >= 0 && o + len[i] <= N){
@@ -103,6 +115,7 @@ export function solve(pieces, opts = {}){
   const maxStates = opts.maxStates ?? 400000;
   const wm = wallMask(opts.walls);
   const gates = opts.gates;
+  const hitches = opts.hitches;
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
   const winOff = N - len[0];
   const key = s => s.join(',');
@@ -126,7 +139,7 @@ export function solve(pieces, opts = {}){
     const sKey = key(s);
     const d = dist.get(sKey);
     if(optimal !== -1 && d >= optimal) break;   // finished the last useful layer
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, hitches)){
       const ns = s.slice(); ns[i] = o;
       const nKey = key(ns);
       if(!dist.has(nKey)){
@@ -204,6 +217,7 @@ export function analyzeShape(pieces, opts = {}){
   const maxStates = opts.maxStates ?? 400000;
   const wm = wallMask(opts.walls);
   const gates = opts.gates;
+  const hitches = opts.hitches;
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
   const winOff = N - len[0];
   const key = s => s.join(',');
@@ -215,7 +229,7 @@ export function analyzeShape(pieces, opts = {}){
   let head = 0;
   while(head < queue.length){
     const s = queue[head++];
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, hitches)){
       const ns = s.slice(); ns[i] = o;
       const k = key(ns);
       if(!seen.has(k)){ seen.add(k); queue.push(ns); }
@@ -236,7 +250,7 @@ export function analyzeShape(pieces, opts = {}){
   while(h2 < frontier.length){
     const s = frontier[h2++];
     const d = distGoal.get(key(s));
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, hitches)){
       const ns = s.slice(); ns[i] = o;
       const k = key(ns);
       if(!distGoal.has(k)){ distGoal.set(k, d + 1); frontier.push(ns); }
