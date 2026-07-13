@@ -9,7 +9,9 @@ Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 [AAA-PLAN.md](AAA-PLAN.md) with a single frame and a locked, ad-clean,
 no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c`.
 Phase H1 (Security Gates) ✅ shipped `528bfd0` — solver gates support,
-gate rendering, 2 test levels. Next up: Phase H2 (The Alarm).
+gate rendering, 2 test levels. Phase H2 (The Alarm) 🔶 in progress (`5f44c2b`)
+— per-move budget, clean getaway bonus tracking, i18n wiring. Next: level
+generation with alarms; then H3 (The Rig / Hitches).
 
 ## Phase 0 — Foundation
 
