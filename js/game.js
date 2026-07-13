@@ -490,7 +490,7 @@ function showHint(){
     }
   }
   clearHint();
-  const mv = firstOptimalMove(pieces, { walls });
+  const mv = firstOptimalMove(pieces, { walls, gates });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
   if(!save.pro){
     save.hints.left--;
@@ -541,7 +541,7 @@ function scheduleHand(){
 }
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
-  const mv = firstOptimalMove(pieces, { walls });
+  const mv = firstOptimalMove(pieces, { walls, gates });
   if(!mv) return;
   const p = pieces[mv.idx];
   const hand = document.createElement('div');
