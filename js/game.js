@@ -35,6 +35,7 @@ let undos = 0, hintsUsed = 0;
 let solvedAnim = false;
 let levelStart = Date.now();
 let skipShown = false;
+let isCleanGetaway = false;
 
 let save = {
   unlocked: 1,
@@ -42,7 +43,7 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
-  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false },
+  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
 };
@@ -352,6 +353,9 @@ function starCountFor(par, usedMoves){
   if(usedMoves <= par + Math.max(3, Math.ceil(par * 0.35))) return 2;
   return 1;
 }
+function alarmBudgetFor(par){
+  return par;
+}
 function starStr(n, size = 3){
   let s = '';
   for(let i = 0; i < size; i++) s += i < n ? '★' : '<span class="off">★</span>';
@@ -593,6 +597,13 @@ function winSequence(){
   const stars = starCountFor(par, moves);
   const timeS = Math.round((Date.now() - levelStart) / 1000);
 
+  isCleanGetaway = false;
+  if(save.settings.alarm){
+    const budget = alarmBudgetFor(par);
+    isCleanGetaway = moves <= budget;
+    if(isCleanGetaway) track('alarm_clean_getaway', { level: mode.type === 'campaign' ? cur + 1 : mode.number, moves, par, date: mode.date });
+  }
+
   if(mode.type === 'campaign'){
     save.stars[cur] = Math.max(save.stars[cur] || 0, stars);
     save.best[cur] = Math.min(save.best[cur] || Infinity, moves);
@@ -630,6 +641,8 @@ function showWinSheet(stars){
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
     : save.best[cur];
+  $('cleanGetaway').hidden = !isCleanGetaway;
+  if(isCleanGetaway) $('cleanGetaway').textContent = t('win.clean');
   const ws = $('winStars');
   ws.innerHTML = '';
   for(let i = 0; i < 3; i++){
@@ -1010,6 +1023,7 @@ function wireSettings(){
   $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
   $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
   $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
+  $('alarmChk').addEventListener('change', e => { save.settings.alarm = e.target.checked; persist(); updateHud(); });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
     save.settings.reminder = e.target.checked; persist();
@@ -1060,6 +1074,7 @@ function applyStrings(){
   $('labMusic').textContent = t('settings.music');
   $('labHaptics').textContent = t('settings.haptics');
   $('labColorblind').textContent = t('settings.colorblind');
+  $('labAlarm').textContent = t('settings.alarm');
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labRestore').textContent = t('btn.restore');
