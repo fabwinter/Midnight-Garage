@@ -211,7 +211,20 @@ Playwright (locked garage → solve → win → reveal → dismiss → advance �
 reopen garage → equip → hero renders new skin in gameplay), zero JS errors
 across the full smoke suite.
 
-H1 (Security Gates / interlocks) has not been started — awaiting go-ahead.
+H1 in progress (`b325466`): 
+- Solver extended with gate support: optional `gates` arg on `legalMoves()`,
+  checked at move-legality time (no state-space overhead).
+- Gate rendering: cyan crosshair symbol on board at gate cells.
+- 2 test interlock levels added (levels 201-202) with gates that force
+  player to move sensor pieces first.
+- Hints/coaching hand now respect gate constraints via solver.
+- Verified: gates load, gates render, gates block/allow moves as expected,
+  existing smoke suite still passes.
+
+Still needed for H1 ship:
+- Full level generation with interlocks (currently hand-crafted test levels)
+- Optional: more themed interlock levels
+- Optional: Alarm mode integration (deferred to H2)
 
 ---
 
