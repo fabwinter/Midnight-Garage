@@ -1,7 +1,7 @@
 # Heist 2.0 Implementation Status
 
-**Status:** M0-M3 complete and merged; M4-M9 scaffolded.
-**Last update:** Post-phase M3 commit `e7866db`.
+**Status:** M0-M4 complete and merged; M5-M9 scaffolded.
+**Last update:** Post-phase M4 commit `9cc1ea7`.
 
 ## Completed Phases
 
@@ -66,19 +66,21 @@
 
 ---
 
+### ✅ M4 — The Look (Win Choreography, Animations, Backgrounds)
+**Implemented:** Visual polish and audio feedback.
+- Win choreography: hero accelerates out (1.2s), gate rises with glow & servo sound
+- Touch feedback: grabbed lift+shadow on pieces, collision rock animation on wall hits
+- Chapter-specific backgrounds: per-chapter radial gradient atmospherics
+  - Ch.1 (Night Shift): amber street lamps
+  - Ch.2 (Neon District): cyan/blue neon spill
+  - Ch.3 (Harbor Freight): teal fog overlay
+  - Ch.4 (Gridlock): purple neon spill
+- SFX suite: gateServo, hitchClink, engineRev, collision impact
+- Engine rev on grab, collision thump on wall hit, hitch clink on decouple
+
+**Commits:** `9cc1ea7`
+
 ## Remaining Phases (Scaffolded)
-
-### M4 — The Look (Win Choreography, Animations, Backgrounds)
-**What:** Elevation of game feel and visual polish.
-- Win choreography: hero accelerates out, gate rises, letterbox slow-mo (≤2.6s)
-- Touch feedback: grab lift+shadow, collision rock from blocking car
-- Chapter backgrounds: street lamps, neon spill per chapter (DOM/CSS)
-- SFX set: engine/rolling loops per length, hitch clink, gate servo, busted stinger
-- Board set-dressing: layered parallax (3px gyro offset, reduced-motion fallback)
-
-**Files to update:** `js/art.js` (SVG art system), `js/game.js` (choreography timing), `css/game.css` (background layers), `js/audio.js` (SFX hooks).
-
-**Effort:** 3-4 hours (art is the bulk; animation logic is small).
 
 ### M5 — The Sound (Adaptive Music, Ambience)
 **What:** Music & atmosphere from AAA-PLAN §6.
