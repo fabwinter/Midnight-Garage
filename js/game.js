@@ -254,6 +254,9 @@ function attachDrag(el, i){
     }
     lastTapT = now;
     if(solvedAnim) return;
+    // Prevent dragging inert trailers (only tow can move, trailer follows)
+    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    if(isInertTrailer){ sfx('deny'); return; }
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     dragging = true; hitWall = false;
@@ -355,6 +358,9 @@ function attachDrag(el, i){
     const map = { ArrowLeft: [-1, 'h'], ArrowRight: [1, 'h'], ArrowUp: [-1, 'v'], ArrowDown: [1, 'v'] };
     const m = map[e.key];
     if(!m) return;
+    // Prevent keyboard control of inert trailers
+    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    if(isInertTrailer){ sfx('deny'); return; }
     e.preventDefault();
     const pp = p();
     if(pp.dir !== m[1]){ sfx('deny'); return; }
