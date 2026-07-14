@@ -114,17 +114,30 @@ future AAA music encoding (clean-getaway.wav → ~128kbps AAC/MP3 with stem laye
 
 ## Remaining Phases (Scaffolded)
 
-### M7 — Interlocks Live (Productionize Gates)
-**What:** Bring interlock mechanics (gates/sensors) into the main campaign.
-- Solver support already exists (legalMoves gates arg, state unchanged)
-- Generator support: `tools/generate-levels.mjs` needs gate generation + difficulty rating
-- Verify: `tools/verify-levels.mjs` needs gate invariants (reachable, not degenerate)
-- Curate: 3-level teaching sequence, then sparse integration in chapters 3–4
-- Level data: regenerate 200-level set with gates in ~30 boards
+### ⚙️ M7 — Interlocks Live (Productionize Gates)
+**Infrastructure Ready; Awaiting Level Design**
 
-**Files:** `tools/generate-levels.mjs`, `tools/verify-levels.mjs`, `js/levels.data.js` (regen), `js/art.js` (gate rendering — already done).
+**Implemented:**
+- Solver: gate mechanics fully supported (legalMoves with XOR polarity logic)
+- Generator: tryGenerate() accepts optional gates parameter for curated levels
+- Verifier: gate invariant checking (bounds, overlap, no exit row)
+  Validates that sensor cells are reachable and gate cells don't block solution
+- Rendering: gateSVG() already renders gate visual on board
 
-**Effort:** 2-3 hours (generator plumbing + level regen smoke test).
+**Next Steps (Manual Level Design):**
+- Design 3-level teaching sequence for chapter 2 (introduce gates → reinforce → combine with walls)
+- Design ~20-30 sparse gate levels for chapters 3-4 (interspersed with regular levels)
+- Ensure difficulty progression maintained across gate introduction
+- Test teaching progression with playtesters for UX clarity
+- Add designed levels to js/levels.data.js (requires regenerating 200-level set)
+
+**Level Design Notes:**
+- Gate format: `{ sensors: [[r,c],…], gate: [r,c], polarity: true/false }`
+- Polarity: `true` = gate open when sensors occupied; `false` = gate open when empty
+- Teaching progression: single gate + simple setup → multiple gates → gates + walls combo
+- Difficulty sweet spot: gates add ~2-4 moves vs non-gate equivalent (avoid trivial gates)
+
+**Files:** `tools/verify-levels.mjs` (updated with gate checks), `js/generate.js` (updated with gates param), `js/art.js` (gate rendering complete), `js/levels.data.js` (pending design + regen).
 
 ### M8 — One-Way Streets (New Mechanic)
 **What:** Cheapest new family; pieces on one-way lanes slide one direction only.

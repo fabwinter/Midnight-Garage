@@ -67,13 +67,15 @@ export function tryGenerate(rng, opts = {}){
   for(let c = hero.c + hero.len; c < N; c++) if(grid[EXIT_ROW][c]) blocked = true;
   if(!blocked) return null;
 
-  const sol = solve(pieces, { maxStates: 250000, walls });
+  const gates = opts.gates ?? null;
+  const sol = solve(pieces, { maxStates: 250000, walls, gates });
   if(!sol.solvable || sol.optimal < minOptimal) return null;
 
-  const stats = rate(pieces, sol, walls);
+  const stats = rate(pieces, sol, walls, gates);
   return {
     p: pieces.map(q => [q.r, q.c, q.len, q.dir]),
     ...(walls.length ? { w: walls.map(w => [w[0], w[1]]) } : {}),
+    ...(gates ? { g: gates } : {}),
     m: sol.optimal,
     d: stats.score,
     stats,

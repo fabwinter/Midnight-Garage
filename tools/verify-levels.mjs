@@ -36,7 +36,24 @@ LEVELS.forEach((lv, i) => {
   pieces.slice(1).forEach(p => {
     if(p.dir === 'h' && p.r === EXIT_ROW) bad(`level ${i + 1}: non-hero horizontal piece in exit row (unwinnable)`);
   });
-  const sol = solve(pieces, { walls: lv.w });
+  // M7: Gate invariant checking
+  if(lv.g){
+    for(const gate of lv.g){
+      if(!gate.sensors || !gate.gate) bad(`level ${i + 1}: malformed gate`);
+      // Sensors must be valid and reachable (not blocked by pieces/walls at start)
+      for(const [sr, sc] of gate.sensors){
+        if(sr < 0 || sc < 0 || sr >= N || sc >= N) bad(`level ${i + 1}: gate sensor out of bounds`);
+        if(g[sr][sc]) bad(`level ${i + 1}: gate sensor overlaps with piece/wall`);
+      }
+      // Gate cell must be valid, not in exit row, not overlapping
+      const [gr, gc] = gate.gate;
+      if(gr < 0 || gc < 0 || gr >= N || gc >= N) bad(`level ${i + 1}: gate cell out of bounds`);
+      if(gr === EXIT_ROW) bad(`level ${i + 1}: gate in exit row (breaks solution)`);
+      if(g[gr][gc]) bad(`level ${i + 1}: gate cell overlaps with piece/wall`);
+    }
+  }
+
+  const sol = solve(pieces, { walls: lv.w, gates: lv.g });
   if(!sol.solvable) bad(`level ${i + 1}: unsolvable`);
   else if(sol.optimal !== lv.m) bad(`level ${i + 1}: par ${lv.m} but optimal ${sol.optimal}`);
 });
