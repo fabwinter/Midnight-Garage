@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, resumeMenuMusic, toggleThemePlayer } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -425,6 +425,10 @@ function commitMove(i, mergedKeyStep = false){
     }
   } else {
     $('srLive').textContent = moveAnnounce;
+  }
+
+  if(moves === 1 && !mergedKeyStep){
+    fadeOutMenuMusicOnFirstMove();
   }
 
   if(save.settings.alarm && moves === 1 && !mergedKeyStep && !won){
@@ -1283,20 +1287,24 @@ function updateThemeButtonText(){
   $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
 }
 
+function fadeOutMenuMusicOnFirstMove(){
+  stopMenuMusic();
+}
+
 /* ================== GLOBAL WIRING ================== */
 function wire(){
   $('levelsBtn').addEventListener('click', () => { sfx('ui'); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
-  $('dailyBtn').addEventListener('click', () => { sfx('ui'); openDaily(); });
+  $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
   $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
-    if(e.target.closest('.overlay').id === 'settingsOverlay') stopSettingsMusic();
+    if([`settingsOverlay`, 'dailyOverlay', 'garageOverlay'].includes(e.target.closest('.overlay').id)) resumeMenuMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){
       o.classList.remove('show');
-      if(o.id === 'settingsOverlay') stopSettingsMusic();
+      if(['settingsOverlay', 'dailyOverlay', 'garageOverlay'].includes(o.id)) resumeMenuMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
@@ -1328,9 +1336,9 @@ function wire(){
     proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
   });
   $('carRevealBtn').addEventListener('click', () => { sfx('ui'); dismissCarReveal(); });
-  $('garageBtn').addEventListener('click', () => { sfx('ui'); buildGarageList(); showOverlay('garageOverlay'); });
+  $('garageBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); buildGarageList(); showOverlay('garageOverlay'); });
   $('dailyPlayBtn').addEventListener('click', () => {
-    sfx('ui'); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
+    sfx('ui'); resumeMenuMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
   $('calPrev').addEventListener('click', () => { calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; } renderCalendar(); });
   $('calNext').addEventListener('click', () => { calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; } renderCalendar(); });
