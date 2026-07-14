@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setAlarmMode } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -457,9 +457,21 @@ function updateHud(){
   const s3 = $('hudStreak3');
   s3.textContent = `🔥 ${save.streak3}×3★`;
   s3.classList.toggle('on', save.streak3 >= 2 && mode.type === 'campaign');
+  updateAlarmHud();
   updateControlsVisibility();
   updateHintBadge();
   $('dailyDot').classList.toggle('on', !isDone(todayStr()));
+}
+
+function updateAlarmHud(){
+  const row = $('hudAlarmRow');
+  if(!save.settings.alarm){ row.hidden = true; return; }
+  row.hidden = false;
+  const budget = alarmBudgetFor(parOf());
+  const remaining = budget - moves;
+  $('hudAlarmBudget').textContent = Math.max(0, remaining);
+  row.classList.toggle('tripped', remaining < 0);
+  row.classList.toggle('low', remaining >= 0 && remaining <= Math.max(1, Math.ceil(budget * 0.2)));
 }
 
 /* Onboarding (plan 0.6): hint appears at level 4, undo at level 6. */
@@ -1100,6 +1112,7 @@ function applySettings(){
   const s = save.settings;
   setSfxVolume(s.sfx);
   setMusicVolume(s.music);
+  setAlarmMode(s.alarm);
   setHapticsEnabled(s.haptics);
   $('sfxRange').value = s.sfx;
   $('musicRange').value = s.music;
@@ -1115,7 +1128,7 @@ function wireSettings(){
   $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
   $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
   $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
-  $('alarmChk').addEventListener('change', e => { save.settings.alarm = e.target.checked; persist(); updateHud(); });
+  $('alarmChk').addEventListener('change', e => { save.settings.alarm = e.target.checked; setAlarmMode(e.target.checked); persist(); updateHud(); });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
     save.settings.reminder = e.target.checked; persist();
@@ -1146,6 +1159,7 @@ function applyStrings(){
   $('labLevel').textContent = t('hud.level');
   $('labMoves').textContent = t('hud.moves');
   $('labPar').textContent = t('hud.par');
+  $('labAlarmBudget').textContent = t('hud.alarm');
   $('labUndo').textContent = t('btn.undo');
   $('labHint').textContent = t('btn.hint');
   $('labReset').textContent = t('btn.reset');

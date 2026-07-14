@@ -7,13 +7,42 @@ let AC = null;
 let sfxVol = 1;
 let musicVol = 0;
 let musicNodes = null;
+let alarmMode = false;
+let alarmAudio = null;
+const ALARM_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
 
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
+  if(alarmMode){
+    if(alarmAudio){
+      alarmAudio.volume = Math.max(0, Math.min(1, v));
+      if(v > 0) alarmAudio.play().catch(() => {});
+      else alarmAudio.pause();
+    }
+    return;
+  }
   if(v > 0) startMusic();
   if(musicNodes) musicNodes.gain.gain.linearRampToValueAtTime(v * 0.05, ac()?.currentTime + 0.4 || 0);
   if(v === 0) stopMusic();
+}
+
+/* Alarm mode swaps the procedural garage hum for a licensed ambient track —
+   the "clock is running" cue matters more once a per-move budget is live. */
+export function setAlarmMode(enabled){
+  alarmMode = enabled;
+  if(enabled){
+    stopMusic();
+    if(!alarmAudio){
+      alarmAudio = new Audio(ALARM_TRACK);
+      alarmAudio.loop = true;
+    }
+    alarmAudio.volume = Math.max(0, Math.min(1, musicVol));
+    if(musicVol > 0) alarmAudio.play().catch(() => {});
+  } else {
+    if(alarmAudio) alarmAudio.pause();
+    if(musicVol > 0) startMusic();
+  }
 }
 
 function ac(){

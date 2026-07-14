@@ -77,13 +77,14 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .icon-btn .dot.on{display:block}
 
 /* ---------- HUD ---------- */
-.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:stretch}
+.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:stretch}
 .hud .chip{
   border:1px solid var(--line);border-radius:12px;padding:7px 12px;
   background:linear-gradient(180deg,#181e2a,#131824);
   display:flex;flex-direction:column;justify-content:center;min-width:60px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
 }
+.hud .chip[hidden]{display:none}
 .chip .lab{font-size:9px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase}
 .chip .val{font-family:var(--disp);font-weight:600;font-size:19px;letter-spacing:.03em;margin-top:1px}
 .chip.level .val{color:var(--accent)}
@@ -93,6 +94,16 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .chip .stars .off{color:#3a4255}
 .chip .streak3{display:none;font-size:11px;color:var(--good);margin-top:2px;letter-spacing:.06em}
 .chip .streak3.on{display:block}
+.chip.alarm-chip{border-color:rgba(255,180,84,.35)}
+.chip.alarm-chip .lab{color:var(--amber)}
+.chip.alarm-chip .val{color:var(--amber)}
+.chip.alarm-chip.low .val{color:var(--red);animation:alarmpulse 1s ease-in-out infinite}
+.chip.alarm-chip.tripped{border-color:rgba(255,59,78,.5)}
+.chip.alarm-chip.tripped .val{color:var(--red)}
+@keyframes alarmpulse{
+  0%,100%{opacity:1}
+  50%{opacity:.45}
+}
 
 /* ---------- Board ---------- */
 .stage{position:relative;margin-top:2px}

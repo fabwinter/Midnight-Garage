@@ -4,7 +4,7 @@
 const S = {
 en: {
   sub: 'Free the red car',
-  'hud.level': 'Level', 'hud.moves': 'Moves', 'hud.par': 'Par', 'hud.daily': 'Daily',
+  'hud.level': 'Level', 'hud.moves': 'Moves', 'hud.par': 'Par', 'hud.daily': 'Daily', 'hud.alarm': 'Alarm',
   'btn.undo': 'Undo', 'btn.hint': 'Hint', 'btn.reset': 'Reset', 'btn.skip': 'Skip (1★)',
   'btn.next': 'Next Level', 'btn.replay': 'Replay', 'btn.levels': 'Level Select',
   'btn.share': 'Share', 'btn.play': 'Play', 'btn.unlock': 'Unlock', 'btn.restore': 'Restore purchases',
@@ -49,7 +49,7 @@ en: {
 },
 es: {
   sub: 'Libera el coche rojo',
-  'hud.level': 'Nivel', 'hud.moves': 'Movs', 'hud.par': 'Par', 'hud.daily': 'Diario',
+  'hud.level': 'Nivel', 'hud.moves': 'Movs', 'hud.par': 'Par', 'hud.daily': 'Diario', 'hud.alarm': 'Alarma',
   'btn.undo': 'Deshacer', 'btn.hint': 'Pista', 'btn.reset': 'Reiniciar', 'btn.skip': 'Saltar (1★)',
   'btn.next': 'Siguiente', 'btn.replay': 'Repetir', 'btn.levels': 'Niveles',
   'btn.share': 'Compartir', 'btn.play': 'Jugar', 'btn.unlock': 'Desbloquear', 'btn.restore': 'Restaurar compras',
@@ -94,7 +94,7 @@ es: {
 },
 fr: {
   sub: 'Libérez la voiture rouge',
-  'hud.level': 'Niveau', 'hud.moves': 'Coups', 'hud.par': 'Par', 'hud.daily': 'Quotidien',
+  'hud.level': 'Niveau', 'hud.moves': 'Coups', 'hud.par': 'Par', 'hud.daily': 'Quotidien', 'hud.alarm': 'Alarme',
   'btn.undo': 'Annuler', 'btn.hint': 'Indice', 'btn.reset': 'Recommencer', 'btn.skip': 'Passer (1★)',
   'btn.next': 'Suivant', 'btn.replay': 'Rejouer', 'btn.levels': 'Niveaux',
   'btn.share': 'Partager', 'btn.play': 'Jouer', 'btn.unlock': 'Débloquer', 'btn.restore': 'Restaurer les achats',
@@ -139,7 +139,7 @@ fr: {
 },
 de: {
   sub: 'Befreie das rote Auto',
-  'hud.level': 'Level', 'hud.moves': 'Züge', 'hud.par': 'Par', 'hud.daily': 'Täglich',
+  'hud.level': 'Level', 'hud.moves': 'Züge', 'hud.par': 'Par', 'hud.daily': 'Täglich', 'hud.alarm': 'Alarm',
   'btn.undo': 'Rückgängig', 'btn.hint': 'Tipp', 'btn.reset': 'Neustart', 'btn.skip': 'Überspringen (1★)',
   'btn.next': 'Weiter', 'btn.replay': 'Wiederholen', 'btn.levels': 'Level',
   'btn.share': 'Teilen', 'btn.play': 'Spielen', 'btn.unlock': 'Freischalten', 'btn.restore': 'Käufe wiederherstellen',
@@ -184,7 +184,7 @@ de: {
 },
 it: {
   sub: 'Libera l’auto rossa',
-  'hud.level': 'Livello', 'hud.moves': 'Mosse', 'hud.par': 'Par', 'hud.daily': 'Giornaliero',
+  'hud.level': 'Livello', 'hud.moves': 'Mosse', 'hud.par': 'Par', 'hud.daily': 'Giornaliero', 'hud.alarm': 'Allarme',
   'btn.undo': 'Annulla', 'btn.hint': 'Indizio', 'btn.reset': 'Ricomincia', 'btn.skip': 'Salta (1★)',
   'btn.next': 'Avanti', 'btn.replay': 'Rigioca', 'btn.levels': 'Livelli',
   'btn.share': 'Condividi', 'btn.play': 'Gioca', 'btn.unlock': 'Sblocca', 'btn.restore': 'Ripristina acquisti',
@@ -229,7 +229,7 @@ it: {
 },
 pt: {
   sub: 'Liberte o carro vermelho',
-  'hud.level': 'Nível', 'hud.moves': 'Jogadas', 'hud.par': 'Par', 'hud.daily': 'Diário',
+  'hud.level': 'Nível', 'hud.moves': 'Jogadas', 'hud.par': 'Par', 'hud.daily': 'Diário', 'hud.alarm': 'Alarme',
   'btn.undo': 'Desfazer', 'btn.hint': 'Dica', 'btn.reset': 'Reiniciar', 'btn.skip': 'Pular (1★)',
   'btn.next': 'Próximo', 'btn.replay': 'Repetir', 'btn.levels': 'Níveis',
   'btn.share': 'Compartilhar', 'btn.play': 'Jogar', 'btn.unlock': 'Desbloquear', 'btn.restore': 'Restaurar compras',
@@ -274,7 +274,7 @@ pt: {
 },
 ja: {
   sub: '赤い車を脱出させよう',
-  'hud.level': 'レベル', 'hud.moves': '手数', 'hud.par': 'パー', 'hud.daily': 'デイリー',
+  'hud.level': 'レベル', 'hud.moves': '手数', 'hud.par': 'パー', 'hud.daily': 'デイリー', 'hud.alarm': 'アラーム',
   'btn.undo': '元に戻す', 'btn.hint': 'ヒント', 'btn.reset': 'リセット', 'btn.skip': 'スキップ (1★)',
   'btn.next': '次へ', 'btn.replay': 'リプレイ', 'btn.levels': 'レベル選択',
   'btn.share': 'シェア', 'btn.play': 'プレイ', 'btn.unlock': '解除', 'btn.restore': '購入を復元',
@@ -319,7 +319,7 @@ ja: {
 },
 ko: {
   sub: '빨간 차를 탈출시키세요',
-  'hud.level': '레벨', 'hud.moves': '이동', 'hud.par': '파', 'hud.daily': '데일리',
+  'hud.level': '레벨', 'hud.moves': '이동', 'hud.par': '파', 'hud.daily': '데일리', 'hud.alarm': '알람',
   'btn.undo': '실행 취소', 'btn.hint': '힌트', 'btn.reset': '리셋', 'btn.skip': '건너뛰기 (1★)',
   'btn.next': '다음', 'btn.replay': '다시', 'btn.levels': '레벨 선택',
   'btn.share': '공유', 'btn.play': '플레이', 'btn.unlock': '잠금 해제', 'btn.restore': '구매 복원',
@@ -364,7 +364,7 @@ ko: {
 },
 zh: {
   sub: '让红车脱困',
-  'hud.level': '关卡', 'hud.moves': '步数', 'hud.par': '标准', 'hud.daily': '每日',
+  'hud.level': '关卡', 'hud.moves': '步数', 'hud.par': '标准', 'hud.daily': '每日', 'hud.alarm': '警报',
   'btn.undo': '撤销', 'btn.hint': '提示', 'btn.reset': '重置', 'btn.skip': '跳过 (1★)',
   'btn.next': '下一关', 'btn.replay': '重玩', 'btn.levels': '选关',
   'btn.share': '分享', 'btn.play': '开始', 'btn.unlock': '解锁', 'btn.restore': '恢复购买',
@@ -409,7 +409,7 @@ zh: {
 },
 ru: {
   sub: 'Освободи красную машину',
-  'hud.level': 'Уровень', 'hud.moves': 'Ходы', 'hud.par': 'Пар', 'hud.daily': 'Дейли',
+  'hud.level': 'Уровень', 'hud.moves': 'Ходы', 'hud.par': 'Пар', 'hud.daily': 'Дейли', 'hud.alarm': 'Тревога',
   'btn.undo': 'Отмена', 'btn.hint': 'Подсказка', 'btn.reset': 'Сброс', 'btn.skip': 'Пропустить (1★)',
   'btn.next': 'Дальше', 'btn.replay': 'Ещё раз', 'btn.levels': 'Уровни',
   'btn.share': 'Поделиться', 'btn.play': 'Играть', 'btn.unlock': 'Открыть', 'btn.restore': 'Восстановить покупки',
