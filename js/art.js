@@ -312,6 +312,32 @@ export function hitchSVG(x1, y1, x2, y2, size = 4){
   </g>`;
 }
 
+/* M8: One-way lane indicator — painted line showing direction of travel restriction.
+   Horizontal lanes show ↔, vertical lanes show ↕. */
+export function laneSVG(r, c, dir, cellSize){
+  const x = c * cellSize;
+  const y = r * cellSize;
+  const cx = x + cellSize * 0.5;
+  const cy = y + cellSize * 0.5;
+  const d = cellSize * 0.22;
+
+  if(dir === 'h'){
+    // Horizontal lane: left-right arrows
+    return `<g stroke="#8fa2bd" stroke-width="1.5" fill="none" opacity="0.6">
+      <line x1="${cx - d}" y1="${cy}" x2="${cx + d}" y2="${cy}" stroke-linecap="round"/>
+      <path d="M ${cx - d - 3} ${cy - 2} L ${cx - d} ${cy} L ${cx - d - 3} ${cy + 2}" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M ${cx + d + 3} ${cy - 2} L ${cx + d} ${cy} L ${cx + d + 3} ${cy + 2}" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>`;
+  } else {
+    // Vertical lane: up-down arrows
+    return `<g stroke="#8fa2bd" stroke-width="1.5" fill="none" opacity="0.6">
+      <line x1="${cx}" y1="${cy - d}" x2="${cx}" y2="${cy + d}" stroke-linecap="round"/>
+      <path d="M ${cx - 2} ${cy - d - 3} L ${cx} ${cy - d} L ${cx + 2} ${cy - d - 3}" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M ${cx - 2} ${cy + d + 3} L ${cx} ${cy + d} L ${cx + 2} ${cy + d + 3}" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>`;
+  }
+}
+
 /* M6: Wordless narrative vignettes (SVG scenes with optional panning).
    Five scenes tell the story: before Ch.1, gaps between chapters, epilogue.
    Each scene is a sequence of illustrated moments, rendered via canvas + SVG. */

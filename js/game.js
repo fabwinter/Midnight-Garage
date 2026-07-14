@@ -14,7 +14,7 @@ import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, laneSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carPayoutValue } from './collection.js';
 import { armClock, startClock, stopClock, pauseClock, resumeClock, getPausesLeft, getTimeLeft, isClockRunning, resetPursuit, initPursuit, PURSUIT_BUDGET } from './pursuit.js';
 import { showVignette, resetVignettes } from './vignette.js';
@@ -40,6 +40,7 @@ let curLevel = null;                          // {m, p, w?, g?, h?} for whatever
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
 let gates = [];                               // interlock gates [{sensors, gate, polarity}]
+let lanes = [];                               // M8: one-way lanes [[r,c,'h'|'v'],…]
 let hitches = [];                             // hitches [{tow, trailer}]
 let decoupledHitches = new Set();             // indices of decoupled hitches
 let history = [];
@@ -158,6 +159,22 @@ function buildPieces(){
     el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
     el.style.pointerEvents = 'none';
     el.innerHTML = gateSVG(CELL / 2, CELL / 2, CELL * 0.4);
+    el.setAttribute('aria-hidden', 'true');
+    board.appendChild(el);
+  });
+  // M8: Render one-way lanes
+  lanes.forEach(([r, c, dir]) => {
+    const el = document.createElement('div');
+    el.className = 'lane';
+    el.dataset.r = r; el.dataset.c = c;
+    el.style.width = CELL + 'px';
+    el.style.height = CELL + 'px';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
+    el.style.pointerEvents = 'none';
+    el.innerHTML = laneSVG(r, c, dir, CELL);
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
@@ -663,6 +680,7 @@ function startBoard(){
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
+  lanes = (curLevel.o ?? []).map(a => [a[0], a[1], a[2]]);  // M8: load lanes
   hitches = curLevel.h ?? [];
   if(hitches.length) console.warn('hitch levels are not ship-ready');
   history = []; moves = 0; undos = 0; hintsUsed = 0;
@@ -734,7 +752,7 @@ function showHint(){
     }
   }
   clearHint();
-  const mv = firstOptimalMove(pieces, { walls, gates, hitches });
+  const mv = firstOptimalMove(pieces, { walls, gates, lanes, hitches });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
   if(!save.pro){
     save.hints.left--;
@@ -788,7 +806,7 @@ function scheduleHand(){
 }
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
-  const mv = firstOptimalMove(pieces, { walls, gates, hitches });
+  const mv = firstOptimalMove(pieces, { walls, gates, lanes, hitches });
   if(!mv) return;
   const p = pieces[mv.idx];
   const hand = document.createElement('div');

@@ -53,7 +53,16 @@ LEVELS.forEach((lv, i) => {
     }
   }
 
-  const sol = solve(pieces, { walls: lv.w, gates: lv.g });
+  // M8: Lane invariant checking
+  if(lv.o){
+    for(const [lr, lc, dir] of lv.o){
+      if(typeof dir !== 'string' || (dir !== 'h' && dir !== 'v')) bad(`level ${i + 1}: malformed lane direction`);
+      if(lr < 0 || lc < 0 || lr >= N || lc >= N) bad(`level ${i + 1}: lane cell out of bounds`);
+      if(lr === EXIT_ROW) bad(`level ${i + 1}: lane in exit row (breaks solution)`);
+    }
+  }
+
+  const sol = solve(pieces, { walls: lv.w, gates: lv.g, lanes: lv.o });
   if(!sol.solvable) bad(`level ${i + 1}: unsolvable`);
   else if(sol.optimal !== lv.m) bad(`level ${i + 1}: par ${lv.m} but optimal ${sol.optimal}`);
 });

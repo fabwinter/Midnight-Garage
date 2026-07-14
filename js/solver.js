@@ -49,9 +49,10 @@ function occupy(len, dir, fixed, offs, wm){
 /* All legal moves from a state: [pieceIdx, newOffset] per slide target.
    Optional gates: [{ sensors:[[r,c],…], gate:[r,c], polarity }].
    A move entering a gate cell is legal iff (anySensorOccupied) XOR polarity.
+   Optional lanes: [[r,c,'h'|'v'], …] — one-way streets, pieces slide only in lane direction.
    Optional hitches: [{ tow, trailer }, …] — tow is the vehicle index, trailer is coupled piece.
    When tow moves, trailer can move with it (coupling). Trailer can decouple with a separate move. */
-export function legalMoves(len, dir, fixed, offs, wm, gates, hitches){
+export function legalMoves(len, dir, fixed, offs, wm, gates, lanes, hitches){
   const g = occupy(len, dir, fixed, offs, wm);
   const out = [];
 
@@ -80,6 +81,16 @@ export function legalMoves(len, dir, fixed, offs, wm, gates, hitches){
             const anySensorOccupied = gate.sensors.some(([sr, sc]) => g[sr * N + sc] !== -1);
             const isOpen = anySensorOccupied !== gate.polarity;
             if(!isOpen) break; // Can't pass through closed gate
+          }
+        }
+
+        // M8: Check if piece is on a one-way lane
+        if(lanes){
+          const onLane = lanes.find(([lr, lc]) => lr === er && lc === ec);
+          if(onLane){
+            const [, , laneDir] = onLane;
+            // Only allow movement in the lane's direction
+            if(dir[i] !== laneDir) break;
           }
         }
 
@@ -115,6 +126,7 @@ export function solve(pieces, opts = {}){
   const maxStates = opts.maxStates ?? 400000;
   const wm = wallMask(opts.walls);
   const gates = opts.gates;
+  const lanes = opts.lanes;
   const hitches = opts.hitches;
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
   const winOff = N - len[0];
@@ -139,7 +151,7 @@ export function solve(pieces, opts = {}){
     const sKey = key(s);
     const d = dist.get(sKey);
     if(optimal !== -1 && d >= optimal) break;   // finished the last useful layer
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, hitches)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, lanes, hitches)){
       const ns = s.slice(); ns[i] = o;
       const nKey = key(ns);
       if(!dist.has(nKey)){
@@ -229,7 +241,7 @@ export function analyzeShape(pieces, opts = {}){
   let head = 0;
   while(head < queue.length){
     const s = queue[head++];
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, hitches)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, lanes, hitches)){
       const ns = s.slice(); ns[i] = o;
       const k = key(ns);
       if(!seen.has(k)){ seen.add(k); queue.push(ns); }
@@ -250,7 +262,7 @@ export function analyzeShape(pieces, opts = {}){
   while(h2 < frontier.length){
     const s = frontier[h2++];
     const d = distGoal.get(key(s));
-    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, hitches)){
+    for(const [i, o] of legalMoves(len, dir, fixed, s, wm, gates, lanes, hitches)){
       const ns = s.slice(); ns[i] = o;
       const k = key(ns);
       if(!distGoal.has(k)){ distGoal.set(k, d + 1); frontier.push(ns); }
@@ -282,8 +294,8 @@ export function stateToPieces(stateKey, len, dir, fixed){
    Composite score is the sort key for the 200-level curve and the editor's
    future auto-rating. Weights are v1; re-fit in v1.1 from live funnel data. */
 
-export function rate(pieces, solved, walls, gates){
-  const sol = solved ?? solve(pieces, { walls, gates });
+export function rate(pieces, solved, walls, gates, lanes){
+  const sol = solved ?? solve(pieces, { walls, gates, lanes });
   if(!sol.solvable) return null;
   const wm = wallMask(walls);
   const { len, dir, fixed, offs: start } = piecesToState(pieces);
@@ -292,7 +304,7 @@ export function rate(pieces, solved, walls, gates){
   let branchSum = 0, counter = 0;
   let hPrev = heroDistance(len, dir, fixed, s, wm);
   for(const mv of sol.path){
-    branchSum += legalMoves(len, dir, fixed, s, wm, gates).length;
+    branchSum += legalMoves(len, dir, fixed, s, wm, gates, lanes).length;
     s = s.slice(); s[mv.i] = mv.to;
     const h = heroDistance(len, dir, fixed, s, wm);
     if(h > hPrev) counter++;
