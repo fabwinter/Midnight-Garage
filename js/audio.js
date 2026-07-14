@@ -1,12 +1,12 @@
-/* Audio (plan items 0.4/0.5/0.8): WebAudio SFX from the prototype plus an
-   optional ambient garage hum, both behind independent volume sliders.
-   The native shell configures the audio session to respect the silent
-   switch and mix with user music (see capacitor notes in README). */
+/* Audio (plan items 0.4/0.5/0.8): WebAudio SFX from the prototype plus
+   licensed music tracks (menu, settings, alarm), each behind independent
+   volume sliders. The native shell configures the audio session to
+   respect the silent switch and mix with user music (see capacitor
+   notes in README). */
 
 let AC = null;
 let sfxVol = 1;
 let musicVol = 0;
-let musicNodes = null;
 let alarmMode = false;
 let alarmAudio = null;
 let alarmActive = false;   // true only while a level attempt is in progress
@@ -23,32 +23,16 @@ export function setMusicVolume(v){
   musicVol = v;
   if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
-  if(alarmMode){
-    if(alarmAudio){
-      alarmAudio.volume = Math.max(0, Math.min(1, v));
-      if(v === 0) alarmAudio.pause();
-      else if(alarmActive) alarmAudio.play().catch(() => {});
-    }
-    return;
+  if(alarmMode && alarmAudio){
+    alarmAudio.volume = Math.max(0, Math.min(1, v));
+    if(v === 0) alarmAudio.pause();
+    else if(alarmActive) alarmAudio.play().catch(() => {});
   }
-  if(v > 0) startMusic();
-  if(musicNodes) musicNodes.gain.gain.linearRampToValueAtTime(v * 0.05, ac()?.currentTime + 0.4 || 0);
-  if(v === 0) stopMusic();
 }
 
-/* Alarm mode swaps the procedural garage hum for a licensed ambient track —
-   the "clock is running" cue matters more once a per-move budget is live.
-   This only flips which track *would* play; actual start/stop is owned by
-   startAlarmTrack/stopAlarmTrack so the music tracks level attempts, not
-   menus (plan: alarm music per-attempt, not a persistent background loop). */
 export function setAlarmMode(enabled){
   alarmMode = enabled;
-  if(enabled){
-    stopMusic();
-  } else {
-    stopAlarmTrack();
-    if(musicVol > 0) startMusic();
-  }
+  if(!enabled) stopAlarmTrack();
 }
 
 /* Called once per level attempt (level load / reset) — restarts the track
@@ -244,31 +228,3 @@ export function sfx(kind){
   }
 }
 
-/* Ambient hum: two detuned saws through a slow-wobbling lowpass. Barely
-   there by design; adaptive music (board-state driven) is a v1.5 item. */
-function startMusic(){
-  if(musicNodes) return;
-  const c = ac(); if(!c) return;
-  const gain = c.createGain(); gain.gain.value = musicVol * 0.05;
-  const filter = c.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 220; filter.Q.value = 2;
-  const lfo = c.createOscillator(); lfo.frequency.value = 0.06;
-  const lfoGain = c.createGain(); lfoGain.gain.value = 90;
-  lfo.connect(lfoGain).connect(filter.frequency); lfo.start();
-  const oscs = [55, 55.4, 110.3].map(freq => {
-    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
-    o.connect(filter); o.start();
-    return o;
-  });
-  filter.connect(gain).connect(c.destination);
-  musicNodes = { gain, filter, lfo, oscs };
-}
-
-function stopMusic(){
-  if(!musicNodes) return;
-  try{
-    musicNodes.oscs.forEach(o => o.stop());
-    musicNodes.lfo.stop();
-    musicNodes.gain.disconnect();
-  }catch(e){}
-  musicNodes = null;
-}
