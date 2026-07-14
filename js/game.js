@@ -1106,6 +1106,7 @@ function applySettings(){
   $('colorblindChk').checked = s.colorblind;
   $('autoAdvanceChk').checked = s.autoAdvance;
   $('reminderChk').checked = s.reminder;
+  $('alarmChk').checked = s.alarm;
 }
 
 function wireSettings(){
