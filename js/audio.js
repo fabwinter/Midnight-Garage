@@ -81,6 +81,7 @@ export function startMenuMusic(){
     menuAudio.volume = 0;
   }
   if(menuAudio.paused){
+    stopSettingsMusic();
     menuAudio.currentTime = 0;
     menuAudio.play().catch(() => {});
     fadeIn(menuAudio, musicVol * 0.7, 800);
@@ -105,6 +106,7 @@ export function playSettingsMusic(){
     settingsAudio.volume = 0;
   }
   if(settingsAudio.paused){
+    stopMenuMusic();
     settingsAudio.currentTime = 0;
     settingsAudio.play().catch(() => {});
     fadeIn(settingsAudio, musicVol * 0.7, 600);
@@ -116,6 +118,7 @@ export function stopSettingsMusic(){
     fadeOut(settingsAudio, 400).then(() => {
       settingsAudio.pause();
       settingsAudio.currentTime = 0;
+      startMenuMusic();
     });
   }
 }
@@ -123,6 +126,8 @@ export function stopSettingsMusic(){
 export function toggleThemePlayer(){
   if(!menuAudio) menuAudio = new Audio(VELVET_GLOVE);
   if(menuAudio.paused){
+    stopSettingsMusic();
+    menuAudio.currentTime = 0;
     menuAudio.play().catch(() => {});
     fadeIn(menuAudio, musicVol * 0.7, 300);
   } else {
