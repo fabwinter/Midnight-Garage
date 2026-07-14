@@ -396,7 +396,10 @@ let kbRun = -1;   // piece index of an in-progress keyboard slide, -1 = none
 let kbRunT = null;
 
 function pushHistory(){
-  history.push(pieces.map(p => ({ r: p.r, c: p.c })));
+  history.push({
+    pieces: pieces.map(p => ({ r: p.r, c: p.c })),
+    decoupled: new Set(decoupledHitches)
+  });
   if(history.length > 500) history.shift();
   updateHud();
 }
@@ -535,8 +538,9 @@ function startBoard(){
 function undo(){
   if(!history.length || solvedAnim) return;
   kbRun = -1;
-  const s = history.pop();
-  s.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
+  const entry = history.pop();
+  entry.pieces.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
+  decoupledHitches = new Set(entry.decoupled);
   moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
