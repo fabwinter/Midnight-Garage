@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setAlarmMode } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -412,11 +412,55 @@ function commitMove(i, mergedKeyStep = false){
   updatePieceAria();
   const p = pieces[i];
   $('srLive').textContent = (i === 0 ? 'Red car' : 'Vehicle ' + i) + ` to row ${p.r + 1}, column ${p.c + 1}`;
+
+  if(save.settings.alarm && moves === 1 && !mergedKeyStep){
+    triggerAlarmFlash();
+  }
+
+  if(save.settings.alarm && moves > alarmBudgetFor(parOf())){
+    busted();
+    return;
+  }
+
   if(i === 0 && pieces[0].c === N - pieces[0].len){
     winSequence();
   } else {
     scheduleHand();
   }
+}
+
+/* Requirement: alarm mode is a hard fail, not just a reward-tier gate — going
+   over budget ends the attempt before it can be solved (police arrive). */
+function busted(){
+  solvedAnim = true;
+  clearHint(); clearHand();
+  stopAlarmTrack();
+  sfx('busted');
+  haptic('thudHeavy');
+  track('alarm_busted', {
+    mode: mode.type, level: mode.type === 'campaign' ? cur + 1 : mode.number,
+    moves, par: parOf(),
+  });
+  setTimeout(() => showBustedSheet(), 260);
+}
+
+function showBustedSheet(){
+  $('bustedFlag').textContent = t('busted.flag');
+  $('bustedTitle').textContent = t('busted.title');
+  $('bustedSub').textContent = t('busted.sub');
+  showOverlay('bustedOverlay');
+}
+
+/* "The alarm just went off" — a brief flash the moment the first piece
+   moves in an alarm-mode attempt, so the budget clearly starts counting now. */
+function triggerAlarmFlash(){
+  const el = $('alarmFlash');
+  el.classList.remove('go');
+  void el.offsetWidth;
+  el.classList.add('go');
+  sfx('alarmTrigger');
+  haptic('thudHeavy');
+  el.addEventListener('animationend', () => el.classList.remove('go'), { once: true });
 }
 
 /* ================== HUD ================== */
@@ -546,6 +590,7 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
+  if(save.settings.alarm) startAlarmTrack(); else stopAlarmTrack();
 }
 
 function undo(){
@@ -687,6 +732,7 @@ let autoTimer = null;
 function winSequence(){
   solvedAnim = true;
   clearHint(); clearHand();
+  stopAlarmTrack();
   updateHud();
   sfx('win');
   haptic('success');
@@ -1128,7 +1174,12 @@ function wireSettings(){
   $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
   $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
   $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
-  $('alarmChk').addEventListener('change', e => { save.settings.alarm = e.target.checked; setAlarmMode(e.target.checked); persist(); updateHud(); });
+  $('alarmChk').addEventListener('change', e => {
+    save.settings.alarm = e.target.checked;
+    setAlarmMode(e.target.checked);
+    if(!solvedAnim){ if(e.target.checked) startAlarmTrack(); else stopAlarmTrack(); }
+    persist(); updateHud();
+  });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
     save.settings.reminder = e.target.checked; persist();
@@ -1195,6 +1246,7 @@ function applyStrings(){
   $('garageSub').textContent = t('garage.sub');
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
+  $('bustedRetryBtn').textContent = t('btn.retry');
 }
 
 /* ================== GLOBAL WIRING ================== */
@@ -1206,10 +1258,11 @@ function wire(){
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay'){ o.classList.remove('show'); }
+    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){ o.classList.remove('show'); }
   }));
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
+  $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); });
   $('hintBtn').addEventListener('click', showHint);
   $('skipBtn').addEventListener('click', skipLevel);
   $('replayBtn').addEventListener('click', () => {
