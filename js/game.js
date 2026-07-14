@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, setMusicIntensity, startAmbienceBed, stopAmbienceBed } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -474,6 +474,7 @@ function busted(){
   solvedAnim = true;
   clearHint(); clearHand();
   stopAlarmTrack();
+  stopAmbienceBed();  // M5: fade out ambience on busted
   sfx('busted');
   haptic('thudHeavy');
   track('alarm_busted', {
@@ -645,6 +646,8 @@ function startBoard(){
   updateCoach();
   // Mark level 4 explainer as seen once player reaches it
   if(mode.type === 'campaign' && cur === 3) save.level4ExplainerSeen = true;
+  // M5: Start chapter-specific ambience for campaign mode
+  if(mode.type === 'campaign') startAmbienceBed(chapterOf(cur));
   scheduleHand();
   stopAlarmTrack(); // reset any track from the previous attempt; this attempt's track (if alarm mode) starts on first move
 }
@@ -792,6 +795,7 @@ function winSequence(){
   solvedAnim = true;
   clearHint(); clearHand();
   stopAlarmTrack();
+  stopAmbienceBed();  // M5: fade out ambience
   updateHud();
   haptic('success');
 

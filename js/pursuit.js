@@ -14,6 +14,7 @@ let pausesUsed = 0;
 let maxPauses = 2;
 let tickingAudio = null;
 let lastTickTime = 0;
+let lastTickSoundTime = 0;  // tracks when last tick sound played
 
 export function initPursuit(){
   // Set up visibility change handler for pause auto-consumption
@@ -131,15 +132,41 @@ function updateClockDisplay(){
 }
 
 function playTick(secondsLeft){
-  // Simple beep in last 10 seconds — would be replaced with real audio in M5
-  if(Date.now() - lastTickTime >= 1000){
-    // One tick per second
-    // TODO: play actual tick sound
-  }
+  const now = Date.now();
+  // One tick per second in last 10s
+  if(now - lastTickSoundTime < 900) return;
+  lastTickSoundTime = now;
+
+  // Intensity increases as time runs out: higher frequency, shorter interval
+  // At 10s: ~600Hz, low urgency. At 0s: ~900Hz, high urgency
+  const freq = 600 + (10 - secondsLeft) * 30;
+  playPursuitTick(freq);
 }
 
 function stopTickingAudio(){
-  // TODO: stop tick sound
+  // Ticking audio is synthesized, nothing to stop
+}
+
+function playPursuitTick(frequency){
+  const AC = typeof window !== 'undefined' && window.AudioContext ? new window.AudioContext() : null;
+  if(!AC) return;
+  const c = AC;
+  const t = c.currentTime;
+
+  // Quick beep: rising pitch for urgency
+  const o = c.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(frequency, t);
+  o.frequency.linearRampToValueAtTime(frequency + 100, t + 0.08);
+
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.3, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+
+  o.connect(g);
+  g.connect(c.destination);
+  o.start(t);
+  o.stop(t + 0.1);
 }
 
 export function resetPursuit(){

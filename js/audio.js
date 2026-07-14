@@ -19,6 +19,16 @@ let settingsAudio = null;
 const VELVET_GLOVE = 'assets/audio/velvet-glove.wav';
 const CLEAN_GETAWAY = 'assets/audio/clean-getaway.wav';
 
+// M5: Adaptive stems & ambience (infrastructure for future AAA-quality music)
+let currentIntensity = 0.5;  // 0 = neutral, 1 = high urgency
+let ambienceAudio = null;  // per-chapter ambience bed
+const AMBIENCE_TRACKS = {
+  0: 'assets/audio/ambience-ch1-night-shift.mp3',  // street ambience
+  1: 'assets/audio/ambience-ch2-neon.mp3',         // neon hum + city
+  2: 'assets/audio/ambience-ch3-harbor.mp3',       // fog horns + water
+  3: 'assets/audio/ambience-ch4-gridlock.mp3',     // distant traffic
+};
+
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
@@ -157,6 +167,39 @@ export function toggleThemePlayer(){
     fadeIn(menuAudio, musicVol * 0.7, 300);
   } else {
     fadeOut(menuAudio, 300).then(() => menuAudio.pause());
+  }
+}
+
+/* M5: Adaptive music stems and ambience (AAA-PLAN §6).
+   Intensity 0-1: based on solver distance-to-freedom. Higher intensity
+   = more urgent musical layer, louder drum elements, etc. Ambience beds
+   layer underneath, keyed to chapter atmosphere. */
+export function setMusicIntensity(value){
+  // Clamp 0-1, typically set by distance-to-freedom metric
+  currentIntensity = Math.max(0, Math.min(1, value));
+  if(alarmAudio){
+    // Duck non-alarm music as intensity rises (more focus on game)
+    const ducking = 1 - currentIntensity * 0.3;  // max 30% duck
+    alarmAudio.volume = Math.max(0, Math.min(1, musicVol * ducking));
+  }
+}
+
+export function startAmbienceBed(chapterIdx){
+  stopAmbienceBed();
+  if(!AMBIENCE_TRACKS[chapterIdx] || musicVol <= 0) return;
+  ambienceAudio = new Audio(AMBIENCE_TRACKS[chapterIdx]);
+  ambienceAudio.preload = 'auto';
+  ambienceAudio.loop = true;
+  ambienceAudio.volume = Math.max(0, Math.min(1, musicVol * 0.35));  // subtle layer
+  ambienceAudio.play().catch(() => {});
+}
+
+export function stopAmbienceBed(){
+  if(ambienceAudio && !ambienceAudio.paused){
+    fadeOut(ambienceAudio, 300).then(() => {
+      ambienceAudio.pause();
+      ambienceAudio.currentTime = 0;
+    });
   }
 }
 
