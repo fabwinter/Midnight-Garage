@@ -1,7 +1,7 @@
 # Heist 2.0 Implementation Status
 
-**Status:** M0-M6 complete and merged; M7-M9 scaffolded.
-**Last update:** Post-phase M6 commit `a2184f9`.
+**Status:** M0-M6 complete; M7-M8 infrastructure ready; M9 remaining.
+**Last update:** Post-M8 infrastructure commit `4655365`.
 
 ## Completed Phases
 
@@ -139,18 +139,28 @@ future AAA music encoding (clean-getaway.wav → ~128kbps AAC/MP3 with stem laye
 
 **Files:** `tools/verify-levels.mjs` (updated with gate checks), `js/generate.js` (updated with gates param), `js/art.js` (gate rendering complete), `js/levels.data.js` (pending design + regen).
 
-### M8 — One-Way Streets (New Mechanic)
-**What:** Cheapest new family; pieces on one-way lanes slide one direction only.
-- Mechanic: legality filter in `legalMoves()` (like walls), no state growth
-- Level data shape: `o: [[r,c,dir]…]` (row, col, direction of lane)
-- Solver: add wall-like occupancy check for lanes, legality filter per direction
-- Generator: add lane generation option to `tryGenerate()` and `harden()`
-- Verify: lane never blocks exit row, no lanes in exit lane itself
-- Curate: introduce in chapter 2–3, concentrate in chapter 4 finale
+### ⚙️ M8 — One-Way Streets (Infrastructure Ready)
+**Implemented:** Lane mechanics infrastructure (direction restrictions, no state growth).
 
-**Files:** `js/solver.js` (lane legality), `js/generate.js` (lane generation), `js/game.js` (render lane as painted line in board), `tools/generate-levels.mjs`, `tools/verify-levels.mjs`.
+**Infrastructure Complete:**
+- Solver: legalMoves() filters moves per lane direction (h/v constraints)
+- Generator: tryGenerate() accepts optional lanes parameter
+- Verifier: lane invariant checking (bounds, no exit row)
+- Rendering: laneSVG() draws directional arrows for each lane
+- Game integration: lanes loaded from curLevel.o, passed to hint system
 
-**Effort:** 3-4 hours (solver + generator plumbing, level regen).
+**Next Steps (Manual Level Design):**
+- Design introductory lane levels (chapter 2-3)
+- Design advanced lane puzzles (chapter 4)
+- Integrate into 200-level set with difficulty progression maintained
+
+**Lane Design Notes:**
+- Format: `o: [[r,c,'h'|'v'], ...]` — row, col, direction of travel allowed
+- No state growth (unlike gates) — pure legality filter
+- Teaching: single lane → multiple lanes → lanes + walls combo
+- Difficulty: lanes add ~1-2 moves vs non-lane equivalent
+
+**Files:** `js/solver.js` (lane legality ✓), `js/generate.js` (lane support ✓), `js/game.js` (rendering ✓), `js/art.js` (laneSVG ✓), `tools/verify-levels.mjs` (invariant check ✓), `js/levels.data.js` (pending design + regen).
 
 ### M9 — The Rig (Hitches/Tow Trucks)
 **What:** Complete hitch mechanics (currently half-built per SHIP-POLISH P0-2).
