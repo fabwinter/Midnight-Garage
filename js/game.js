@@ -1356,6 +1356,7 @@ function wire(){
     save.introSeen = true;
     persist();
     hideOverlay('startOverlay');
+    setTimeout(() => $('board').focus(), 100);
   });
 }
 
@@ -1366,7 +1367,7 @@ function wire(){
   const loaded = await load('save_v1');
   if(loaded){
     save = Object.assign(save, loaded);
-    save.settings = Object.assign({ sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false }, loaded.settings);
+    save.settings = Object.assign({ sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false }, loaded.settings);
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
   }
   await loadDaily();
