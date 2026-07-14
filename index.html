@@ -121,14 +121,15 @@
 </div>
 
 <!-- Busted (alarm mode hard fail) -->
-<div class="overlay" id="bustedOverlay">
+<div class="overlay" id="bustedOverlay" role="alertdialog" aria-labelledby="bustedTitle" aria-describedby="bustedSub">
   <div class="sheet busted-sheet">
     <div class="police-lights" aria-hidden="true"></div>
     <div class="flag busted-flag" id="bustedFlag">Busted</div>
     <h2 id="bustedTitle">Not quick enough!</h2>
     <p class="sub" id="bustedSub">The alarm tripped before you cleared the lot. Try again.</p>
     <div class="win-row">
-      <button class="btn primary" id="bustedRetryBtn" style="grid-column:1/3">Retry</button>
+      <button class="btn primary" id="bustedRetryBtn">Retry</button>
+      <button class="btn" id="bustedNoAlarmBtn"></button>
     </div>
   </div>
 </div>

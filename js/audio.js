@@ -50,6 +50,7 @@ export function startAlarmTrack(){
   if(!alarmMode) return;
   if(!alarmAudio){
     alarmAudio = new Audio(ALARM_TRACK);
+    alarmAudio.preload = 'auto';
     alarmAudio.loop = true;
   }
   alarmAudio.currentTime = 0;
