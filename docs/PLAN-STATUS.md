@@ -10,10 +10,11 @@ Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c`.
 Phase H1 (Security Gates) ✅ shipped `528bfd0`. Phase H2 (The Alarm) ✅ shipped
 `d57e0fd` — per-move budget, clean getaway bonus, i18n (10 langs).
-Phase H3 (The Rig) 🔶 in progress (`48d56b7`) — hitch solver scaffolding ✅,
-inert piece handling ✅, test levels 203–204 ✅, hitch coupling visualization ✅,
-auto-coupling mechanics ✅, decoupling via double-tap ✅. Next: tow-truck SVG
-rendering, full chapter generation (levels 205–250).
+Phase H3 (The Rig) 🔶 in progress (`401e593`) — hitch solver scaffolding ✅,
+inert piece handling ✅, test levels 203–210 ✅, hitch coupling visualization ✅,
+auto-coupling mechanics ✅, decoupling via double-tap ✅, undo state recovery ✅,
+UI constraints (trailers non-interactive when coupled) ✅, tow vehicle indicators ✅.
+Next: tow-truck SVG rendering, full chapter generation (production levels).
 
 ## Phase 0 — Foundation
 
