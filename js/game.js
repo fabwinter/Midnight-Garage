@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -45,7 +45,7 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
-  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
+  settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
@@ -427,6 +427,11 @@ function commitMove(i, mergedKeyStep = false){
     $('srLive').textContent = moveAnnounce;
   }
 
+  if(moves === 1 && !mergedKeyStep){
+    fadeOutMenuMusicOnFirstMove();
+    if(save.settings.alarm) startAlarmTrack();
+  }
+
   if(save.settings.alarm && moves === 1 && !mergedKeyStep && !won){
     triggerAlarmFlash();
   }
@@ -574,6 +579,7 @@ function abandonIfMidLevel(){
 
 function loadLevel(idx){
   abandonIfMidLevel();
+  stopMenuMusic();
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
@@ -583,6 +589,7 @@ function loadLevel(idx){
 
 function loadDailyLevel(dateStr){
   abandonIfMidLevel();
+  stopMenuMusic();
   const lv = dailyLevel(dateStr);
   mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
   curLevel = lv;
@@ -609,7 +616,7 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  if(save.settings.alarm) startAlarmTrack(); else stopAlarmTrack();
+  stopAlarmTrack(); // reset any track from the previous attempt; this attempt's track (if alarm mode) starts on first move
 }
 
 function undo(){
@@ -1088,7 +1095,7 @@ function buildLevelList(){
       : `<span class="n">${i + 1}</span><span class="s">${starStr(st)}</span>`;
     if(!locked){
       b.addEventListener('click', () => {
-        sfx('ui'); hideOverlay('levelsOverlay'); loadLevel(i);
+        sfx('ui'); stopSettingsMusic(); hideOverlay('levelsOverlay'); loadLevel(i);
       });
     } else if(chLocked){
       b.addEventListener('click', () => {
@@ -1195,7 +1202,9 @@ function wireSettings(){
   $('alarmChk').addEventListener('change', e => {
     save.settings.alarm = e.target.checked;
     setAlarmMode(e.target.checked);
-    if(!solvedAnim){ if(e.target.checked) startAlarmTrack(); else stopAlarmTrack(); }
+    // Only start the track if the current attempt is already underway
+    // (moves > 0) — a fresh, unmoved board waits for the first move.
+    if(!solvedAnim && e.target.checked && moves > 0) startAlarmTrack();
     persist(); updateHud();
   });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
@@ -1252,6 +1261,8 @@ function applyStrings(){
   $('labAlarm').textContent = t('settings.alarm');
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
+  $('labTheme').textContent = t('theme.label');
+  $('themePlayBtn').textContent = t('theme.play');
   $('labRestore').textContent = t('btn.restore');
   $('proTitle').textContent = t('pro.title');
   $('proPitch').textContent = t('pro.pitch');
@@ -1274,16 +1285,30 @@ function applyStrings(){
   $('startNote').textContent = t('start.note');
 }
 
+function updateThemeButtonText(){
+  const isPlaying = menuAudio && !menuAudio.paused;
+  $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
+}
+
+function fadeOutMenuMusicOnFirstMove(){
+  stopMenuMusic();
+}
+
 /* ================== GLOBAL WIRING ================== */
 function wire(){
-  $('levelsBtn').addEventListener('click', () => { sfx('ui'); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
-  $('dailyBtn').addEventListener('click', () => { sfx('ui'); openDaily(); });
-  $('settingsBtn').addEventListener('click', () => { sfx('ui'); showOverlay('settingsOverlay'); });
+  $('levelsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
+  $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
+  $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
+  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
+    if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){ o.classList.remove('show'); }
+    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){
+      o.classList.remove('show');
+      if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+    }
   }));
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
@@ -1314,9 +1339,9 @@ function wire(){
     proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
   });
   $('carRevealBtn').addEventListener('click', () => { sfx('ui'); dismissCarReveal(); });
-  $('garageBtn').addEventListener('click', () => { sfx('ui'); buildGarageList(); showOverlay('garageOverlay'); });
+  $('garageBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); buildGarageList(); showOverlay('garageOverlay'); });
   $('dailyPlayBtn').addEventListener('click', () => {
-    sfx('ui'); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
+    sfx('ui'); stopSettingsMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
   $('calPrev').addEventListener('click', () => { calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; } renderCalendar(); });
   $('calNext').addEventListener('click', () => { calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; } renderCalendar(); });
@@ -1324,7 +1349,10 @@ function wire(){
   document.addEventListener('keydown', e => {
     if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
     if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
-    if(e.key === 'Escape'){ ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay'].forEach(hideOverlay); }
+    if(e.key === 'Escape'){
+      ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay'].forEach(hideOverlay);
+      stopSettingsMusic();
+    }
   });
   window.addEventListener('resize', layout);
   window.addEventListener('pagehide', () => { abandonIfMidLevel(); flush(); });
@@ -1334,8 +1362,15 @@ function wire(){
     save.introSeen = true;
     persist();
     hideOverlay('startOverlay');
+    setTimeout(() => $('board').focus(), 100);
   });
 }
+
+/* Browsers block audio.play() until a user gesture; retry menu music
+   on the first tap/click/key anywhere so Velvet Glove starts the
+   moment the player touches the screen, not just on the Play button. */
+document.addEventListener('pointerdown', () => startMenuMusic(), { once: true });
+document.addEventListener('keydown', () => startMenuMusic(), { once: true });
 
 /* ================== BOOT ================== */
 (async function boot(){
@@ -1344,7 +1379,7 @@ function wire(){
   const loaded = await load('save_v1');
   if(loaded){
     save = Object.assign(save, loaded);
-    save.settings = Object.assign({ sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false }, loaded.settings);
+    save.settings = Object.assign({ sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false }, loaded.settings);
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
   }
   await loadDaily();
@@ -1356,6 +1391,7 @@ function wire(){
   layout();
   const startAt = Math.min(Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS), LEVELS.length) - 1;
   loadLevel(Math.max(0, startAt));
+  startMenuMusic();
   // Show intro on first play
   if(!save.introSeen){
     showOverlay('startOverlay');
