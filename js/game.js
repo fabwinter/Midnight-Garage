@@ -48,6 +48,7 @@ let save = {
   settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
+  introSeen: false,
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -1106,6 +1107,7 @@ function applySettings(){
   $('colorblindChk').checked = s.colorblind;
   $('autoAdvanceChk').checked = s.autoAdvance;
   $('reminderChk').checked = s.reminder;
+  $('alarmChk').checked = s.alarm;
 }
 
 function wireSettings(){
@@ -1226,6 +1228,12 @@ function wire(){
   window.addEventListener('resize', layout);
   window.addEventListener('pagehide', () => { abandonIfMidLevel(); flush(); });
   board.addEventListener('contextmenu', e => e.preventDefault());
+  $('startPlayBtn').addEventListener('click', () => {
+    sfx('ui');
+    save.introSeen = true;
+    persist();
+    hideOverlay('startOverlay');
+  });
 }
 
 /* ================== BOOT ================== */
@@ -1235,7 +1243,7 @@ function wire(){
   const loaded = await load('save_v1');
   if(loaded){
     save = Object.assign(save, loaded);
-    save.settings = Object.assign({ sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false }, loaded.settings);
+    save.settings = Object.assign({ sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false }, loaded.settings);
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
   }
   await loadDaily();
@@ -1247,4 +1255,8 @@ function wire(){
   layout();
   const startAt = Math.min(Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS), LEVELS.length) - 1;
   loadLevel(Math.max(0, startAt));
+  // Show intro on first play
+  if(!save.introSeen){
+    showOverlay('startOverlay');
+  }
 })();
