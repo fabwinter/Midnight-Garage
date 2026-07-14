@@ -14,7 +14,7 @@ import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
 
 const $ = id => document.getElementById(id);
@@ -25,15 +25,19 @@ const HINT_TOKENS_PER_DAY = 3;
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
-let curLevel = null;                          // {m, p, w?} for whatever is on the board
+let curLevel = null;                          // {m, p, w?, g?, h?} for whatever is on the board
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
+let gates = [];                               // interlock gates [{sensors, gate, polarity}]
+let hitches = [];                             // hitches [{tow, trailer}]
+let decoupledHitches = new Set();             // indices of decoupled hitches
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
 let solvedAnim = false;
 let levelStart = Date.now();
 let skipShown = false;
+let isCleanGetaway = false;
 
 let save = {
   unlocked: 1,
@@ -41,7 +45,7 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
-  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false },
+  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
 };
@@ -113,7 +117,7 @@ function easingFor(len, distCells){
 }
 
 function buildPieces(){
-  board.querySelectorAll('.piece, .wall').forEach(el => el.remove());
+  board.querySelectorAll('.piece, .wall, .gate, .hitch').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
     const el = document.createElement('div');
     el.className = 'wall';
@@ -125,9 +129,39 @@ function buildPieces(){
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
+  gates.forEach(gate => {
+    const [r, c] = gate.gate;
+    const el = document.createElement('div');
+    el.className = 'gate';
+    el.dataset.r = r; el.dataset.c = c;
+    el.style.width = CELL + 'px';
+    el.style.height = CELL + 'px';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
+    el.style.pointerEvents = 'none';
+    el.innerHTML = gateSVG(CELL / 2, CELL / 2, CELL * 0.4);
+    el.setAttribute('aria-hidden', 'true');
+    board.appendChild(el);
+  });
+  hitches.forEach((hitch, hi) => {
+    const el = document.createElement('div');
+    el.className = 'hitch';
+    el.dataset.hi = hi;
+    el.style.position = 'absolute';
+    el.style.top = '0';
+    el.style.left = '0';
+    el.style.width = (CELL * 6) + 'px';
+    el.style.height = (CELL * 6) + 'px';
+    el.style.pointerEvents = 'none';
+    el.setAttribute('aria-hidden', 'true');
+    board.appendChild(el);
+  });
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
-    el.className = 'piece' + (i === 0 ? ' hero' : '');
+    const isTow = hitches.some(h => h.tow === i);
+    el.className = 'piece' + (i === 0 ? ' hero' : '') + (isTow ? ' tow' : '');
     el.dataset.idx = i;
     el.setAttribute('tabindex', '0');
     el.setAttribute('role', 'button');
@@ -171,6 +205,19 @@ function renderPositions(animate = true){
     el.style.transform = `translate(${p.c * CELL}px, ${p.r * CELL}px)`;
     if(!animate){ void el.offsetWidth; el.style.transition = ''; }
   });
+  board.querySelectorAll('.hitch').forEach(el => {
+    const hi = +el.dataset.hi, h = hitches[hi];
+    if(!h || decoupledHitches.has(hi)) return;  // Skip decoupled hitches
+    const tow = pieces[h.tow], trailer = pieces[h.trailer];
+    if(!tow || !trailer) return;
+    // Center of tow piece
+    const towCx = (tow.c + (tow.dir === 'h' ? tow.len / 2 : 0.5)) * CELL;
+    const towCy = (tow.r + (tow.dir === 'v' ? tow.len / 2 : 0.5)) * CELL;
+    // Center of trailer piece
+    const trailerCx = (trailer.c + (trailer.dir === 'h' ? trailer.len / 2 : 0.5)) * CELL;
+    const trailerCy = (trailer.r + (trailer.dir === 'v' ? trailer.len / 2 : 0.5)) * CELL;
+    el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, CELL * 0.08);
+  });
 }
 
 /* ================== DRAG + FLICK ================== */
@@ -191,10 +238,25 @@ function attachDrag(el, i){
   let startX = 0, startY = 0, startPos = 0, lo = 0, hi = 0;
   let dragging = false, lastSlideT = 0, lastCell = 0, hitWall = false;
   let samples = [];
+  let lastTapT = 0;
   const p = () => pieces[i];
 
   el.addEventListener('pointerdown', e => {
+    // Double-tap to decouple (for tow pieces)
+    const now = performance.now();
+    if(now - lastTapT < 300){
+      if(decoupleTow(i)){
+        renderPositions(true);
+        updateHud();
+      }
+      lastTapT = 0;
+      return;
+    }
+    lastTapT = now;
     if(solvedAnim) return;
+    // Prevent dragging inert trailers (only tow can move, trailer follows)
+    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    if(isInertTrailer){ sfx('deny'); return; }
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     dragging = true; hitWall = false;
@@ -255,7 +317,18 @@ function attachDrag(el, i){
     const before = p().dir === 'h' ? p().c : p().r;
     if(target !== before){
       pushHistory();
+      const offset = target - before;
       if(p().dir === 'h') p().c = target; else p().r = target;
+      // Auto-couple: move trailer along with tow (if hitch not decoupled)
+      for(let hi = 0; hi < hitches.length; hi++){
+        const h = hitches[hi];
+        if(h.tow === i && !decoupledHitches.has(hi)){
+          const trailer = pieces[h.trailer];
+          if(trailer && trailer.dir === p().dir){
+            if(p().dir === 'h') trailer.c += offset; else trailer.r += offset;
+          }
+        }
+      }
       const dist = Math.abs(target - before);
       if(flicked){
         el.style.transition = `transform ${Math.min(0.45, 0.12 + dist * 0.055)}s cubic-bezier(.18,.7,.3,1.12)`;
@@ -285,6 +358,9 @@ function attachDrag(el, i){
     const map = { ArrowLeft: [-1, 'h'], ArrowRight: [1, 'h'], ArrowUp: [-1, 'v'], ArrowDown: [1, 'v'] };
     const m = map[e.key];
     if(!m) return;
+    // Prevent keyboard control of inert trailers
+    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    if(isInertTrailer){ sfx('deny'); return; }
     e.preventDefault();
     const pp = p();
     if(pp.dir !== m[1]){ sfx('deny'); return; }
@@ -297,7 +373,18 @@ function attachDrag(el, i){
        and VoiceOver players can still hit par (plan 0.8). */
     const merge = kbRun === i;
     if(!merge) pushHistory();
+    const offset = to - at;
     if(pp.dir === 'h') pp.c = to; else pp.r = to;
+    // Auto-couple: move trailer along with tow (if hitch not decoupled)
+    for(let hi = 0; hi < hitches.length; hi++){
+      const h = hitches[hi];
+      if(h.tow === i && !decoupledHitches.has(hi)){
+        const trailer = pieces[h.trailer];
+        if(trailer && trailer.dir === pp.dir){
+          if(pp.dir === 'h') trailer.c += offset; else trailer.r += offset;
+        }
+      }
+    }
     commitMove(i, merge);
     kbRun = i;
     clearTimeout(kbRunT);
@@ -309,7 +396,10 @@ let kbRun = -1;   // piece index of an in-progress keyboard slide, -1 = none
 let kbRunT = null;
 
 function pushHistory(){
-  history.push(pieces.map(p => ({ r: p.r, c: p.c })));
+  history.push({
+    pieces: pieces.map(p => ({ r: p.r, c: p.c })),
+    decoupled: new Set(decoupledHitches)
+  });
   if(history.length > 500) history.shift();
   updateHud();
 }
@@ -334,6 +424,9 @@ function starCountFor(par, usedMoves){
   if(usedMoves <= par) return 3;
   if(usedMoves <= par + Math.max(3, Math.ceil(par * 0.35))) return 2;
   return 1;
+}
+function alarmBudgetFor(par){
+  return par;
 }
 function starStr(n, size = 3){
   let s = '';
@@ -425,7 +518,10 @@ function loadDailyLevel(dateStr){
 function startBoard(){
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
+  gates = curLevel.g ?? [];
+  hitches = curLevel.h ?? [];
   history = []; moves = 0; undos = 0; hintsUsed = 0;
+  decoupledHitches.clear();
   solvedAnim = false;
   kbRun = -1;
   levelStart = Date.now();
@@ -442,8 +538,9 @@ function startBoard(){
 function undo(){
   if(!history.length || solvedAnim) return;
   kbRun = -1;
-  const s = history.pop();
-  s.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
+  const entry = history.pop();
+  entry.pieces.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
+  decoupledHitches = new Set(entry.decoupled);
   moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
@@ -451,6 +548,21 @@ function undo(){
   renderPositions(true);
   updateHud();
   updatePieceAria();
+}
+
+function decoupleTow(towIdx){
+  if(solvedAnim) return false;
+  const hi = hitches.findIndex(h => h.tow === towIdx);
+  if(hi === -1) return false;
+  if(decoupledHitches.has(hi)) return false;
+  pushHistory();
+  decoupledHitches.add(hi);
+  moves++;
+  sfx('snap');
+  haptic('ui');
+  track('decouple', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  updateHud();
+  return true;
 }
 
 /* ================== HINTS ================== */
@@ -472,7 +584,7 @@ function showHint(){
     }
   }
   clearHint();
-  const mv = firstOptimalMove(pieces, { walls });
+  const mv = firstOptimalMove(pieces, { walls, gates, hitches });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
   if(!save.pro){
     save.hints.left--;
@@ -523,7 +635,7 @@ function scheduleHand(){
 }
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
-  const mv = firstOptimalMove(pieces, { walls });
+  const mv = firstOptimalMove(pieces, { walls, gates, hitches });
   if(!mv) return;
   const p = pieces[mv.idx];
   const hand = document.createElement('div');
@@ -575,6 +687,13 @@ function winSequence(){
   const stars = starCountFor(par, moves);
   const timeS = Math.round((Date.now() - levelStart) / 1000);
 
+  isCleanGetaway = false;
+  if(save.settings.alarm){
+    const budget = alarmBudgetFor(par);
+    isCleanGetaway = moves <= budget;
+    if(isCleanGetaway) track('alarm_clean_getaway', { level: mode.type === 'campaign' ? cur + 1 : mode.number, moves, par, date: mode.date });
+  }
+
   if(mode.type === 'campaign'){
     save.stars[cur] = Math.max(save.stars[cur] || 0, stars);
     save.best[cur] = Math.min(save.best[cur] || Infinity, moves);
@@ -612,6 +731,8 @@ function showWinSheet(stars){
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
     : save.best[cur];
+  $('cleanGetaway').hidden = !isCleanGetaway;
+  if(isCleanGetaway) $('cleanGetaway').textContent = t('win.clean');
   const ws = $('winStars');
   ws.innerHTML = '';
   for(let i = 0; i < 3; i++){
@@ -992,6 +1113,7 @@ function wireSettings(){
   $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
   $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
   $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
+  $('alarmChk').addEventListener('change', e => { save.settings.alarm = e.target.checked; persist(); updateHud(); });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
     save.settings.reminder = e.target.checked; persist();
@@ -1042,6 +1164,7 @@ function applyStrings(){
   $('labMusic').textContent = t('settings.music');
   $('labHaptics').textContent = t('settings.haptics');
   $('labColorblind').textContent = t('settings.colorblind');
+  $('labAlarm').textContent = t('settings.alarm');
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labRestore').textContent = t('btn.restore');

@@ -290,3 +290,24 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
   ${lamp(CELL * 4.72, CELL * 5.94, true)}
   ${signal(CELL * 0.14, CELL * 2)}`;
 }
+
+/* Interlock gate (camera/laser) symbol: a simple circle with crosshair.
+   Overlaid on the board grid at gate cell positions. */
+export function gateSVG(x, y, size = 30){
+  return `<g opacity="0.85">
+    <circle cx="${x}" cy="${y}" r="${size * 0.4}" fill="none" stroke="#00ffcc" stroke-width="2"/>
+    <line x1="${x - size * 0.25}" y1="${y}" x2="${x + size * 0.25}" y2="${y}" stroke="#00ffcc" stroke-width="1.5"/>
+    <line x1="${x}" y1="${y - size * 0.25}" x2="${x}" y2="${y + size * 0.25}" stroke="#00ffcc" stroke-width="1.5"/>
+    <circle cx="${x}" cy="${y}" r="${size * 0.08}" fill="#00ffcc"/>
+  </g>`;
+}
+
+/* Hitch coupling indicator: a tow-rope line connecting tow vehicle to trailer.
+   Shows which pieces are currently coupled. */
+export function hitchSVG(x1, y1, x2, y2, size = 4){
+  return `<g opacity="0.75">
+    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ff9e5c" stroke-width="${size}" stroke-dasharray="${size * 3},${size * 2}" stroke-linecap="round"/>
+    <circle cx="${x1}" cy="${y1}" r="${size * 1.2}" fill="#ff9e5c" opacity="0.9"/>
+    <circle cx="${x2}" cy="${y2}" r="${size * 1.2}" fill="#ff9e5c" opacity="0.9"/>
+  </g>`;
+}

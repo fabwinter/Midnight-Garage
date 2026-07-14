@@ -216,6 +216,8 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 .piece.hero{filter:drop-shadow(0 7px 9px rgba(0,0,0,.55)) drop-shadow(0 0 13px rgba(255,59,78,.28))}
 .piece.hero.drag{filter:drop-shadow(0 13px 16px rgba(0,0,0,.62)) drop-shadow(0 0 16px rgba(255,59,78,.4))}
+.piece.tow{filter:drop-shadow(0 7px 9px rgba(0,0,0,.55)) drop-shadow(0 0 8px rgba(255,158,92,.4))}
+.piece.tow.drag{filter:drop-shadow(0 13px 16px rgba(0,0,0,.62)) drop-shadow(0 0 12px rgba(255,158,92,.6))}
 
 /* ---------- Roadworks (immovable) ---------- */
 .wall{
@@ -338,6 +340,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 @keyframes starpop{to{opacity:1;transform:none}}
 .win-stats{display:flex;justify-content:center;gap:22px;margin:10px 0 14px;color:var(--muted);font-size:13px}
 .win-stats b{color:var(--ink);font-family:var(--disp);font-size:17px;display:block;margin-top:2px}
+.clean-getaway{font-family:var(--disp);color:var(--amber);font-weight:600;font-size:14px;margin:8px 0 10px;text-shadow:0 0 12px rgba(255,180,84,.4)}
 .win-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btn.primary{
   background:linear-gradient(180deg,#ffc36b,#f09a2e);

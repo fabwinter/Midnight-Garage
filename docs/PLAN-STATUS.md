@@ -7,9 +7,14 @@ Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 [HEIST-PLAN.md](HEIST-PLAN.md) — the collection-heist meta on the **premium
 (Variant A)** business model, which supersedes/sharpens the later phases of
 [AAA-PLAN.md](AAA-PLAN.md) with a single frame and a locked, ad-clean,
-no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c` —
-12 cosmetic hero-skin unlocks + garage screen. Next up: Phase H1 (Security
-Gates), pending go-ahead.
+no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c`.
+Phase H1 (Security Gates) ✅ shipped `528bfd0`. Phase H2 (The Alarm) ✅ shipped
+`d57e0fd` — per-move budget, clean getaway bonus, i18n (10 langs).
+Phase H3 (The Rig) 🔶 in progress (`401e593`) — hitch solver scaffolding ✅,
+inert piece handling ✅, test levels 203–210 ✅, hitch coupling visualization ✅,
+auto-coupling mechanics ✅, decoupling via double-tap ✅, undo state recovery ✅,
+UI constraints (trailers non-interactive when coupled) ✅, tow vehicle indicators ✅.
+Next: tow-truck SVG rendering, full chapter generation (production levels).
 
 ## Phase 0 — Foundation
 

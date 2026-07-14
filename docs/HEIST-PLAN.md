@@ -181,7 +181,7 @@ Same discipline as the original plan: one marketable beat per phase.
 | Phase | Focus | Ships | New solver work? |
 |---|---|---|---|
 | **H0 — The Garage** ✅ shipped | Re-narrativize; build garage collection screen; ~12 cosmetic cars unlocked by *existing* milestones; car-skin applies to hero | "Collect the cars" — the retention hook, zero new puzzle tech | none |
-| **H1 — Security Gates** | Interlocks (cameras/laser gates): solver arg, generator, verify, a themed set of levels | "The garage fights back" — first security mechanic (cheapest) | interlocks (free) |
+| **H1 — Security Gates** ✅ shipped | Interlocks (cameras/laser gates): solver arg, generator, verify, a themed set of levels | "The garage fights back" — first security mechanic (cheapest) | interlocks (free) |
 | **H2 — The Alarm** | Optional per-move Alarm mode, reward-gating; clean-getaway bonus; settings toggle | "Beat the alarm" — the opt-in countdown | none |
 | **H3 — The Rig** | Hitches + tow truck (inert marks): solver coupled-set/inert, generator, verify, a themed chapter | "Some cars can't drive themselves" — the marquee mechanic | hitches (~1.8× state) |
 | **H4 — Bounties** | Nightly mark on daily infra; rare-car rewards; leaderboard tie-in | "A new mark every night" — recurring pull | none |
@@ -211,7 +211,16 @@ Playwright (locked garage → solve → win → reveal → dismiss → advance �
 reopen garage → equip → hero renders new skin in gameplay), zero JS errors
 across the full smoke suite.
 
-H1 (Security Gates / interlocks) has not been started — awaiting go-ahead.
+H1 shipped (`528bfd0`):
+- Solver: `legalMoves()` gates arg, state-representation unchanged
+- Rendering: cyan crosshair gate symbols on board
+- 2 test interlock levels (201–202) with gates blocking hero until sensors activated
+- Hints respect gate constraints
+- Verified end-to-end (all smoke tests pass)
+- Deferred: algorithmic level generation with gates, full-chapter curation
+
+H2 (Alarm mode) up next — optional per-move budget countdown, gating a
+"clean getaway" bonus (reward) not access (covenant intact).
 
 ---
 
