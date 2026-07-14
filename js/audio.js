@@ -97,14 +97,6 @@ export function stopMenuMusic(){
   }
 }
 
-export function resumeMenuMusic(){
-  if(menuAudio && menuAudio.paused && musicVol > 0){
-    stopSettingsMusic();
-    menuAudio.play().catch(() => {});
-    fadeIn(menuAudio, musicVol * 0.7, 800);
-  }
-}
-
 /* Settings/theme menu music. */
 export function playSettingsMusic(){
   if(!settingsAudio){
@@ -126,7 +118,6 @@ export function stopSettingsMusic(){
     fadeOut(settingsAudio, 400).then(() => {
       settingsAudio.pause();
       settingsAudio.currentTime = 0;
-      startMenuMusic();
     });
   }
 }
