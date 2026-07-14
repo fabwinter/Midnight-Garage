@@ -1094,7 +1094,7 @@ function buildLevelList(){
       : `<span class="n">${i + 1}</span><span class="s">${starStr(st)}</span>`;
     if(!locked){
       b.addEventListener('click', () => {
-        sfx('ui'); hideOverlay('levelsOverlay'); loadLevel(i);
+        sfx('ui'); stopSettingsMusic(); hideOverlay('levelsOverlay'); loadLevel(i);
       });
     } else if(chLocked){
       b.addEventListener('click', () => {
@@ -1293,18 +1293,18 @@ function fadeOutMenuMusicOnFirstMove(){
 
 /* ================== GLOBAL WIRING ================== */
 function wire(){
-  $('levelsBtn').addEventListener('click', () => { sfx('ui'); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
+  $('levelsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
   $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
-    if(['settingsOverlay', 'dailyOverlay', 'garageOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
+    if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){
       o.classList.remove('show');
-      if(['settingsOverlay', 'dailyOverlay', 'garageOverlay'].includes(o.id)) stopSettingsMusic();
+      if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
@@ -1346,7 +1346,10 @@ function wire(){
   document.addEventListener('keydown', e => {
     if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
     if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
-    if(e.key === 'Escape'){ ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay'].forEach(hideOverlay); }
+    if(e.key === 'Escape'){
+      ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay'].forEach(hideOverlay);
+      stopSettingsMusic();
+    }
   });
   window.addEventListener('resize', layout);
   window.addEventListener('pagehide', () => { abandonIfMidLevel(); flush(); });
@@ -1359,6 +1362,12 @@ function wire(){
     setTimeout(() => $('board').focus(), 100);
   });
 }
+
+/* Browsers block audio.play() until a user gesture; retry menu music
+   on the first tap/click/key anywhere so Velvet Glove starts the
+   moment the player touches the screen, not just on the Play button. */
+document.addEventListener('pointerdown', () => startMenuMusic(), { once: true });
+document.addEventListener('keydown', () => startMenuMusic(), { once: true });
 
 /* ================== BOOT ================== */
 (async function boot(){
