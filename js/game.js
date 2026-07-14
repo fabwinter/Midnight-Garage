@@ -411,9 +411,23 @@ function commitMove(i, mergedKeyStep = false){
   updateHud();
   updatePieceAria();
   const p = pieces[i];
-  $('srLive').textContent = (i === 0 ? 'Red car' : 'Vehicle ' + i) + ` to row ${p.r + 1}, column ${p.c + 1}`;
+  const moveAnnounce = (i === 0 ? 'Red car' : 'Vehicle ' + i) + ` to row ${p.r + 1}, column ${p.c + 1}`;
 
-  if(save.settings.alarm && moves === 1 && !mergedKeyStep){
+  const won = i === 0 && pieces[0].c === N - pieces[0].len;
+
+  if(save.settings.alarm){
+    const budget = alarmBudgetFor(parOf());
+    const remaining = budget - moves;
+    if(moves === 1){
+      $('srLive').textContent = moveAnnounce + '. ' + t('alarm.triggered', remaining);
+    } else {
+      $('srLive').textContent = moveAnnounce + '. ' + t('alarm.remaining', remaining);
+    }
+  } else {
+    $('srLive').textContent = moveAnnounce;
+  }
+
+  if(save.settings.alarm && moves === 1 && !mergedKeyStep && !won){
     triggerAlarmFlash();
   }
 
@@ -422,7 +436,7 @@ function commitMove(i, mergedKeyStep = false){
     return;
   }
 
-  if(i === 0 && pieces[0].c === N - pieces[0].len){
+  if(won){
     winSequence();
   } else {
     scheduleHand();
@@ -439,7 +453,7 @@ function busted(){
   haptic('thudHeavy');
   track('alarm_busted', {
     mode: mode.type, level: mode.type === 'campaign' ? cur + 1 : mode.number,
-    moves, par: parOf(),
+    moves, par: parOf(), hintsUsed, ...(mode.date && { date: mode.date }),
   });
   setTimeout(() => showBustedSheet(), 260);
 }
@@ -449,6 +463,8 @@ function showBustedSheet(){
   $('bustedTitle').textContent = t('busted.title');
   $('bustedSub').textContent = t('busted.sub');
   showOverlay('bustedOverlay');
+  $('srLive').textContent = t('busted.title');
+  setTimeout(() => $('bustedRetryBtn').focus(), 100);
 }
 
 /* "The alarm just went off" — a brief flash the moment the first piece
@@ -471,7 +487,7 @@ function starCountFor(par, usedMoves){
   return 1;
 }
 function alarmBudgetFor(par){
-  return par;
+  return par + Math.max(2, Math.ceil(par * 0.25));
 }
 function starStr(n, size = 3){
   let s = '';
@@ -515,6 +531,7 @@ function updateAlarmHud(){
   const budget = alarmBudgetFor(parOf());
   const remaining = budget - moves;
   $('hudAlarmBudget').textContent = Math.max(0, remaining);
+  row.setAttribute('aria-label', t('alarm.remaining', Math.max(0, remaining)));
   row.classList.toggle('tripped', remaining < 0);
   row.classList.toggle('low', remaining >= 0 && remaining <= Math.max(1, Math.ceil(budget * 0.2)));
 }
@@ -578,6 +595,7 @@ function startBoard(){
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
   hitches = curLevel.h ?? [];
+  if(hitches.length) console.warn('hitch levels are not ship-ready');
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   decoupledHitches.clear();
   solvedAnim = false;
@@ -600,7 +618,7 @@ function undo(){
   const entry = history.pop();
   entry.pieces.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
   decoupledHitches = new Set(entry.decoupled);
-  moves = Math.max(0, moves - 1);
+  if(!save.settings.alarm) moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
   track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
@@ -749,8 +767,7 @@ function winSequence(){
 
   isCleanGetaway = false;
   if(save.settings.alarm){
-    const budget = alarmBudgetFor(par);
-    isCleanGetaway = moves <= budget;
+    isCleanGetaway = moves <= par;
     if(isCleanGetaway) track('alarm_clean_getaway', { level: mode.type === 'campaign' ? cur + 1 : mode.number, moves, par, date: mode.date });
   }
 
@@ -1248,6 +1265,13 @@ function applyStrings(){
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
   $('bustedRetryBtn').textContent = t('btn.retry');
+  $('bustedNoAlarmBtn').textContent = t('btn.noAlarm');
+  $('startSubtitle').textContent = t('start.subtitle');
+  $('startP1').textContent = t('start.p1');
+  $('startP2').textContent = t('start.p2');
+  $('startP3').textContent = t('start.p3');
+  $('startPlayLabel').textContent = t('start.play');
+  $('startNote').textContent = t('start.note');
 }
 
 /* ================== GLOBAL WIRING ================== */
@@ -1263,7 +1287,16 @@ function wire(){
   }));
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
-  $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); });
+  $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); setTimeout(() => $('board').focus(), 100); });
+  $('bustedNoAlarmBtn').addEventListener('click', () => {
+    sfx('ui');
+    save.settings.alarm = false;
+    setAlarmMode(false);
+    saveGame();
+    hideOverlay('bustedOverlay');
+    startBoard();
+    setTimeout(() => $('board').focus(), 100);
+  });
   $('hintBtn').addEventListener('click', showHint);
   $('skipBtn').addEventListener('click', skipLevel);
   $('replayBtn').addEventListener('click', () => {
@@ -1326,5 +1359,6 @@ function wire(){
   // Show intro on first play
   if(!save.introSeen){
     showOverlay('startOverlay');
+    setTimeout(() => $('startPlayBtn').focus(), 100);
   }
 })();

@@ -8,9 +8,6 @@
 <meta name="theme-color" content="#0b0e14">
 <title>Midnight Garage</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/game.css">
 </head>
 <body>
@@ -124,14 +121,15 @@
 </div>
 
 <!-- Busted (alarm mode hard fail) -->
-<div class="overlay" id="bustedOverlay">
+<div class="overlay" id="bustedOverlay" role="alertdialog" aria-labelledby="bustedTitle" aria-describedby="bustedSub">
   <div class="sheet busted-sheet">
     <div class="police-lights" aria-hidden="true"></div>
     <div class="flag busted-flag" id="bustedFlag">Busted</div>
     <h2 id="bustedTitle">Not quick enough!</h2>
     <p class="sub" id="bustedSub">The alarm tripped before you cleared the lot. Try again.</p>
     <div class="win-row">
-      <button class="btn primary" id="bustedRetryBtn" style="grid-column:1/3">Retry</button>
+      <button class="btn primary" id="bustedRetryBtn">Retry</button>
+      <button class="btn" id="bustedNoAlarmBtn"></button>
     </div>
   </div>
 </div>
@@ -229,10 +227,10 @@
       <div class="start-subtitle" id="startSubtitle">Operation: Clean Getaway</div>
     </div>
     <div class="start-body">
-      <div class="start-narration" id="startNarration">
-        <p>It's 2024. The syndicate's collection is locked in a garage lot. You've got one shot.</p>
-        <p>Navigate the traffic jam. Free your car. Every move counts.</p>
-        <p style="margin-top: 12px; font-size: 12px; opacity: 0.7;">Clear the board to escape. Three stars if you nail the par.</p>
+      <div class="start-narration">
+        <p id="startP1"></p>
+        <p id="startP2"></p>
+        <p id="startP3" style="margin-top: 12px; font-size: 12px; opacity: 0.7;"></p>
       </div>
     </div>
     <div class="start-footer">
