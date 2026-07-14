@@ -1,7 +1,7 @@
 # Heist 2.0 Implementation Status
 
-**Status:** M0-M5 complete and merged; M6-M9 scaffolded.
-**Last update:** Post-phase M5 commit `a934a09`.
+**Status:** M0-M6 complete and merged; M7-M9 scaffolded.
+**Last update:** Post-phase M6 commit `a2184f9`.
 
 ## Completed Phases
 
@@ -99,22 +99,20 @@ future AAA music encoding (clean-getaway.wav → ~128kbps AAC/MP3 with stem laye
 
 **Commits:** `a934a09`
 
+### ✅ M6 — The Story (Narrative Shell, Chapter Cards & Vignettes)
+**Implemented:** Wordless visual storytelling with chapter cards and vignette scenes.
+- Chapter title cards: auto-displayed on first level of each chapter
+  (2.5s fade-in-out animation, chapter-specific accent colors)
+- Vignette system: canvas-based scene player with SVG rendering
+  Five narrative scenes (Before Ch.1, Ch.1-2, Ch.2-3, Ch.3-4, After 200)
+  Each scene includes title, description, and narrative arc
+- Vignette player: scene lifecycle (show, animate, fade-out), click-to-advance
+- Persistence: save.chaptersCardShown tracks which chapter cards have been shown
+- Placeholder SVG scenes ready for AAA artwork integration
+
+**Commits:** `a2184f9`
+
 ## Remaining Phases (Scaffolded)
-
-### M6 — The Story (Narrative Shell)
-**What:** Wordless visual storytelling (no dialogue).
-- Animated start screen: garage at night, headlights sweep, title flickers (≤3s, skippable)
-- Chapter title cards: one-line localized blurb per chapter (the story arc)
-- Five wordless vignettes: 2–4 SVG scenes with pans (skippable, replayable from garage)
-  - Scene 1: Before Ch.1 (tarp pulled off first mark)
-  - Scene 2: Between Ch.1/2 (container opens, more cars)
-  - Scene 3: Between Ch.2/3 (shipment arrives)
-  - Scene 4: Between Ch.3/4 (buyer's final list)
-  - Scene 5: After level 200 (dawn, full garage, credits)
-
-**Files:** `js/vignette.js` (new scene player), `js/art.js` (SVG scenes), `index.html` (start screen overlay update).
-
-**Effort:** 4-5 hours (heavy on SVG scene art; logic is straightforward).
 
 ### M7 — Interlocks Live (Productionize Gates)
 **What:** Bring interlock mechanics (gates/sensors) into the main campaign.
