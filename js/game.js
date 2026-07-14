@@ -45,7 +45,7 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
-  settings: { sfx: 1, music: 0, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
+  settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
