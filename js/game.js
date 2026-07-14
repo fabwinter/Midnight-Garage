@@ -14,7 +14,7 @@ import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
 
 const $ = id => document.getElementById(id);
@@ -116,7 +116,7 @@ function easingFor(len, distCells){
 }
 
 function buildPieces(){
-  board.querySelectorAll('.piece, .wall, .gate').forEach(el => el.remove());
+  board.querySelectorAll('.piece, .wall, .gate, .hitch').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
     const el = document.createElement('div');
     el.className = 'wall';
@@ -141,6 +141,19 @@ function buildPieces(){
     el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
     el.style.pointerEvents = 'none';
     el.innerHTML = gateSVG(CELL / 2, CELL / 2, CELL * 0.4);
+    el.setAttribute('aria-hidden', 'true');
+    board.appendChild(el);
+  });
+  hitches.forEach((hitch, hi) => {
+    const el = document.createElement('div');
+    el.className = 'hitch';
+    el.dataset.hi = hi;
+    el.style.position = 'absolute';
+    el.style.top = '0';
+    el.style.left = '0';
+    el.style.width = (CELL * 6) + 'px';
+    el.style.height = (CELL * 6) + 'px';
+    el.style.pointerEvents = 'none';
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
@@ -189,6 +202,19 @@ function renderPositions(animate = true){
     if(!animate) el.style.transition = 'none';
     el.style.transform = `translate(${p.c * CELL}px, ${p.r * CELL}px)`;
     if(!animate){ void el.offsetWidth; el.style.transition = ''; }
+  });
+  board.querySelectorAll('.hitch').forEach(el => {
+    const hi = +el.dataset.hi, h = hitches[hi];
+    if(!h) return;
+    const tow = pieces[h.tow], trailer = pieces[h.trailer];
+    if(!tow || !trailer) return;
+    // Center of tow piece
+    const towCx = (tow.c + (tow.dir === 'h' ? tow.len / 2 : 0.5)) * CELL;
+    const towCy = (tow.r + (tow.dir === 'v' ? tow.len / 2 : 0.5)) * CELL;
+    // Center of trailer piece
+    const trailerCx = (trailer.c + (trailer.dir === 'h' ? trailer.len / 2 : 0.5)) * CELL;
+    const trailerCy = (trailer.r + (trailer.dir === 'v' ? trailer.len / 2 : 0.5)) * CELL;
+    el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, CELL * 0.08);
   });
 }
 
