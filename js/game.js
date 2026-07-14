@@ -30,6 +30,7 @@ let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
 let gates = [];                               // interlock gates [{sensors, gate, polarity}]
 let hitches = [];                             // hitches [{tow, trailer}]
+let decoupledHitches = new Set();             // indices of decoupled hitches
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
@@ -206,7 +207,7 @@ function renderPositions(animate = true){
   });
   board.querySelectorAll('.hitch').forEach(el => {
     const hi = +el.dataset.hi, h = hitches[hi];
-    if(!h) return;
+    if(!h || decoupledHitches.has(hi)) return;  // Skip decoupled hitches
     const tow = pieces[h.tow], trailer = pieces[h.trailer];
     if(!tow || !trailer) return;
     // Center of tow piece
@@ -237,9 +238,21 @@ function attachDrag(el, i){
   let startX = 0, startY = 0, startPos = 0, lo = 0, hi = 0;
   let dragging = false, lastSlideT = 0, lastCell = 0, hitWall = false;
   let samples = [];
+  let lastTapT = 0;
   const p = () => pieces[i];
 
   el.addEventListener('pointerdown', e => {
+    // Double-tap to decouple (for tow pieces)
+    const now = performance.now();
+    if(now - lastTapT < 300){
+      if(decoupleTow(i)){
+        renderPositions(true);
+        updateHud();
+      }
+      lastTapT = 0;
+      return;
+    }
+    lastTapT = now;
     if(solvedAnim) return;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
@@ -303,9 +316,10 @@ function attachDrag(el, i){
       pushHistory();
       const offset = target - before;
       if(p().dir === 'h') p().c = target; else p().r = target;
-      // Auto-couple: move trailer along with tow
-      for(const h of hitches){
-        if(h.tow === i){
+      // Auto-couple: move trailer along with tow (if hitch not decoupled)
+      for(let hi = 0; hi < hitches.length; hi++){
+        const h = hitches[hi];
+        if(h.tow === i && !decoupledHitches.has(hi)){
           const trailer = pieces[h.trailer];
           if(trailer && trailer.dir === p().dir){
             if(p().dir === 'h') trailer.c += offset; else trailer.r += offset;
@@ -355,9 +369,10 @@ function attachDrag(el, i){
     if(!merge) pushHistory();
     const offset = to - at;
     if(pp.dir === 'h') pp.c = to; else pp.r = to;
-    // Auto-couple: move trailer along with tow
-    for(const h of hitches){
-      if(h.tow === i){
+    // Auto-couple: move trailer along with tow (if hitch not decoupled)
+    for(let hi = 0; hi < hitches.length; hi++){
+      const h = hitches[hi];
+      if(h.tow === i && !decoupledHitches.has(hi)){
         const trailer = pieces[h.trailer];
         if(trailer && trailer.dir === pp.dir){
           if(pp.dir === 'h') trailer.c += offset; else trailer.r += offset;
@@ -497,6 +512,7 @@ function startBoard(){
   gates = curLevel.g ?? [];
   hitches = curLevel.h ?? [];
   history = []; moves = 0; undos = 0; hintsUsed = 0;
+  decoupledHitches.clear();
   solvedAnim = false;
   kbRun = -1;
   levelStart = Date.now();
@@ -522,6 +538,21 @@ function undo(){
   renderPositions(true);
   updateHud();
   updatePieceAria();
+}
+
+function decoupleTow(towIdx){
+  if(solvedAnim) return false;
+  const hi = hitches.findIndex(h => h.tow === towIdx);
+  if(hi === -1) return false;
+  if(decoupledHitches.has(hi)) return false;
+  pushHistory();
+  decoupledHitches.add(hi);
+  moves++;
+  sfx('snap');
+  haptic('ui');
+  track('decouple', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  updateHud();
+  return true;
 }
 
 /* ================== HINTS ================== */
