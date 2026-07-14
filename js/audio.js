@@ -10,6 +10,7 @@ let musicVol = 0;
 let alarmMode = false;
 let alarmAudio = null;
 let alarmActive = false;   // true only while a level attempt is in progress
+let duckAlarm = false;     // true while menu/tab music has priority over the alarm track
 const ALARM_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
 
 // Menu/theme music
@@ -23,10 +24,10 @@ export function setMusicVolume(v){
   musicVol = v;
   if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
-  if(alarmMode && alarmAudio){
+  if(alarmMode && alarmAudio && !duckAlarm){
     alarmAudio.volume = Math.max(0, Math.min(1, v));
     if(v === 0) alarmAudio.pause();
-    else if(alarmActive) alarmAudio.play().catch(() => {});
+    else if(alarmActive && alarmAudio.paused) alarmAudio.play().catch(() => {});
   }
 }
 
@@ -35,29 +36,66 @@ export function setAlarmMode(enabled){
   if(!enabled) stopAlarmTrack();
 }
 
-/* Called once per level attempt (level load / reset) — restarts the track
-   from the top so every attempt gets a fresh run of the loop. */
-export function startAlarmTrack(){
-  alarmActive = true;
-  if(!alarmMode) return;
+function ensureAlarmAudio(){
   if(!alarmAudio){
     alarmAudio = new Audio(ALARM_TRACK);
     alarmAudio.preload = 'auto';
     alarmAudio.loop = true;
+    alarmAudio.volume = 0;
   }
+  return alarmAudio;
+}
+
+/* Called once per level attempt (level load / reset) — restarts the track
+   from the top so every attempt gets a fresh run of the loop. Stays
+   silent while a tab/menu track has priority (duckAlarm); resumeAlarmTrack
+   picks it up once that track closes. */
+export function startAlarmTrack(){
+  alarmActive = true;
+  if(!alarmMode) return;
+  ensureAlarmAudio();
+  if(duckAlarm) return;
   alarmAudio.currentTime = 0;
-  alarmAudio.volume = Math.max(0, Math.min(1, musicVol));
-  if(musicVol > 0) alarmAudio.play().catch(() => {});
+  if(musicVol > 0){
+    alarmAudio.play().catch(() => {});
+    fadeIn(alarmAudio, Math.max(0, Math.min(1, musicVol)), 300);
+  }
 }
 
 /* Called the moment an attempt ends — win, busted, or navigating away. */
 export function stopAlarmTrack(){
   alarmActive = false;
-  if(alarmAudio){ alarmAudio.pause(); alarmAudio.currentTime = 0; }
+  if(alarmAudio && !alarmAudio.paused){
+    fadeOut(alarmAudio, 400).then(() => {
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+    });
+  }
 }
 
-/* Menu music playback with fade-in/fade-out. */
+/* Temporarily silences the alarm track so a tab/menu track can play alone;
+   resumeAlarmTrack() picks it back up from where it paused. */
+function duckAlarmTrack(){
+  duckAlarm = true;
+  if(alarmAudio && !alarmAudio.paused){
+    fadeOut(alarmAudio, 300).then(() => { if(duckAlarm) alarmAudio.pause(); });
+  }
+}
+
+function resumeAlarmTrack(){
+  duckAlarm = false;
+  if(!alarmMode || !alarmActive) return;
+  ensureAlarmAudio();
+  if(alarmAudio.paused && musicVol > 0){
+    alarmAudio.play().catch(() => {});
+    fadeIn(alarmAudio, Math.max(0, Math.min(1, musicVol)), 300);
+  }
+}
+
+/* Menu music playback with fade-in/fade-out. Never competes with a live
+   alarm-mode attempt — that track already owns the foreground. */
 export function startMenuMusic(){
+  if(alarmMode && alarmActive) return;
   if(!menuAudio){
     menuAudio = new Audio(VELVET_GLOVE);
     menuAudio.preload = 'auto';
@@ -81,7 +119,9 @@ export function stopMenuMusic(){
   }
 }
 
-/* Settings/theme menu music. */
+/* Settings/theme menu music. Ducks the alarm track while a tab is open so
+   the two never sound at once; closing the tab (stopSettingsMusic) hands
+   the foreground back to whichever track should be playing. */
 export function playSettingsMusic(){
   if(!settingsAudio){
     settingsAudio = new Audio(CLEAN_GETAWAY);
@@ -91,6 +131,7 @@ export function playSettingsMusic(){
   }
   if(settingsAudio.paused){
     stopMenuMusic();
+    duckAlarmTrack();
     settingsAudio.currentTime = 0;
     settingsAudio.play().catch(() => {});
     fadeIn(settingsAudio, musicVol * 0.7, 600);
@@ -104,6 +145,7 @@ export function stopSettingsMusic(){
       settingsAudio.currentTime = 0;
     });
   }
+  resumeAlarmTrack();
 }
 
 export function toggleThemePlayer(){
@@ -118,29 +160,37 @@ export function toggleThemePlayer(){
   }
 }
 
-/* Fade helpers for smooth volume transitions. */
+/* Fade helpers for smooth volume transitions. Each audio element tracks its
+   own in-flight interval so a new fade always cancels a stale one instead
+   of fighting over .volume (e.g. rapid tab open/close). */
+function clearFade(audio){
+  if(audio._fadeInterval){ clearInterval(audio._fadeInterval); audio._fadeInterval = null; }
+}
+
 function fadeIn(audio, targetVol, ms){
+  clearFade(audio);
   const steps = Math.ceil(ms / 16);
   let step = 0;
-  const interval = setInterval(() => {
+  audio._fadeInterval = setInterval(() => {
     audio.volume = targetVol * (step / steps);
     if(++step >= steps){
       audio.volume = targetVol;
-      clearInterval(interval);
+      clearFade(audio);
     }
   }, 16);
 }
 
 function fadeOut(audio, ms){
+  clearFade(audio);
   return new Promise(resolve => {
     const startVol = audio.volume;
     const steps = Math.ceil(ms / 16);
     let step = 0;
-    const interval = setInterval(() => {
+    audio._fadeInterval = setInterval(() => {
       audio.volume = startVol * (1 - step / steps);
       if(++step >= steps){
         audio.volume = 0;
-        clearInterval(interval);
+        clearFade(audio);
         resolve();
       }
     }, 16);
