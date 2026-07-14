@@ -3,11 +3,14 @@
 Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 🔶 scaffolded (native/business step remains), ⬜ deferred by the plan itself.
 
-**Direction (2026-07):** post-launch work now follows
-[HEIST-PLAN.md](HEIST-PLAN.md) — the collection-heist meta on the **premium
-(Variant A)** business model, which supersedes/sharpens the later phases of
-[AAA-PLAN.md](AAA-PLAN.md) with a single frame and a locked, ad-clean,
-no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c`.
+**Direction (2026-07, updated):** work now follows
+[HEIST-2-PLAN.md](HEIST-2-PLAN.md) — the full lean into the heist narrative:
+Heist (alarm) becomes the DEFAULT mode with a Relax opt-out, a new real-time
+Pursuit (timer) mode, cars-as-score collection payouts, and the AV/narrative
+upgrades. It supersedes [HEIST-PLAN.md](HEIST-PLAN.md) where they conflict
+(notably the "no fail states by default" covenant) and absorbs
+[SHIP-POLISH-PLAN.md](SHIP-POLISH-PLAN.md) P0s as its phase M0. Business
+model unchanged: **premium (Variant A)**, ad-clean, no-RNG. Phase H0 (The Garage) ✅ shipped `b6f001c`.
 Phase H1 (Security Gates) ✅ shipped `528bfd0`. Phase H2 (The Alarm) ✅ shipped — optional hard mode with per-move budget
 (par + 25% slack), busted fail state (no progress saved), per-attempt music
 (starts on first move, stops on win/busted), first-move flash, and full i18n
