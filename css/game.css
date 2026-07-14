@@ -216,6 +216,8 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 .piece.hero{filter:drop-shadow(0 7px 9px rgba(0,0,0,.55)) drop-shadow(0 0 13px rgba(255,59,78,.28))}
 .piece.hero.drag{filter:drop-shadow(0 13px 16px rgba(0,0,0,.62)) drop-shadow(0 0 16px rgba(255,59,78,.4))}
+.piece.tow{filter:drop-shadow(0 7px 9px rgba(0,0,0,.55)) drop-shadow(0 0 8px rgba(255,158,92,.4))}
+.piece.tow.drag{filter:drop-shadow(0 13px 16px rgba(0,0,0,.62)) drop-shadow(0 0 12px rgba(255,158,92,.6))}
 
 /* ---------- Roadworks (immovable) ---------- */
 .wall{

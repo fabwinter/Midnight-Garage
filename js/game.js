@@ -159,7 +159,8 @@ function buildPieces(){
   });
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
-    el.className = 'piece' + (i === 0 ? ' hero' : '');
+    const isTow = hitches.some(h => h.tow === i);
+    el.className = 'piece' + (i === 0 ? ' hero' : '') + (isTow ? ' tow' : '');
     el.dataset.idx = i;
     el.setAttribute('tabindex', '0');
     el.setAttribute('role', 'button');
