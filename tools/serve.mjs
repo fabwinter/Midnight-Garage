@@ -3,7 +3,7 @@
    http://localhost:8080 — ES modules need http(s), file:// won't do. */
 
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +17,7 @@ const types = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.webmanifest': 'application/manifest+json',
+  '.mp3': 'audio/mpeg',
 };
 
 createServer(async (req, res) => {
@@ -25,9 +26,28 @@ createServer(async (req, res) => {
     if(path === '/') path = '/index.html';
     const file = normalize(join(root, path));
     if(!file.startsWith(root)) throw new Error('traversal');
-    const body = await readFile(file);
-    res.writeHead(200, { 'Content-Type': types[extname(file)] ?? 'application/octet-stream' });
-    res.end(body);
+    const type = types[extname(file)] ?? 'application/octet-stream';
+    const { size } = await stat(file);
+    const range = req.headers.range;
+    // Media elements issue Range requests; answering plain 200 to those
+    // confuses Chromium into resetting the connection — honor them properly.
+    if(range){
+      const [, startStr, endStr] = /bytes=(\d*)-(\d*)/.exec(range) ?? [];
+      const start = startStr ? Number(startStr) : 0;
+      const end = endStr ? Number(endStr) : size - 1;
+      const body = await readFile(file);
+      res.writeHead(206, {
+        'Content-Type': type,
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': end - start + 1,
+      });
+      res.end(body.subarray(start, end + 1));
+    } else {
+      const body = await readFile(file);
+      res.writeHead(200, { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': size });
+      res.end(body);
+    }
   }catch(e){
     res.writeHead(404); res.end('not found');
   }

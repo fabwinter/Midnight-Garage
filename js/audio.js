@@ -7,13 +7,60 @@ let AC = null;
 let sfxVol = 1;
 let musicVol = 0;
 let musicNodes = null;
+let alarmMode = false;
+let alarmAudio = null;
+let alarmActive = false;   // true only while a level attempt is in progress
+const ALARM_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
 
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
+  if(alarmMode){
+    if(alarmAudio){
+      alarmAudio.volume = Math.max(0, Math.min(1, v));
+      if(v === 0) alarmAudio.pause();
+      else if(alarmActive) alarmAudio.play().catch(() => {});
+    }
+    return;
+  }
   if(v > 0) startMusic();
   if(musicNodes) musicNodes.gain.gain.linearRampToValueAtTime(v * 0.05, ac()?.currentTime + 0.4 || 0);
   if(v === 0) stopMusic();
+}
+
+/* Alarm mode swaps the procedural garage hum for a licensed ambient track —
+   the "clock is running" cue matters more once a per-move budget is live.
+   This only flips which track *would* play; actual start/stop is owned by
+   startAlarmTrack/stopAlarmTrack so the music tracks level attempts, not
+   menus (plan: alarm music per-attempt, not a persistent background loop). */
+export function setAlarmMode(enabled){
+  alarmMode = enabled;
+  if(enabled){
+    stopMusic();
+  } else {
+    stopAlarmTrack();
+    if(musicVol > 0) startMusic();
+  }
+}
+
+/* Called once per level attempt (level load / reset) — restarts the track
+   from the top so every attempt gets a fresh run of the loop. */
+export function startAlarmTrack(){
+  alarmActive = true;
+  if(!alarmMode) return;
+  if(!alarmAudio){
+    alarmAudio = new Audio(ALARM_TRACK);
+    alarmAudio.loop = true;
+  }
+  alarmAudio.currentTime = 0;
+  alarmAudio.volume = Math.max(0, Math.min(1, musicVol));
+  if(musicVol > 0) alarmAudio.play().catch(() => {});
+}
+
+/* Called the moment an attempt ends — win, busted, or navigating away. */
+export function stopAlarmTrack(){
+  alarmActive = false;
+  if(alarmAudio){ alarmAudio.pause(); alarmAudio.currentTime = 0; }
 }
 
 function ac(){
@@ -77,6 +124,23 @@ export function sfx(kind){
     const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 1180;
     const g = c.createGain(); env(g, t, 0.004, 0.22, 0.1);
     o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.25);
+  } else if(kind === 'alarmTrigger'){
+    // short rising two-note blip — "the alarm just went off"
+    [0, 0.12].forEach((dt, i) => {
+      const o = c.createOscillator(); o.type = 'square';
+      o.frequency.setValueAtTime(i === 0 ? 660 : 880, t + dt);
+      const g = c.createGain(); env(g, t + dt, 0.006, 0.11, 0.16);
+      o.connect(g).connect(c.destination); o.start(t + dt); o.stop(t + dt + 0.14);
+    });
+  } else if(kind === 'busted'){
+    // alternating two-tone siren, ~1s — "the police just arrived"
+    for(let i = 0; i < 6; i++){
+      const dt = i * 0.16;
+      const o = c.createOscillator(); o.type = 'sawtooth';
+      o.frequency.value = i % 2 === 0 ? 500 : 720;
+      const g = c.createGain(); env(g, t + dt, 0.01, 0.15, 0.14);
+      o.connect(g).connect(c.destination); o.start(t + dt); o.stop(t + dt + 0.17);
+    }
   }
 }
 

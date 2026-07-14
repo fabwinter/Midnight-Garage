@@ -8,8 +8,12 @@ Tracking against [SEQUENCING-PLAN.md](SEQUENCING-PLAN.md). ✅ built here,
 (Variant A)** business model, which supersedes/sharpens the later phases of
 [AAA-PLAN.md](AAA-PLAN.md) with a single frame and a locked, ad-clean,
 no-RNG monetization model. Phase H0 (The Garage) ✅ shipped `b6f001c`.
-Phase H1 (Security Gates) ✅ shipped `528bfd0`. Phase H2 (The Alarm) ✅ shipped
-`d57e0fd` — per-move budget, clean getaway bonus, i18n (10 langs).
+Phase H1 (Security Gates) ✅ shipped `528bfd0`. Phase H2 (The Alarm) ✅ hardened
+— per-move budget is now a real fail state, not just a reward-tier bonus:
+going over budget ends the attempt immediately (police-lights "Busted" sheet,
+no progress saved, must retry), first move fires an alarm-triggered flash,
+and the ambient track (assets/audio/midnight-in-the-vault.mp3) starts/stops
+with each level attempt instead of looping across menus. i18n (10 langs).
 Phase H3 (The Rig) 🔶 in progress (`401e593`) — hitch solver scaffolding ✅,
 inert piece handling ✅, test levels 203–210 ✅, hitch coupling visualization ✅,
 auto-coupling mechanics ✅, decoupling via double-tap ✅, undo state recovery ✅,
