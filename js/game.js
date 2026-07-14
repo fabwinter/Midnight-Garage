@@ -15,7 +15,8 @@ import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
-import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
+import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carPayoutValue } from './collection.js';
+import { armClock, startClock, stopClock, pauseClock, resumeClock, getPausesLeft, getTimeLeft, isClockRunning, resetPursuit, initPursuit, PURSUIT_BUDGET } from './pursuit.js';
 
 const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
@@ -25,6 +26,10 @@ const HINT_TOKENS_PER_DAY = 3;
 function isAlarmMode(){
   // Intro levels (0–2) are always relax; level 3+ respects the setting
   return cur > 2 && save.settings.mode === 'heist';
+}
+
+function isPursuitMode(){
+  return cur > 2 && save.settings.mode === 'pursuit';
 }
 
 /* ================== STATE ================== */
@@ -56,6 +61,7 @@ let save = {
   introSeen: false,
   modeUpgradeShown: false,
   level4ExplainerSeen: false,
+  heists: {},  // levelIdx: {mode, value, moves}
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -437,6 +443,7 @@ function commitMove(i, mergedKeyStep = false){
   if(moves === 1 && !mergedKeyStep){
     fadeOutMenuMusicOnFirstMove();
     if(isAlarmMode()) startAlarmTrack();
+    if(isPursuitMode()) startClock();
   }
 
   if(isAlarmMode() && moves === 1 && !mergedKeyStep && !won){
@@ -445,6 +452,11 @@ function commitMove(i, mergedKeyStep = false){
 
   if(isAlarmMode() && moves > alarmBudgetFor(parOf())){
     busted();
+    return;
+  }
+
+  if(isPursuitMode() && getTimeLeft() <= 0){
+    busted('pursuit');
     return;
   }
 
@@ -796,8 +808,15 @@ function winSequence(){
     save.best[cur] = Math.min(save.best[cur] || Infinity, moves);
     save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, cur + 2));
     save.streak3 = stars === 3 ? save.streak3 + 1 : 0;
+    // M3: Heist payout — only pay out on first win or best payout mode
+    const prevHeist = save.heists[cur];
+    const currentPayout = carPayoutValue(cur, save.settings.mode);
+    const shouldPayout = !prevHeist || currentPayout > prevHeist.value;
+    if(shouldPayout){
+      save.heists[cur] = { mode: save.settings.mode, value: currentPayout, moves };
+    }
     persist();
-    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed });
+    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed, payout: shouldPayout ? currentPayout : 0 });
   } else {
     const res = recordDailyWin(mode.date, moves, par, stars);
     if(res.usedFreeze) toast(t('toast.freeze'));
@@ -1293,6 +1312,7 @@ function applyStrings(){
   $('labMode').textContent = t('settings.mode');
   $('modeHeistBtn').textContent = t('mode.heist');
   $('modeRelaxBtn').textContent = t('mode.relax');
+  if($('modePursuitBtn')) $('modePursuitBtn').textContent = t('mode.pursuit');
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labTheme').textContent = t('theme.label');

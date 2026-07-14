@@ -47,6 +47,11 @@
       <span class="lab" id="labAlarmBudget">Alarm</span>
       <span class="val" id="hudAlarmBudget">–</span>
     </div>
+    <div class="chip pursuit-chip" id="hudPursuitRow" hidden>
+      <span class="lab">⏱</span>
+      <span class="val" id="hudPursuitTime">0:00</span>
+      <div class="pause-pips" id="pursuitPauses"></div>
+    </div>
   </div>
 
   <div class="stage">
@@ -185,6 +190,7 @@
       <div class="mode-btns">
         <button class="mode-btn" data-mode="heist" id="modeHeistBtn"></button>
         <button class="mode-btn" data-mode="relax" id="modeRelaxBtn"></button>
+        <button class="mode-btn" data-mode="pursuit" id="modePursuitBtn" style="opacity:0.5;cursor:not-allowed" title="Coming soon"></button>
       </div>
     </div>
     <div class="set-row">

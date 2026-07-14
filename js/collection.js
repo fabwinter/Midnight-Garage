@@ -7,6 +7,32 @@
 
 export const DEFAULT_CAR = 'classic';
 
+// Value curve: levels 1–50 (Night Shift, $2k–15k), 51–100 (Neon District, $15k–80k),
+// 101–150 (Harbor Freight, $80k–400k), 151–200 (Gridlock, $400k–$4M).
+// Exponential growth: later chapters' cars worth more than earlier chapters combined.
+const VALUE_CURVE = {
+  0: { min: 2000, max: 15000 },     // Chapter 1
+  1: { min: 15000, max: 80000 },    // Chapter 2
+  2: { min: 80000, max: 400000 },   // Chapter 3
+  3: { min: 400000, max: 4000000 }, // Chapter 4
+};
+
+export function carValueForLevel(levelIndex){
+  const chapter = Math.floor(levelIndex / 50);
+  const band = VALUE_CURVE[chapter];
+  if(!band) return 0;
+  const posInChapter = levelIndex % 50;
+  const fraction = posInChapter / 50;
+  return Math.round(band.min + (band.max - band.min) * fraction);
+}
+
+export function carPayoutValue(levelIndex, mode){
+  const baseValue = carValueForLevel(levelIndex);
+  if(mode === 'relax') return Math.round(baseValue * 0.6);
+  if(mode === 'pursuit') return Math.round(baseValue * 1.05); // slight bonus for risk
+  return baseValue; // heist
+}
+
 /* unlock(save, dailyState) → boolean. Every condition below reads fields
    that already exist in save_v1 / daily_v1 — H0 adds no new persistent
    tracking beyond `equippedCar` and `carsSeen` (see game.js). */
