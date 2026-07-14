@@ -14,11 +14,9 @@ going over budget ends the attempt immediately (police-lights "Busted" sheet,
 no progress saved, must retry), first move fires an alarm-triggered flash,
 and the ambient track (assets/audio/midnight-in-the-vault.mp3) starts/stops
 with each level attempt instead of looping across menus. i18n (10 langs).
-Phase H3 (The Rig) 🔶 in progress (`401e593`) — hitch solver scaffolding ✅,
-inert piece handling ✅, test levels 203–210 ✅, hitch coupling visualization ✅,
-auto-coupling mechanics ✅, decoupling via double-tap ✅, undo state recovery ✅,
-UI constraints (trailers non-interactive when coupled) ✅, tow vehicle indicators ✅.
-Next: tow-truck SVG rendering, full chapter generation (production levels).
+Phase H3 (The Rig) ⬜ parked — dev-only scaffolding complete (solver, UI, mechanics)
+but not shipped; see [SHIP-POLISH-PLAN.md P0-2](SHIP-POLISH-PLAN.md#p0-2-hitch-h3-mechanics-are-incoherent--strip-from-ship-path)
+for spec to finish before production release.
 
 ## Phase 0 — Foundation
 

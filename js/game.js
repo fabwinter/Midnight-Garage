@@ -578,6 +578,7 @@ function startBoard(){
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
   hitches = curLevel.h ?? [];
+  if(hitches.length) console.warn('hitch levels are not ship-ready');
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   decoupledHitches.clear();
   solvedAnim = false;
@@ -600,7 +601,7 @@ function undo(){
   const entry = history.pop();
   entry.pieces.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
   decoupledHitches = new Set(entry.decoupled);
-  moves = Math.max(0, moves - 1);
+  if(!save.settings.alarm) moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
   track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
@@ -1248,6 +1249,12 @@ function applyStrings(){
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
   $('bustedRetryBtn').textContent = t('btn.retry');
+  $('startSubtitle').textContent = t('start.subtitle');
+  $('startP1').textContent = t('start.p1');
+  $('startP2').textContent = t('start.p2');
+  $('startP3').textContent = t('start.p3');
+  $('startPlayLabel').textContent = t('start.play');
+  $('startNote').textContent = t('start.note');
 }
 
 /* ================== GLOBAL WIRING ================== */
