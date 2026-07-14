@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -574,6 +574,7 @@ function abandonIfMidLevel(){
 
 function loadLevel(idx){
   abandonIfMidLevel();
+  stopMenuMusic();
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
@@ -583,6 +584,7 @@ function loadLevel(idx){
 
 function loadDailyLevel(dateStr){
   abandonIfMidLevel();
+  stopMenuMusic();
   const lv = dailyLevel(dateStr);
   mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
   curLevel = lv;
@@ -1252,6 +1254,8 @@ function applyStrings(){
   $('labAlarm').textContent = t('settings.alarm');
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
+  $('labTheme').textContent = t('theme.label');
+  $('themePlayBtn').textContent = t('theme.play');
   $('labRestore').textContent = t('btn.restore');
   $('proTitle').textContent = t('pro.title');
   $('proPitch').textContent = t('pro.pitch');
@@ -1274,16 +1278,26 @@ function applyStrings(){
   $('startNote').textContent = t('start.note');
 }
 
+function updateThemeButtonText(){
+  const isPlaying = menuAudio && !menuAudio.paused;
+  $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
+}
+
 /* ================== GLOBAL WIRING ================== */
 function wire(){
   $('levelsBtn').addEventListener('click', () => { sfx('ui'); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); openDaily(); });
-  $('settingsBtn').addEventListener('click', () => { sfx('ui'); showOverlay('settingsOverlay'); });
+  $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
+  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
+    if(e.target.closest('.overlay').id === 'settingsOverlay') stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){ o.classList.remove('show'); }
+    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){
+      o.classList.remove('show');
+      if(o.id === 'settingsOverlay') stopSettingsMusic();
+    }
   }));
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
@@ -1356,6 +1370,7 @@ function wire(){
   layout();
   const startAt = Math.min(Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS), LEVELS.length) - 1;
   loadLevel(Math.max(0, startAt));
+  startMenuMusic();
   // Show intro on first play
   if(!save.introSeen){
     showOverlay('startOverlay');

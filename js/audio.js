@@ -12,9 +12,17 @@ let alarmAudio = null;
 let alarmActive = false;   // true only while a level attempt is in progress
 const ALARM_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
 
+// Menu/theme music
+let menuAudio = null;
+let settingsAudio = null;
+const VELVET_GLOVE = 'assets/audio/velvet-glove.wav';
+const CLEAN_GETAWAY = 'assets/audio/clean-getaway.wav';
+
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
+  if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
+  if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(alarmMode){
     if(alarmAudio){
       alarmAudio.volume = Math.max(0, Math.min(1, v));
@@ -62,6 +70,93 @@ export function startAlarmTrack(){
 export function stopAlarmTrack(){
   alarmActive = false;
   if(alarmAudio){ alarmAudio.pause(); alarmAudio.currentTime = 0; }
+}
+
+/* Menu music playback with fade-in/fade-out. */
+export function startMenuMusic(){
+  if(!menuAudio){
+    menuAudio = new Audio(VELVET_GLOVE);
+    menuAudio.preload = 'auto';
+    menuAudio.loop = true;
+    menuAudio.volume = 0;
+  }
+  if(menuAudio.paused){
+    menuAudio.currentTime = 0;
+    menuAudio.play().catch(() => {});
+    fadeIn(menuAudio, musicVol * 0.7, 800);
+  }
+}
+
+export function stopMenuMusic(){
+  if(menuAudio && !menuAudio.paused){
+    fadeOut(menuAudio, 800).then(() => {
+      menuAudio.pause();
+      menuAudio.currentTime = 0;
+    });
+  }
+}
+
+/* Settings/theme menu music. */
+export function playSettingsMusic(){
+  if(!settingsAudio){
+    settingsAudio = new Audio(CLEAN_GETAWAY);
+    settingsAudio.preload = 'auto';
+    settingsAudio.loop = false;
+    settingsAudio.volume = 0;
+  }
+  if(settingsAudio.paused){
+    settingsAudio.currentTime = 0;
+    settingsAudio.play().catch(() => {});
+    fadeIn(settingsAudio, musicVol * 0.7, 600);
+  }
+}
+
+export function stopSettingsMusic(){
+  if(settingsAudio && !settingsAudio.paused){
+    fadeOut(settingsAudio, 400).then(() => {
+      settingsAudio.pause();
+      settingsAudio.currentTime = 0;
+    });
+  }
+}
+
+export function toggleThemePlayer(){
+  if(!menuAudio) menuAudio = new Audio(VELVET_GLOVE);
+  if(menuAudio.paused){
+    menuAudio.play().catch(() => {});
+    fadeIn(menuAudio, musicVol * 0.7, 300);
+  } else {
+    fadeOut(menuAudio, 300).then(() => menuAudio.pause());
+  }
+}
+
+/* Fade helpers for smooth volume transitions. */
+function fadeIn(audio, targetVol, ms){
+  const steps = Math.ceil(ms / 16);
+  let step = 0;
+  const interval = setInterval(() => {
+    audio.volume = targetVol * (step / steps);
+    if(++step >= steps){
+      audio.volume = targetVol;
+      clearInterval(interval);
+    }
+  }, 16);
+}
+
+function fadeOut(audio, ms){
+  return new Promise(resolve => {
+    const startVol = audio.volume;
+    const steps = Math.ceil(ms / 16);
+    let step = 0;
+    const interval = setInterval(() => {
+      audio.volume = startVol * (1 - step / steps);
+      if(++step >= steps){
+        audio.volume = 0;
+        clearInterval(interval);
+        resolve();
+      }
+    }, 16);
+  });
 }
 
 function ac(){
