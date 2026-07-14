@@ -509,6 +509,7 @@ function updateHud(){
 
 function updateAlarmHud(){
   const row = $('hudAlarmRow');
+  $('hudParRow').hidden = save.settings.alarm;
   if(!save.settings.alarm){ row.hidden = true; return; }
   row.hidden = false;
   const budget = alarmBudgetFor(parOf());
