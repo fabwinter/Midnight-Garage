@@ -22,6 +22,11 @@ const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are P
 const SKIP_AFTER_MS = 8 * 60 * 1000;         // quiet skip valve (plan 0.7)
 const HINT_TOKENS_PER_DAY = 3;
 
+function isAlarmMode(){
+  // Intro levels (0–2) are always relax; level 3+ respects the setting
+  return cur > 2 && save.settings.mode === 'heist';
+}
+
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
@@ -45,10 +50,12 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
-  settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
+  settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, mode: 'heist' },
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
+  modeUpgradeShown: false,
+  level4ExplainerSeen: false,
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -415,7 +422,7 @@ function commitMove(i, mergedKeyStep = false){
 
   const won = i === 0 && pieces[0].c === N - pieces[0].len;
 
-  if(save.settings.alarm){
+  if(isAlarmMode()){
     const budget = alarmBudgetFor(parOf());
     const remaining = budget - moves;
     if(moves === 1){
@@ -429,14 +436,14 @@ function commitMove(i, mergedKeyStep = false){
 
   if(moves === 1 && !mergedKeyStep){
     fadeOutMenuMusicOnFirstMove();
-    if(save.settings.alarm) startAlarmTrack();
+    if(isAlarmMode()) startAlarmTrack();
   }
 
-  if(save.settings.alarm && moves === 1 && !mergedKeyStep && !won){
+  if(isAlarmMode() && moves === 1 && !mergedKeyStep && !won){
     triggerAlarmFlash();
   }
 
-  if(save.settings.alarm && moves > alarmBudgetFor(parOf())){
+  if(isAlarmMode() && moves > alarmBudgetFor(parOf())){
     busted();
     return;
   }
@@ -530,8 +537,9 @@ function updateHud(){
 
 function updateAlarmHud(){
   const row = $('hudAlarmRow');
-  $('hudParRow').hidden = save.settings.alarm;
-  if(!save.settings.alarm){ row.hidden = true; return; }
+  const alarm = isAlarmMode();
+  $('hudParRow').hidden = alarm;
+  if(!alarm){ row.hidden = true; return; }
   row.hidden = false;
   const budget = alarmBudgetFor(parOf());
   const remaining = budget - moves;
@@ -615,6 +623,8 @@ function startBoard(){
   buildPieces();
   updateHud();
   updateCoach();
+  // Mark level 4 explainer as seen once player reaches it
+  if(mode.type === 'campaign' && cur === 3) save.level4ExplainerSeen = true;
   scheduleHand();
   stopAlarmTrack(); // reset any track from the previous attempt; this attempt's track (if alarm mode) starts on first move
 }
@@ -625,7 +635,7 @@ function undo(){
   const entry = history.pop();
   entry.pieces.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
   decoupledHitches = new Set(entry.decoupled);
-  if(!save.settings.alarm) moves = Math.max(0, moves - 1);
+  if(!isAlarmMode()) moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
   track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
@@ -700,6 +710,9 @@ function updateCoach(){
   const el = $('coach');
   if(mode.type === 'campaign' && cur < 3){
     el.textContent = t('coach.' + (cur + 1));
+    el.classList.add('on');
+  } else if(mode.type === 'campaign' && cur === 3 && !save.level4ExplainerSeen){
+    el.textContent = t('level4.explainer');
     el.classList.add('on');
   } else {
     el.textContent = '';
@@ -1181,9 +1194,17 @@ function renderCalendar(){
 /* ================== SETTINGS ================== */
 function applySettings(){
   const s = save.settings;
+  // Migrate old boolean alarm to new mode system
+  if(typeof s.mode !== 'string'){
+    s.mode = s.alarm ? 'heist' : 'relax';
+    if(!save.modeUpgradeShown && s.mode === 'relax'){
+      save.modeUpgradeShown = true;
+      toast(t('toast.modeUpgrade'));
+    }
+  }
   setSfxVolume(s.sfx);
   setMusicVolume(s.music);
-  setAlarmMode(s.alarm);
+  setAlarmMode(false); // Will be set per-level based on isAlarmMode()
   setHapticsEnabled(s.haptics);
   $('sfxRange').value = s.sfx;
   $('musicRange').value = s.music;
@@ -1191,7 +1212,8 @@ function applySettings(){
   $('colorblindChk').checked = s.colorblind;
   $('autoAdvanceChk').checked = s.autoAdvance;
   $('reminderChk').checked = s.reminder;
-  $('alarmChk').checked = s.alarm;
+  // Update mode UI
+  updateModeUI();
 }
 
 function wireSettings(){
@@ -1199,13 +1221,17 @@ function wireSettings(){
   $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
   $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
   $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
-  $('alarmChk').addEventListener('change', e => {
-    save.settings.alarm = e.target.checked;
-    setAlarmMode(e.target.checked);
-    // Only start the track if the current attempt is already underway
-    // (moves > 0) — a fresh, unmoved board waits for the first move.
-    if(!solvedAnim && e.target.checked && moves > 0) startAlarmTrack();
-    persist(); updateHud();
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newMode = btn.dataset.mode;
+      save.settings.mode = newMode;
+      setAlarmMode(newMode === 'heist');
+      persist();
+      updateModeUI();
+      updateHud();
+      if(!solvedAnim && newMode === 'heist' && moves > 0) startAlarmTrack();
+      sfx('ui');
+    });
   });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
@@ -1215,6 +1241,12 @@ function wireSettings(){
   const restore = () => { toast(save.pro ? t('toast.pro') : t('btn.restore') + ' …'); };
   $('restoreBtn').addEventListener('click', restore);
   $('restoreBtn2').addEventListener('click', restore);
+}
+
+function updateModeUI(){
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === save.settings.mode);
+  });
 }
 
 /* ================== PRO GARAGE (plan 1.3) ================== */
@@ -1258,7 +1290,9 @@ function applyStrings(){
   $('labMusic').textContent = t('settings.music');
   $('labHaptics').textContent = t('settings.haptics');
   $('labColorblind').textContent = t('settings.colorblind');
-  $('labAlarm').textContent = t('settings.alarm');
+  $('labMode').textContent = t('settings.mode');
+  $('modeHeistBtn').textContent = t('mode.heist');
+  $('modeRelaxBtn').textContent = t('mode.relax');
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labTheme').textContent = t('theme.label');
@@ -1276,7 +1310,7 @@ function applyStrings(){
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
   $('bustedRetryBtn').textContent = t('btn.retry');
-  $('bustedNoAlarmBtn').textContent = t('btn.noAlarm');
+  $('bustedSwitchRelaxBtn').textContent = t('btn.relax');
   $('startSubtitle').textContent = t('start.subtitle');
   $('startP1').textContent = t('start.p1');
   $('startP2').textContent = t('start.p2');
@@ -1313,11 +1347,11 @@ function wire(){
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
   $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); setTimeout(() => $('board').focus(), 100); });
-  $('bustedNoAlarmBtn').addEventListener('click', () => {
+  $('bustedSwitchRelaxBtn').addEventListener('click', () => {
     sfx('ui');
-    save.settings.alarm = false;
+    save.settings.mode = 'relax';
     setAlarmMode(false);
-    saveGame();
+    persist();
     hideOverlay('bustedOverlay');
     startBoard();
     setTimeout(() => $('board').focus(), 100);

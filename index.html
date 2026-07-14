@@ -129,7 +129,7 @@
     <p class="sub" id="bustedSub">The alarm tripped before you cleared the lot. Try again.</p>
     <div class="win-row">
       <button class="btn primary" id="bustedRetryBtn">Retry</button>
-      <button class="btn" id="bustedNoAlarmBtn"></button>
+      <button class="btn" id="bustedSwitchRelaxBtn"></button>
     </div>
   </div>
 </div>
@@ -181,8 +181,11 @@
       <label class="switch"><input type="checkbox" id="colorblindChk"><span class="knob"></span></label>
     </div>
     <div class="set-row">
-      <span class="lab" id="labAlarm">Alarm mode (per-move budget)</span>
-      <label class="switch"><input type="checkbox" id="alarmChk"><span class="knob"></span></label>
+      <span class="lab" id="labMode">Game Mode</span>
+      <div class="mode-btns">
+        <button class="mode-btn" data-mode="heist" id="modeHeistBtn"></button>
+        <button class="mode-btn" data-mode="relax" id="modeRelaxBtn"></button>
+      </div>
     </div>
     <div class="set-row">
       <span class="lab" id="labAutoAdvance">Auto-advance on win</span>
