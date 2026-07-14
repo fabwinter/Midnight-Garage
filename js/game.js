@@ -300,7 +300,17 @@ function attachDrag(el, i){
     const before = p().dir === 'h' ? p().c : p().r;
     if(target !== before){
       pushHistory();
+      const offset = target - before;
       if(p().dir === 'h') p().c = target; else p().r = target;
+      // Auto-couple: move trailer along with tow
+      for(const h of hitches){
+        if(h.tow === i){
+          const trailer = pieces[h.trailer];
+          if(trailer && trailer.dir === p().dir){
+            if(p().dir === 'h') trailer.c += offset; else trailer.r += offset;
+          }
+        }
+      }
       const dist = Math.abs(target - before);
       if(flicked){
         el.style.transition = `transform ${Math.min(0.45, 0.12 + dist * 0.055)}s cubic-bezier(.18,.7,.3,1.12)`;
@@ -342,7 +352,17 @@ function attachDrag(el, i){
        and VoiceOver players can still hit par (plan 0.8). */
     const merge = kbRun === i;
     if(!merge) pushHistory();
+    const offset = to - at;
     if(pp.dir === 'h') pp.c = to; else pp.r = to;
+    // Auto-couple: move trailer along with tow
+    for(const h of hitches){
+      if(h.tow === i){
+        const trailer = pieces[h.trailer];
+        if(trailer && trailer.dir === pp.dir){
+          if(pp.dir === 'h') trailer.c += offset; else trailer.r += offset;
+        }
+      }
+    }
     commitMove(i, merge);
     kbRun = i;
     clearTimeout(kbRunT);
