@@ -551,6 +551,69 @@ input[type=range]::-moz-range-thumb{
 .car-reveal-art{width:100%;height:76px;display:flex;align-items:center;justify-content:center;margin:10px 0 6px}
 .car-reveal-art svg{width:160px;height:80px;filter:drop-shadow(0 10px 16px rgba(0,0,0,.5))}
 
+/* M4: Chapter backgrounds & atmospherics */
+.wrap[class*="chapter-"] #boardwrap{
+  position:relative;
+  background-position:50% 50%;
+  background-size:cover;
+  background-attachment:fixed;
+  background-blend-mode:multiply;
+}
+
+/* Chapter 1: Night Shift (amber street lamps) */
+.chapter-1 #boardwrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle 40px at 20% 15%, rgba(255,180,84,.3) 0%, transparent 40%),
+             radial-gradient(circle 35px at 85% 25%, rgba(255,180,84,.25) 0%, transparent 35%);
+  opacity:.6;
+}
+
+/* Chapter 2: Neon District (cyan/blue spill) */
+.chapter-2 #boardwrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle 50px at 30% 20%, rgba(79,210,240,.25) 0%, transparent 50%),
+             radial-gradient(circle 45px at 70% 30%, rgba(63,107,255,.2) 0%, transparent 45%);
+  opacity:.5;
+}
+
+/* Chapter 3: Harbor Freight (teal/green with fog) */
+.chapter-3 #boardwrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle 60px at 25% 25%, rgba(55,200,171,.2) 0%, transparent 55%),
+             linear-gradient(180deg, rgba(15,43,55,.2) 0%, transparent 40%, rgba(15,43,55,.15) 100%);
+  opacity:.5;
+}
+
+/* Chapter 4: Gridlock (purple/darker neon) */
+.chapter-4 #boardwrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle 50px at 35% 20%, rgba(111,58,208,.2) 0%, transparent 50%),
+             radial-gradient(circle 40px at 65% 35%, rgba(63,107,255,.18) 0%, transparent 40%);
+  opacity:.55;
+}
+
+/* M4: Touch feedback animations */
+.piece{
+  touch-action:none;
+  transition:transform .08s ease, box-shadow .08s ease;
+}
+
+.piece.grabbed{
+  transform:translateY(-8px) scale(1.02);
+  box-shadow:0 12px 32px rgba(0,0,0,.6), 0 0 0 1px rgba(255,180,84,.4);
+  z-index:50;
+}
+
+.piece.colliding{
+  animation:rock-collision .18s ease-out;
+}
+
+@keyframes rock-collision{
+  0%, 100%{transform:translateX(0)}
+  25%{transform:translateX(-3px)}
+  75%{transform:translateX(3px)}
+}
+
 /* particles canvas */
 #fx{position:fixed;inset:0;pointer-events:none;z-index:90}
 

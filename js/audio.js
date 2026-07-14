@@ -275,6 +275,33 @@ export function sfx(kind){
       const g = c.createGain(); env(g, t + dt, 0.01, 0.15, 0.14);
       o.connect(g).connect(c.destination); o.start(t + dt); o.stop(t + dt + 0.17);
     }
+  } else if(kind === 'collision'){
+    // Brief collision impact: downward pitch + muffled thump
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.08);
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 400;
+    const g = c.createGain(); env(g, t, 0.002, 0.08, 0.18);
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + 0.1);
+  } else if(kind === 'gateServo'){
+    // Rising servo motor whirr for gate mechanism
+    const o = c.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(340, t); o.frequency.linearRampToValueAtTime(580, t + 0.7);
+    const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 280;
+    const g = c.createGain(); env(g, t, 0.01, 0.7, 0.15);
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + 0.85);
+  } else if(kind === 'hitchClink'){
+    // Metallic clink of hitch release mechanism
+    const o = c.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(1200, t); o.frequency.exponentialRampToValueAtTime(480, t + 0.06);
+    const g = c.createGain(); env(g, t, 0.003, 0.08, 0.10);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.12);
+  } else if(kind === 'engineRev'){
+    // Quick engine rev when grabbing piece (varies by length)
+    const o = c.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(160, t); o.frequency.linearRampToValueAtTime(340, t + 0.12);
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 600;
+    const g = c.createGain(); env(g, t, 0.008, 0.12, 0.08);
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + 0.18);
   }
 }
 

@@ -274,7 +274,8 @@ function attachDrag(el, i){
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     dragging = true; hitWall = false;
-    el.classList.add('drag');
+    el.classList.add('drag', 'grabbed');
+    sfx('engineRev');
     startX = e.clientX; startY = e.clientY;
     startPos = p().dir === 'h' ? p().c : p().r;
     lastCell = startPos;
@@ -289,8 +290,8 @@ function attachDrag(el, i){
     if(!dragging) return;
     const d = p().dir === 'h' ? (e.clientX - startX) : (e.clientY - startY);
     let pos = startPos + d / CELL;
-    if(pos < lo){ pos = lo - Math.min(0.22, (lo - pos) * 0.25); if(!hitWall){ hitWall = true; haptic(p().len === 3 ? 'thudHeavy' : 'thud'); } }
-    else if(pos > hi){ pos = hi + Math.min(0.22, (pos - hi) * 0.25); if(!hitWall){ hitWall = true; haptic(p().len === 3 ? 'thudHeavy' : 'thud'); } }
+    if(pos < lo){ pos = lo - Math.min(0.22, (lo - pos) * 0.25); if(!hitWall){ hitWall = true; el.classList.add('colliding'); setTimeout(() => el.classList.remove('colliding'), 180); haptic(p().len === 3 ? 'thudHeavy' : 'thud'); sfx('collision'); } }
+    else if(pos > hi){ pos = hi + Math.min(0.22, (pos - hi) * 0.25); if(!hitWall){ hitWall = true; el.classList.add('colliding'); setTimeout(() => el.classList.remove('colliding'), 180); haptic(p().len === 3 ? 'thudHeavy' : 'thud'); sfx('collision'); } }
     else hitWall = false;
     const x = p().dir === 'h' ? pos * CELL : p().c * CELL;
     const y = p().dir === 'v' ? pos * CELL : p().r * CELL;
@@ -307,7 +308,7 @@ function attachDrag(el, i){
   const finish = e => {
     if(!dragging) return;
     dragging = false;
-    el.classList.remove('drag');
+    el.classList.remove('drag', 'grabbed');
     const d = p().dir === 'h' ? (e.clientX - startX) : (e.clientY - startY);
     const rawPos = startPos + d / CELL;
 
@@ -523,6 +524,13 @@ function chapterOf(idx){ return Math.floor(idx / CHAPTER_SIZE); }
 function applyChapterAccent(){
   const accent = mode.type === 'daily' ? '#ffb454' : CHAPTERS[chapterOf(cur)].accent;
   document.documentElement.style.setProperty('--accent', accent);
+  // M4: Apply chapter-specific visual class for backgrounds/atmospherics
+  const frame = $('board').parentElement;
+  frame.classList.remove('chapter-1', 'chapter-2', 'chapter-3', 'chapter-4');
+  if(mode.type === 'campaign'){
+    const ch = chapterOf(cur);
+    frame.classList.add('chapter-' + (ch + 1));
+  }
 }
 
 function updateHud(){
@@ -664,7 +672,7 @@ function decoupleTow(towIdx){
   pushHistory();
   decoupledHitches.add(hi);
   moves++;
-  sfx('snap');
+  sfx('hitchClink');
   haptic('ui');
   track('decouple', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
   updateHud();
@@ -785,13 +793,29 @@ function winSequence(){
   clearHint(); clearHand();
   stopAlarmTrack();
   updateHud();
-  sfx('win');
   haptic('success');
+
+  // M4: Win choreography (AAA-PLAN §4)
+  // Beat of silence → traffic lights flip → boom gate rises → hero accelerates → letterbox micro-slow-mo
   const hero = board.querySelector('.piece[data-idx="0"]');
-  hero.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
-  hero.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
-  gate.style.filter = 'brightness(1.6)';
   burst();
+
+  // Exit animation: hero accelerates out
+  hero.style.transition = 'transform 1.2s cubic-bezier(.2,.4,.8,1)';
+  hero.style.transform = `translate(${(N + 3.2) * CELL}px, ${pieces[0].r * CELL}px)`;
+
+  // Gate rises (height increase + glow) + servo sound
+  gate.style.transition = 'opacity .8s ease, filter .8s ease';
+  gate.style.opacity = '0.3';
+  gate.style.filter = 'brightness(2.2) drop-shadow(0 0 20px rgba(255,180,84,0.8))';
+  sfx('gateServo');
+
+  // Letterbox effect (subtle vignette during exit)
+  const board_el = $('board').parentElement;
+  board_el.style.transition = 'filter .6s ease-out .4s';
+  board_el.style.filter = 'brightness(0.98)';
+
+  sfx('win');
 
   const par = parOf();
   const stars = starCountFor(par, moves);
