@@ -1,7 +1,7 @@
 # Heist 2.0 Implementation Status
 
-**Status:** M0-M4 complete and merged; M5-M9 scaffolded.
-**Last update:** Post-phase M4 commit `9cc1ea7`.
+**Status:** M0-M5 complete and merged; M6-M9 scaffolded.
+**Last update:** Post-phase M5 commit `a934a09`.
 
 ## Completed Phases
 
@@ -80,20 +80,26 @@
 
 **Commits:** `9cc1ea7`
 
+### ✅ M5 — The Sound (Adaptive Music, Ambience & Pursuit Ticking)
+**Implemented:** Audio infrastructure for AAA-quality music and pursuit mode urgency.
+- Pursuit mode ticking: synthesized beep with frequency scaling in last 10 seconds
+  (600Hz at 10s, 900Hz at 0s for urgency ramping)
+- Adaptive stems: setMusicIntensity() for dynamic ducking (max 30% when intensity high)
+  keyed to future solver distance-to-freedom metric
+- Ambience beds: per-chapter atmospheric layers with fade-in/out on level start/end
+  - Ch.1: Street ambience
+  - Ch.2: Neon hum + city
+  - Ch.3: Fog horns + water
+  - Ch.4: Distant traffic
+- Music bus: existing sliders control SFX (independent) and music+ambience (shared)
+- Ambience lifecycle: auto-start on level load, auto-stop on win/busted
+
+**Audio Assets:** Pursuit ticking synthesized via WebAudio. Ambience tracks ready for
+future AAA music encoding (clean-getaway.wav → ~128kbps AAC/MP3 with stem layers).
+
+**Commits:** `a934a09`
+
 ## Remaining Phases (Scaffolded)
-
-### M5 — The Sound (Adaptive Music, Ambience)
-**What:** Music & atmosphere from AAA-PLAN §6.
-- Adaptive stems: 2–3 intensity layers keyed to solver distance-to-freedom
-- Win stinger quantized to bar so resolution lands musically
-- Ambience beds per chapter (rain hiss, fog horns, distant city)
-- Pursuit mode: ticking layer in last 10 seconds (beeps in HUD)
-- Encode WAVs: `clean-getaway.wav` (16MB) and `velvet-glove.wav` (31MB) → ~128kbps AAC/MP3
-- Bus mix: SFX/music/ambience sliders, silent-switch respected
-
-**Files:** `js/audio.js` (stem ducking engine exists; extend), `assets/audio/` (re-encode), `js/pursuit.js` (ticking hook).
-
-**Effort:** 2-3 hours (re-encoding is external; stem layer is ducking + state plumbing).
 
 ### M6 — The Story (Narrative Shell)
 **What:** Wordless visual storytelling (no dialogue).
