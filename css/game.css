@@ -630,6 +630,14 @@ input[type=range]::-moz-range-thumb{
 /* screen-reader live region */
 .sr-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* M6: Chapter card animation */
+@keyframes fadeInOut{
+  0%{opacity:0;transform:scale(.95)}
+  15%{opacity:1;transform:scale(1)}
+  85%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(.95)}
+}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001s !important;transition-duration:.001s !important}
   .hand{display:none}

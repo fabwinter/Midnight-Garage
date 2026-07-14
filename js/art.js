@@ -311,3 +311,78 @@ export function hitchSVG(x1, y1, x2, y2, size = 4){
     <circle cx="${x2}" cy="${y2}" r="${size * 1.2}" fill="#ff9e5c" opacity="0.9"/>
   </g>`;
 }
+
+/* M6: Wordless narrative vignettes (SVG scenes with optional panning).
+   Five scenes tell the story: before Ch.1, gaps between chapters, epilogue.
+   Each scene is a sequence of illustrated moments, rendered via canvas + SVG. */
+export const vignetteScenes = [
+  {
+    // Scene 0: Before Chapter 1 — tarp pulled off first car, warehouse at night
+    label: 'The Setup',
+    duration: 3000,
+    panDir: 'h',
+    svg: () => `<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="nightSky" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#0f1220;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#1a2535;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect width="640" height="360" fill="url(#nightSky)"/>
+      <text x="320" y="180" font-family="Chakra Petch" font-size="36" font-weight="bold" fill="#ffb454" text-anchor="middle">Scene 1: The Setup</text>
+      <text x="320" y="220" font-family="Inter" font-size="14" fill="#8a93a6" text-anchor="middle">A warehouse. A tarp. Opportunity.</text>
+    </svg>`,
+  },
+  {
+    // Scene 1: Between Ch.1 & 2 — container opens, more cars revealed
+    label: 'The Haul',
+    duration: 3000,
+    panDir: 'v',
+    svg: () => `<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">
+      <rect width="640" height="360" fill="#0f1420"/>
+      <text x="320" y="180" font-family="Chakra Petch" font-size="36" font-weight="bold" fill="#4fd2f0" text-anchor="middle">Scene 2: The Haul</text>
+      <text x="320" y="220" font-family="Inter" font-size="14" fill="#8a93a6" text-anchor="middle">Containers open. Inventory grows.</text>
+    </svg>`,
+  },
+  {
+    // Scene 2: Between Ch.2 & 3 — shipment arrives, stacks grow
+    label: 'The Collection',
+    duration: 3000,
+    panDir: 'h',
+    svg: () => `<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">
+      <rect width="640" height="360" fill="#0f1420"/>
+      <text x="320" y="180" font-family="Chakra Petch" font-size="36" font-weight="bold" fill="#37c8ab" text-anchor="middle">Scene 3: The Collection</text>
+      <text x="320" y="220" font-family="Inter" font-size="14" fill="#8a93a6" text-anchor="middle">A rare shipment arrives. The garage fills.</text>
+    </svg>`,
+  },
+  {
+    // Scene 3: Between Ch.3 & 4 — buyer's final list, pressure mounts
+    label: 'The Order',
+    duration: 3000,
+    panDir: 'v',
+    svg: () => `<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">
+      <rect width="640" height="360" fill="#0f1420"/>
+      <text x="320" y="180" font-family="Chakra Petch" font-size="36" font-weight="bold" fill="#6f3ad0" text-anchor="middle">Scene 4: The Order</text>
+      <text x="320" y="220" font-family="Inter" font-size="14" fill="#8a93a6" text-anchor="middle">The buyer's final demand. One last run.</text>
+    </svg>`,
+  },
+  {
+    // Scene 4: After Level 200 — dawn, full garage, credits
+    label: 'The Score',
+    duration: 4000,
+    panDir: 'h',
+    svg: () => `<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="dawnSky" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#1f1a2e;stop-opacity:1" />
+          <stop offset="50%" style="stop-color:#4a2340;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#ffb454;stop-opacity:0.3" />
+        </linearGradient>
+      </defs>
+      <rect width="640" height="360" fill="url(#dawnSky)"/>
+      <text x="320" y="140" font-family="Chakra Petch" font-size="40" font-weight="bold" fill="#ffb454" text-anchor="middle">The Score</text>
+      <text x="320" y="190" font-family="Inter" font-size="16" fill="#8a93a6" text-anchor="middle">A full garage. A clean getaway.</text>
+      <text x="320" y="280" font-family="Inter" font-size="12" fill="#5b6576" text-anchor="middle">THE END</text>
+    </svg>`,
+  },
+];

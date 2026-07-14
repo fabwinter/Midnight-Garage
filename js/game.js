@@ -17,6 +17,7 @@ import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carPayoutValue } from './collection.js';
 import { armClock, startClock, stopClock, pauseClock, resumeClock, getPausesLeft, getTimeLeft, isClockRunning, resetPursuit, initPursuit, PURSUIT_BUDGET } from './pursuit.js';
+import { showVignette, resetVignettes } from './vignette.js';
 
 const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
@@ -61,6 +62,7 @@ let save = {
   introSeen: false,
   modeUpgradeShown: false,
   level4ExplainerSeen: false,
+  chaptersCardShown: {},  // chapterIdx: true (M6)
   heists: {},  // levelIdx: {mode, value, moves}
 };
 let memOnly = false;
@@ -534,6 +536,31 @@ function applyChapterAccent(){
   }
 }
 
+/* M6: Show chapter title card when entering a new chapter. */
+function showChapterCard(chapterIdx){
+  if(mode.type !== 'campaign') return;
+  const ch = CHAPTERS[chapterIdx];
+  if(!ch) return;
+
+  // Create a transient chapter card overlay
+  const card = document.createElement('div');
+  card.className = 'chapter-card';
+  card.style.cssText = `
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.8);z-index:95;animation:fadeInOut 2.5s ease-in-out forwards;
+  `;
+  card.innerHTML = `
+    <div style="text-align:center;color:#${ch.accent?.slice(1) || 'ffb454'}">
+      <div style="font-family:Chakra Petch;font-size:28px;font-weight:700;letter-spacing:.08em;
+                  text-transform:uppercase;margin-bottom:8px">${ch.name}</div>
+      <div style="font-family:Inter;font-size:13px;color:#8a93a6;letter-spacing:.08em;
+                  text-transform:uppercase">Chapter ${chapterIdx + 1}</div>
+    </div>
+  `;
+  document.body.appendChild(card);
+  setTimeout(() => card.remove(), 2500);
+}
+
 function updateHud(){
   if(mode.type === 'daily'){
     $('hudLevel').textContent = '#' + mode.number;
@@ -612,6 +639,12 @@ function loadLevel(idx){
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
+  // M6: Show chapter card on first level of each chapter
+  const ch = chapterOf(idx);
+  if(!save.chaptersCardShown?.[ch]){
+    save.chaptersCardShown[ch] = true;
+    showChapterCard(ch);
+  }
   startBoard();
   track('level_start', { level: idx + 1, par: curLevel.m, chapter: chapterOf(idx) + 1 });
 }
