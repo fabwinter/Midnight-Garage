@@ -429,6 +429,7 @@ function commitMove(i, mergedKeyStep = false){
 
   if(moves === 1 && !mergedKeyStep){
     fadeOutMenuMusicOnFirstMove();
+    if(save.settings.alarm) startAlarmTrack();
   }
 
   if(save.settings.alarm && moves === 1 && !mergedKeyStep && !won){
@@ -615,7 +616,7 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  if(save.settings.alarm) startAlarmTrack(); else stopAlarmTrack();
+  stopAlarmTrack(); // reset any track from the previous attempt; this attempt's track (if alarm mode) starts on first move
 }
 
 function undo(){
@@ -1201,7 +1202,9 @@ function wireSettings(){
   $('alarmChk').addEventListener('change', e => {
     save.settings.alarm = e.target.checked;
     setAlarmMode(e.target.checked);
-    if(!solvedAnim){ if(e.target.checked) startAlarmTrack(); else stopAlarmTrack(); }
+    // Only start the track if the current attempt is already underway
+    // (moves > 0) — a fresh, unmoved board waits for the first move.
+    if(!solvedAnim && e.target.checked && moves > 0) startAlarmTrack();
     persist(); updateHud();
   });
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
