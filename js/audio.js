@@ -1,17 +1,22 @@
 /* Audio (plan items 0.4/0.5/0.8): WebAudio SFX from the prototype plus
-   licensed music tracks (menu, settings, alarm), each behind independent
-   volume sliders. The native shell configures the audio session to
-   respect the silent switch and mix with user music (see capacitor
-   notes in README). */
+   licensed music tracks (menu, settings, per-mode attempt track), each
+   behind independent volume sliders. The native shell configures the
+   audio session to respect the silent switch and mix with user music
+   (see capacitor notes in README). */
 
 let AC = null;
 let sfxVol = 1;
 let musicVol = 0;
-let alarmMode = false;
-let alarmAudio = null;
-let alarmActive = false;   // true only while a level attempt is in progress
-let duckAlarm = false;     // true while menu/tab music has priority over the alarm track
-const ALARM_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
+
+// Heist/Pursuit attempt track — whichever of the two licensed tracks
+// matches the current game mode (Relaxed has no attempt track).
+let gameMode = 'heist';    // 'relaxed' | 'heist' | 'pursuit'
+let attemptAudio = null;
+let attemptTrackSrc = null;
+let attemptActive = false; // true only while a level attempt is in progress
+let duckAttempt = false;   // true while menu/tab music has priority over the attempt track
+const HEIST_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
+const PURSUIT_TRACK = 'assets/audio/pursuit.mp3'; // placeholder path — drop the uploaded track here
 
 // Menu/theme music
 let menuAudio = null;
@@ -19,83 +24,92 @@ let settingsAudio = null;
 const VELVET_GLOVE = 'assets/audio/velvet-glove.wav';
 const CLEAN_GETAWAY = 'assets/audio/clean-getaway.wav';
 
+function trackFor(mode){
+  return mode === 'heist' ? HEIST_TRACK : mode === 'pursuit' ? PURSUIT_TRACK : null;
+}
+
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
   if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
-  if(alarmMode && alarmAudio && !duckAlarm){
-    alarmAudio.volume = Math.max(0, Math.min(1, v));
-    if(v === 0) alarmAudio.pause();
-    else if(alarmActive && alarmAudio.paused) alarmAudio.play().catch(() => {});
+  if(gameMode !== 'relaxed' && attemptAudio && !duckAttempt){
+    attemptAudio.volume = Math.max(0, Math.min(1, v));
+    if(v === 0) attemptAudio.pause();
+    else if(attemptActive && attemptAudio.paused) attemptAudio.play().catch(() => {});
   }
 }
 
-export function setAlarmMode(enabled){
-  alarmMode = enabled;
-  if(!enabled) stopAlarmTrack();
+export function setGameMode(mode){
+  gameMode = mode;
+  if(mode === 'relaxed') stopAttemptTrack();
 }
 
-function ensureAlarmAudio(){
-  if(!alarmAudio){
-    alarmAudio = new Audio(ALARM_TRACK);
-    alarmAudio.preload = 'auto';
-    alarmAudio.loop = true;
-    alarmAudio.volume = 0;
+function ensureAttemptAudio(src){
+  if(!attemptAudio || attemptTrackSrc !== src){
+    if(attemptAudio) attemptAudio.pause();
+    attemptAudio = new Audio(src);
+    attemptAudio.preload = 'auto';
+    attemptAudio.loop = true;
+    attemptAudio.volume = 0;
+    attemptTrackSrc = src;
   }
-  return alarmAudio;
+  return attemptAudio;
 }
 
 /* Called once per level attempt (level load / reset) — restarts the track
    from the top so every attempt gets a fresh run of the loop. Stays
-   silent while a tab/menu track has priority (duckAlarm); resumeAlarmTrack
+   silent while a tab/menu track has priority (duckAttempt); resumeAttemptTrack
    picks it up once that track closes. */
-export function startAlarmTrack(){
-  alarmActive = true;
-  if(!alarmMode) return;
-  ensureAlarmAudio();
-  if(duckAlarm) return;
-  alarmAudio.currentTime = 0;
+export function startAttemptTrack(mode){
+  attemptActive = true;
+  const src = trackFor(mode);
+  if(!src) return;
+  ensureAttemptAudio(src);
+  if(duckAttempt) return;
+  attemptAudio.currentTime = 0;
   if(musicVol > 0){
-    alarmAudio.play().catch(() => {});
-    fadeIn(alarmAudio, Math.max(0, Math.min(1, musicVol)), 300);
+    attemptAudio.play().catch(() => {});
+    fadeIn(attemptAudio, Math.max(0, Math.min(1, musicVol)), 300);
   }
 }
 
 /* Called the moment an attempt ends — win, busted, or navigating away. */
-export function stopAlarmTrack(){
-  alarmActive = false;
-  if(alarmAudio && !alarmAudio.paused){
-    fadeOut(alarmAudio, 400).then(() => {
-      alarmAudio.pause();
-      alarmAudio.currentTime = 0;
+export function stopAttemptTrack(){
+  attemptActive = false;
+  if(attemptAudio && !attemptAudio.paused){
+    fadeOut(attemptAudio, 400).then(() => {
+      attemptAudio.pause();
+      attemptAudio.currentTime = 0;
     });
   }
 }
 
-/* Temporarily silences the alarm track so a tab/menu track can play alone;
-   resumeAlarmTrack() picks it back up from where it paused. */
-function duckAlarmTrack(){
-  duckAlarm = true;
-  if(alarmAudio && !alarmAudio.paused){
-    fadeOut(alarmAudio, 300).then(() => { if(duckAlarm) alarmAudio.pause(); });
+/* Temporarily silences the attempt track so a tab/menu track can play alone;
+   resumeAttemptTrack() picks it back up from where it paused. Also used
+   directly by the Pursuit pause button (same "hand back the foreground
+   later" semantics as a closed tab). */
+export function duckAttemptTrack(){
+  duckAttempt = true;
+  if(attemptAudio && !attemptAudio.paused){
+    fadeOut(attemptAudio, 300).then(() => { if(duckAttempt) attemptAudio.pause(); });
   }
 }
 
-function resumeAlarmTrack(){
-  duckAlarm = false;
-  if(!alarmMode || !alarmActive) return;
-  ensureAlarmAudio();
-  if(alarmAudio.paused && musicVol > 0){
-    alarmAudio.play().catch(() => {});
-    fadeIn(alarmAudio, Math.max(0, Math.min(1, musicVol)), 300);
+export function resumeAttemptTrack(){
+  duckAttempt = false;
+  if(gameMode === 'relaxed' || !attemptActive) return;
+  ensureAttemptAudio(trackFor(gameMode));
+  if(attemptAudio.paused && musicVol > 0){
+    attemptAudio.play().catch(() => {});
+    fadeIn(attemptAudio, Math.max(0, Math.min(1, musicVol)), 300);
   }
 }
 
 /* Menu music playback with fade-in/fade-out. Never competes with a live
-   alarm-mode attempt — that track already owns the foreground. */
+   Heist/Pursuit attempt — that track already owns the foreground. */
 export function startMenuMusic(){
-  if(alarmMode && alarmActive) return;
+  if(gameMode !== 'relaxed' && attemptActive) return;
   if(!menuAudio){
     menuAudio = new Audio(VELVET_GLOVE);
     menuAudio.preload = 'auto';
@@ -119,7 +133,7 @@ export function stopMenuMusic(){
   }
 }
 
-/* Settings/theme menu music. Ducks the alarm track while a tab is open so
+/* Settings/theme menu music. Ducks the attempt track while a tab is open so
    the two never sound at once; closing the tab (stopSettingsMusic) hands
    the foreground back to whichever track should be playing. */
 export function playSettingsMusic(){
@@ -131,7 +145,7 @@ export function playSettingsMusic(){
   }
   if(settingsAudio.paused){
     stopMenuMusic();
-    duckAlarmTrack();
+    duckAttemptTrack();
     settingsAudio.currentTime = 0;
     settingsAudio.play().catch(() => {});
     fadeIn(settingsAudio, musicVol * 0.7, 600);
@@ -145,7 +159,7 @@ export function stopSettingsMusic(){
       settingsAudio.currentTime = 0;
     });
   }
-  resumeAlarmTrack();
+  resumeAttemptTrack();
 }
 
 export function toggleThemePlayer(){
