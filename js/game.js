@@ -566,11 +566,11 @@ function starCountFor(par, usedMoves){
 function alarmBudgetFor(par){
   return par + Math.max(2, Math.ceil(par * 0.25));
 }
-/* Pursuit's real-time budget — v1 formula: seconds scale with the
-   level's optimal-move count plus a flat cushion. Re-tune from funnel
-   data once Pursuit has live completion rates, same as alarmBudgetFor. */
+/* Pursuit's real-time budget — v1 formula: 1 second per optimal move
+   (par = 10 → 10s). Tight on purpose; loosen from funnel data once
+   Pursuit has live completion rates, same as alarmBudgetFor. */
 function pursuitTimeFor(par){
-  return Math.round(par * 5 + 20);
+  return par;
 }
 function formatTime(totalSeconds){
   const s = Math.max(0, Math.round(totalSeconds));
