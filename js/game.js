@@ -700,7 +700,7 @@ function startBoard(){
   // M5: Start chapter-specific ambience for campaign mode
   if(mode.type === 'campaign') startAmbienceBed(chapterOf(cur));
   scheduleHand();
-  stopAlarmTrack(); // reset any track from the previous attempt; this attempt's track (if alarm mode) starts on first move
+  stopAlarmTrack(); // reset any track from the previous attempt
 }
 
 function undo(){
