@@ -7,6 +7,12 @@
    Body type varies by piece index so a full board reads as traffic, not
    clones: sedans, hatchbacks, pickups (len 2); box trucks, tankers (len 3). */
 
+/* Classic hero car: a top-down photoreal render, front at the right end
+   (matches the procedural convention above) so it drops in with no flip.
+   Only the default/unowned-skin hero uses this — Garage skins keep the
+   procedural sedan body recolored per unlock (see vehicleSVG). */
+const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
+
 export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#ff4d5e','#b3111f','#41151d'],
   ['#37c8ab','#177a67','#0e2f2b'],
@@ -204,7 +210,11 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
 
   const cb = opts.colorblind && !isHero;
   let body;
-  if(len >= 3){
+  if(isHero && !skin){
+    // Classic (default) hero: photoreal render in place of the procedural
+    // sedan. Skinned/unlocked cars still use the recolorable sedan below.
+    body = `<image href="${CLASSIC_CAR_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${heroExtra}`;
+  } else if(len >= 3){
     const variant = (idx * 7 + len) % 2;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
     body = variant === 0 ? boxtruck(0, L, gid, extra, dark) : tanker(0, L, gid, extra, base);
