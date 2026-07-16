@@ -546,10 +546,11 @@ input[type=range]::-moz-range-thumb{
   display:flex;flex-direction:column;align-items:center;gap:10px;
 }
 .start-cta .btn{width:100%}
-.start-note{
-  font-size:11px;color:var(--muted);margin:0;opacity:.75;
-  font-style:italic;text-align:center;
-}
+
+/* ---------- How-to-play popup (first launch only) ---------- */
+.start-narration{text-align:left;line-height:1.6;font-size:14px;color:var(--ink);margin-top:8px}
+.start-narration p{margin:0 0 10px;opacity:.95}
+.start-narration p:last-child{margin:0}
 
 /* ---------- Garage (collection, H0) ---------- */
 .car-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}

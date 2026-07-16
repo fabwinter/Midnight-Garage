@@ -237,11 +237,23 @@
   </div>
 </div>
 
-<!-- Start/Intro Screen -->
+<!-- Start/Intro Screen (poster art, shown every launch) -->
 <div class="overlay" id="startOverlay">
   <div class="start-cta">
     <button class="btn primary" id="startPlayBtn"><span id="startPlayLabel">Start</span></button>
-    <p class="start-note" id="startNote">Tap to dismiss this intro in future plays.</p>
+  </div>
+</div>
+
+<!-- How-to-play popup, shown once after Start on the very first launch -->
+<div class="overlay" id="introOverlay">
+  <div class="sheet">
+    <h2 id="introTitle">How to Play</h2>
+    <div class="start-narration">
+      <p id="introP1"></p>
+      <p id="introP2"></p>
+      <p id="introP3"></p>
+    </div>
+    <button class="btn primary" id="introPlayBtn" style="width:100%;margin-top:6px"><span id="introPlayLabel">Let's Go</span></button>
   </div>
 </div>
 

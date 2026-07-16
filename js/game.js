@@ -53,6 +53,7 @@ let save = {
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
   settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, mode: 'heist' },
+  modeLevel: { relaxed: 0, heist: 0, pursuit: 0 }, // last-played campaign level index, per mode
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
@@ -584,6 +585,10 @@ function starStr(n, size = 3){
   return s;
 }
 function chapterOf(idx){ return Math.floor(idx / CHAPTER_SIZE); }
+/* Highest campaign index currently playable (unlock progress + Pro gate). */
+function campaignUpperBound(){
+  return Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS, LEVELS.length) - 1;
+}
 
 function applyChapterAccent(){
   const accent = mode.type === 'daily' ? '#ffb454' : CHAPTERS[chapterOf(cur)].accent;
@@ -679,6 +684,10 @@ function loadLevel(idx){
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
+  // Each mode tracks its own place in the campaign — switching modes
+  // never continues the level you were just on in a different mode.
+  save.modeLevel[save.settings.mode] = idx;
+  persist();
   startBoard();
   track('level_start', { level: idx + 1, par: curLevel.m, chapter: chapterOf(idx) + 1 });
 }
@@ -1314,11 +1323,15 @@ function wireSettings(){
     save.settings.mode = m;
     setGameMode(m);
     updateModeSelectUI();
-    // Only start the attempt track immediately if the current attempt is
-    // already underway (moves > 0) — a fresh, unmoved board waits for
-    // the first move, same as loading a level in this mode from scratch.
-    if(!solvedAnim && m !== 'relaxed' && moves > 0) startAttemptTrack(m);
-    persist(); updateHud();
+    persist();
+    // A mode switch never continues the level/day you were just on —
+    // each mode keeps its own campaign position; Daily just restarts
+    // fresh under the new mode's rules (there's only one board per day).
+    if(mode.type === 'daily'){
+      loadDailyLevel(mode.date);
+    } else {
+      loadLevel(Math.max(0, Math.min(save.modeLevel[m] ?? 0, campaignUpperBound())));
+    }
   }));
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
@@ -1396,7 +1409,11 @@ function applyStrings(){
   $('bustedRetryBtn').textContent = t('btn.retry');
   $('bustedNoAlarmBtn').textContent = t('btn.relaxed');
   $('startPlayLabel').textContent = t('start.play');
-  $('startNote').textContent = t('start.note');
+  $('introTitle').textContent = t('intro.title');
+  $('introP1').textContent = t('start.p1');
+  $('introP2').textContent = t('start.p2');
+  $('introP3').textContent = t('start.p3');
+  $('introPlayLabel').textContent = t('intro.play');
 }
 
 function updateThemeButtonText(){
@@ -1419,7 +1436,7 @@ function wire(){
     if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){
+    if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
       o.classList.remove('show');
       if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
@@ -1428,10 +1445,14 @@ function wire(){
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
   $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); setTimeout(() => $('board').focus(), 100); });
   $('bustedNoAlarmBtn').addEventListener('click', () => {
+    // Deliberate exception to "modes don't share a level": this is a
+    // retry-easier escape hatch right after a bust, so it stays on the
+    // same level rather than jumping to Relaxed's own tracked position.
     sfx('ui');
     save.settings.mode = 'relaxed';
     setGameMode('relaxed');
     updateModeSelectUI();
+    if(mode.type === 'campaign') save.modeLevel.relaxed = cur;
     persist();
     hideOverlay('bustedOverlay');
     startBoard();
@@ -1476,9 +1497,19 @@ function wire(){
   board.addEventListener('contextmenu', e => e.preventDefault());
   $('startPlayBtn').addEventListener('click', () => {
     sfx('ui');
+    hideOverlay('startOverlay');
+    if(!save.introSeen){
+      showOverlay('introOverlay');
+      setTimeout(() => $('introPlayBtn').focus(), 100);
+    } else {
+      setTimeout(() => $('board').focus(), 100);
+    }
+  });
+  $('introPlayBtn').addEventListener('click', () => {
+    sfx('ui');
     save.introSeen = true;
     persist();
-    hideOverlay('startOverlay');
+    hideOverlay('introOverlay');
     setTimeout(() => $('board').focus(), 100);
   });
 }
@@ -1505,6 +1536,12 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     }
     delete save.settings.alarm;
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
+    // Older saves have no per-mode level tracking — seed all three modes
+    // from wherever the player's single shared progress pointer was.
+    if(!loaded.modeLevel){
+      const shared = Math.max(0, campaignUpperBound());
+      save.modeLevel = { relaxed: shared, heist: shared, pursuit: shared };
+    }
   }
   await loadDaily();
   await initAnalytics();
@@ -1513,12 +1550,11 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   wireSettings();
   wirePro();
   layout();
-  const startAt = Math.min(Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS), LEVELS.length) - 1;
-  loadLevel(Math.max(0, startAt));
+  const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
+  loadLevel(startAt);
   startMenuMusic();
-  // Show intro on first play
-  if(!save.introSeen){
-    showOverlay('startOverlay');
-    setTimeout(() => $('startPlayBtn').focus(), 100);
-  }
+  // Poster start screen shows on every launch; the how-to-play popup
+  // that follows it is gated to the first launch only (see startPlayBtn).
+  showOverlay('startOverlay');
+  setTimeout(() => $('startPlayBtn').focus(), 100);
 })();
