@@ -1395,10 +1395,6 @@ function applyStrings(){
   $('carRevealBtn').textContent = t('btn.nice');
   $('bustedRetryBtn').textContent = t('btn.retry');
   $('bustedNoAlarmBtn').textContent = t('btn.relaxed');
-  $('startSubtitle').textContent = t('start.subtitle');
-  $('startP1').textContent = t('start.p1');
-  $('startP2').textContent = t('start.p2');
-  $('startP3').textContent = t('start.p3');
   $('startPlayLabel').textContent = t('start.play');
   $('startNote').textContent = t('start.note');
 }
