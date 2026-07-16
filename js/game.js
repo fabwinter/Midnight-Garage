@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setAlarmMode, startAlarmTrack, stopAlarmTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -21,6 +21,7 @@ const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
 const SKIP_AFTER_MS = 8 * 60 * 1000;         // quiet skip valve (plan 0.7)
 const HINT_TOKENS_PER_DAY = 3;
+const PURSUIT_PAUSES_MAX = 3;                // pause tokens per Pursuit attempt (v1)
 
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
@@ -39,13 +40,20 @@ let levelStart = Date.now();
 let skipShown = false;
 let isCleanGetaway = false;
 
+// Pursuit mode: real-time countdown, ticks while running, freezes while paused.
+let pursuitTimeLeft = 0;
+let pursuitTimerId = null;
+let pursuitPaused = false;
+let pursuitPausesLeft = PURSUIT_PAUSES_MAX;
+
 let save = {
   unlocked: 1,
   stars: {}, best: {},
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
-  settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false },
+  settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, mode: 'heist' },
+  modeLevel: { relaxed: 0, heist: 0, pursuit: 0 }, // last-played campaign level index, per mode
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
@@ -254,7 +262,7 @@ function attachDrag(el, i){
       return;
     }
     lastTapT = now;
-    if(solvedAnim) return;
+    if(solvedAnim || pursuitPaused) return;
     // Prevent dragging inert trailers (only tow can move, trailer follows)
     const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
     if(isInertTrailer){ sfx('deny'); return; }
@@ -355,7 +363,7 @@ function attachDrag(el, i){
   el.addEventListener('pointercancel', finish);
 
   el.addEventListener('keydown', e => {
-    if(solvedAnim) return;
+    if(solvedAnim || pursuitPaused) return;
     const map = { ArrowLeft: [-1, 'h'], ArrowRight: [1, 'h'], ArrowUp: [-1, 'v'], ArrowDown: [1, 'v'] };
     const m = map[e.key];
     if(!m) return;
@@ -414,30 +422,34 @@ function commitMove(i, mergedKeyStep = false){
   const moveAnnounce = (i === 0 ? 'Red car' : 'Vehicle ' + i) + ` to row ${p.r + 1}, column ${p.c + 1}`;
 
   const won = i === 0 && pieces[0].c === N - pieces[0].len;
+  const gm = save.settings.mode;
 
-  if(save.settings.alarm){
+  if(gm === 'heist'){
     const budget = alarmBudgetFor(parOf());
     const remaining = budget - moves;
     if(moves === 1){
-      $('srLive').textContent = moveAnnounce + '. ' + t('alarm.triggered', remaining);
+      $('srLive').textContent = moveAnnounce + '. ' + t('alarm.triggered', { n: remaining });
     } else {
-      $('srLive').textContent = moveAnnounce + '. ' + t('alarm.remaining', remaining);
+      $('srLive').textContent = moveAnnounce + '. ' + t('alarm.remaining', { n: remaining });
     }
+  } else if(gm === 'pursuit' && moves === 1){
+    $('srLive').textContent = moveAnnounce + '. ' + t('pursuit.triggered');
   } else {
     $('srLive').textContent = moveAnnounce;
   }
 
   if(moves === 1 && !mergedKeyStep){
     fadeOutMenuMusicOnFirstMove();
-    if(save.settings.alarm) startAlarmTrack();
+    if(gm !== 'relaxed') startAttemptTrack(gm);
+    if(gm === 'pursuit') startPursuitTimer();
   }
 
-  if(save.settings.alarm && moves === 1 && !mergedKeyStep && !won){
+  if(gm !== 'relaxed' && moves === 1 && !mergedKeyStep && !won){
     triggerAlarmFlash();
   }
 
-  if(save.settings.alarm && moves > alarmBudgetFor(parOf())){
-    busted();
+  if(gm === 'heist' && moves > alarmBudgetFor(parOf())){
+    busted('heist');
     return;
   }
 
@@ -448,32 +460,35 @@ function commitMove(i, mergedKeyStep = false){
   }
 }
 
-/* Requirement: alarm mode is a hard fail, not just a reward-tier gate — going
-   over budget ends the attempt before it can be solved (police arrive). */
-function busted(){
+/* Heist and Pursuit are both hard fails, not just reward-tier gates —
+   going over budget or out of time ends the attempt before it can be
+   solved (police arrive / the clock runs out). */
+function busted(kind){
   solvedAnim = true;
   clearHint(); clearHand();
-  stopAlarmTrack();
+  clearPursuitTimer();
+  stopAttemptTrack();
   sfx('busted');
   haptic('thudHeavy');
-  track('alarm_busted', {
+  track(kind === 'pursuit' ? 'pursuit_busted' : 'alarm_busted', {
     mode: mode.type, level: mode.type === 'campaign' ? cur + 1 : mode.number,
     moves, par: parOf(), hintsUsed, ...(mode.date && { date: mode.date }),
   });
-  setTimeout(() => showBustedSheet(), 260);
+  setTimeout(() => showBustedSheet(kind), 260);
 }
 
-function showBustedSheet(){
-  $('bustedFlag').textContent = t('busted.flag');
-  $('bustedTitle').textContent = t('busted.title');
-  $('bustedSub').textContent = t('busted.sub');
+function showBustedSheet(kind){
+  const prefix = kind === 'pursuit' ? 'pursuit.busted.' : 'busted.';
+  $('bustedFlag').textContent = t(prefix + 'flag');
+  $('bustedTitle').textContent = t(prefix + 'title');
+  $('bustedSub').textContent = t(prefix + 'sub');
   showOverlay('bustedOverlay');
-  $('srLive').textContent = t('busted.title');
+  $('srLive').textContent = t(prefix + 'title');
   setTimeout(() => $('bustedRetryBtn').focus(), 100);
 }
 
-/* "The alarm just went off" — a brief flash the moment the first piece
-   moves in an alarm-mode attempt, so the budget clearly starts counting now. */
+/* "The clock just started" — a brief flash the moment the first piece
+   moves in a Heist/Pursuit attempt, so the budget/timer clearly starts now. */
 function triggerAlarmFlash(){
   const el = $('alarmFlash');
   el.classList.remove('go');
@@ -482,6 +497,64 @@ function triggerAlarmFlash(){
   sfx('alarmTrigger');
   haptic('thudHeavy');
   el.addEventListener('animationend', () => el.classList.remove('go'), { once: true });
+}
+
+/* ================== PURSUIT MODE ================== */
+function startPursuitTimer(){
+  clearPursuitTimer();
+  pursuitTimerId = setInterval(() => {
+    if(pursuitPaused) return;
+    pursuitTimeLeft--;
+    updateModeHud();
+    if(pursuitTimeLeft <= 0){
+      pursuitTimeLeft = 0;
+      updateModeHud();
+      clearPursuitTimer();
+      busted('pursuit');
+    }
+  }, 1000);
+}
+
+function clearPursuitTimer(){
+  if(pursuitTimerId){ clearInterval(pursuitTimerId); pursuitTimerId = null; }
+}
+
+/* Pause locks the board and freezes the countdown; unpause hands the
+   attempt track's foreground back via the same duck/resume path a
+   closed tab uses. Header nav is disabled too, so a manual pause can't
+   be compounded with a tab-open duck at the same time. */
+function togglePursuitPause(){
+  if(solvedAnim || moves === 0) return;
+  if(pursuitPaused){
+    pursuitPaused = false;
+    resumeAttemptTrack();
+    hideBoardPause();
+  } else {
+    if(pursuitPausesLeft <= 0) return;
+    pursuitPaused = true;
+    pursuitPausesLeft--;
+    duckAttemptTrack();
+    showBoardPause();
+  }
+  sfx('ui');
+  updateModeHud();
+}
+
+function showBoardPause(){
+  $('boardPauseOverlay').hidden = false;
+  $('boardPausedLabel').textContent = t('pursuit.pausedLabel');
+  $('boardPausesLeftLabel').textContent = t('pursuit.pausesLeftLabel', { n: pursuitPausesLeft });
+  $('boardResumeBtn').textContent = t('pursuit.resume');
+  setNavLocked(true);
+}
+
+function hideBoardPause(){
+  $('boardPauseOverlay').hidden = true;
+  setNavLocked(false);
+}
+
+function setNavLocked(locked){
+  ['levelsBtn', 'dailyBtn', 'garageBtn', 'settingsBtn'].forEach(id => { $(id).disabled = locked; });
 }
 
 /* ================== HUD ================== */
@@ -494,12 +567,28 @@ function starCountFor(par, usedMoves){
 function alarmBudgetFor(par){
   return par + Math.max(2, Math.ceil(par * 0.25));
 }
+/* Pursuit's real-time budget — v1 formula: 1 second per optimal move
+   (par = 10 → 10s). Tight on purpose; loosen from funnel data once
+   Pursuit has live completion rates, same as alarmBudgetFor. */
+function pursuitTimeFor(par){
+  return par;
+}
+function formatTime(totalSeconds){
+  const s = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
 function starStr(n, size = 3){
   let s = '';
   for(let i = 0; i < size; i++) s += i < n ? '★' : '<span class="off">★</span>';
   return s;
 }
 function chapterOf(idx){ return Math.floor(idx / CHAPTER_SIZE); }
+/* Highest campaign index currently playable (unlock progress + Pro gate). */
+function campaignUpperBound(){
+  return Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS, LEVELS.length) - 1;
+}
 
 function applyChapterAccent(){
   const accent = mode.type === 'daily' ? '#ffb454' : CHAPTERS[chapterOf(cur)].accent;
@@ -518,27 +607,39 @@ function updateHud(){
   }
   $('hudMoves').textContent = moves;
   $('hudPar').textContent = parOf();
-  $('undoBtn').disabled = history.length === 0 || solvedAnim;
+  $('undoBtn').disabled = history.length === 0 || solvedAnim || pursuitPaused;
   const s3 = $('hudStreak3');
   s3.textContent = `🔥 ${save.streak3}×3★`;
   s3.classList.toggle('on', save.streak3 >= 2 && mode.type === 'campaign');
-  updateAlarmHud();
+  updateModeHud();
   updateControlsVisibility();
   updateHintBadge();
   $('dailyDot').classList.toggle('on', !isDone(todayStr()));
 }
 
-function updateAlarmHud(){
-  const row = $('hudAlarmRow');
-  $('hudParRow').hidden = save.settings.alarm;
-  if(!save.settings.alarm){ row.hidden = true; return; }
-  row.hidden = false;
-  const budget = alarmBudgetFor(parOf());
-  const remaining = budget - moves;
-  $('hudAlarmBudget').textContent = Math.max(0, remaining);
-  row.setAttribute('aria-label', t('alarm.remaining', Math.max(0, remaining)));
-  row.classList.toggle('tripped', remaining < 0);
-  row.classList.toggle('low', remaining >= 0 && remaining <= Math.max(1, Math.ceil(budget * 0.2)));
+function updateModeHud(){
+  const gm = save.settings.mode;
+  $('hudParRow').hidden = gm !== 'relaxed';
+  $('hudAlarmRow').hidden = gm !== 'heist';
+  $('hudPursuitRow').hidden = gm !== 'pursuit';
+
+  if(gm === 'heist'){
+    const budget = alarmBudgetFor(parOf());
+    const remaining = budget - moves;
+    $('hudAlarmBudget').textContent = Math.max(0, remaining);
+    $('hudAlarmRow').setAttribute('aria-label', t('alarm.remaining', { n: Math.max(0, remaining) }));
+    $('hudAlarmRow').classList.toggle('tripped', remaining < 0);
+    $('hudAlarmRow').classList.toggle('low', remaining >= 0 && remaining <= Math.max(1, Math.ceil(budget * 0.2)));
+  } else if(gm === 'pursuit'){
+    const budget = pursuitTimeFor(parOf());
+    $('hudPursuitTime').textContent = formatTime(pursuitTimeLeft);
+    $('hudPursuitRow').setAttribute('aria-label', t('pursuit.remaining', { n: pursuitTimeLeft }));
+    $('hudPursuitRow').classList.toggle('low', pursuitTimeLeft <= Math.max(5, Math.ceil(budget * 0.2)));
+    const pauseBtn = $('pursuitPauseBtn');
+    pauseBtn.textContent = pursuitPaused ? '▶' : '⏸';
+    pauseBtn.setAttribute('aria-label', pursuitPaused ? t('pursuit.resume') : t('pursuit.pause'));
+    pauseBtn.disabled = !pursuitPaused && (pursuitPausesLeft <= 0 || moves === 0 || solvedAnim);
+  }
 }
 
 /* Onboarding (plan 0.6): hint appears at level 4, undo at level 6. */
@@ -583,6 +684,10 @@ function loadLevel(idx){
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
+  // Each mode tracks its own place in the campaign — switching modes
+  // never continues the level you were just on in a different mode.
+  save.modeLevel[save.settings.mode] = idx;
+  persist();
   startBoard();
   track('level_start', { level: idx + 1, par: curLevel.m, chapter: chapterOf(idx) + 1 });
 }
@@ -613,19 +718,24 @@ function startBoard(){
   clearHint(); clearHand();
   applyChapterAccent();
   buildPieces();
+  clearPursuitTimer();
+  pursuitTimeLeft = pursuitTimeFor(parOf());
+  pursuitPaused = false;
+  pursuitPausesLeft = PURSUIT_PAUSES_MAX;
+  hideBoardPause();
   updateHud();
   updateCoach();
   scheduleHand();
-  stopAlarmTrack(); // reset any track from the previous attempt; this attempt's track (if alarm mode) starts on first move
+  stopAttemptTrack(); // reset any track from the previous attempt; this attempt's track (if heist/pursuit) starts on first move
 }
 
 function undo(){
-  if(!history.length || solvedAnim) return;
+  if(!history.length || solvedAnim || pursuitPaused) return;
   kbRun = -1;
   const entry = history.pop();
   entry.pieces.forEach((q, i) => { pieces[i].r = q.r; pieces[i].c = q.c; });
   decoupledHitches = new Set(entry.decoupled);
-  if(!save.settings.alarm) moves = Math.max(0, moves - 1);
+  if(save.settings.mode !== 'heist') moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
   track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
@@ -635,7 +745,7 @@ function undo(){
 }
 
 function decoupleTow(towIdx){
-  if(solvedAnim) return false;
+  if(solvedAnim || pursuitPaused) return false;
   const hi = hitches.findIndex(h => h.tow === towIdx);
   if(hi === -1) return false;
   if(decoupledHitches.has(hi)) return false;
@@ -657,7 +767,7 @@ function clearHint(){
   if(hintTimer){ clearTimeout(hintTimer); hintTimer = null; }
 }
 function showHint(){
-  if(solvedAnim) return;
+  if(solvedAnim || pursuitPaused) return;
   if(!save.pro){
     refreshHintTokens();
     if(save.hints.left <= 0){
@@ -758,7 +868,8 @@ let autoTimer = null;
 function winSequence(){
   solvedAnim = true;
   clearHint(); clearHand();
-  stopAlarmTrack();
+  clearPursuitTimer();
+  stopAttemptTrack();
   updateHud();
   sfx('win');
   haptic('success');
@@ -773,7 +884,7 @@ function winSequence(){
   const timeS = Math.round((Date.now() - levelStart) / 1000);
 
   isCleanGetaway = false;
-  if(save.settings.alarm){
+  if(save.settings.mode === 'heist'){
     isCleanGetaway = moves <= par;
     if(isCleanGetaway) track('alarm_clean_getaway', { level: mode.type === 'campaign' ? cur + 1 : mode.number, moves, par, date: mode.date });
   }
@@ -1183,7 +1294,7 @@ function applySettings(){
   const s = save.settings;
   setSfxVolume(s.sfx);
   setMusicVolume(s.music);
-  setAlarmMode(s.alarm);
+  setGameMode(s.mode);
   setHapticsEnabled(s.haptics);
   $('sfxRange').value = s.sfx;
   $('musicRange').value = s.music;
@@ -1191,7 +1302,13 @@ function applySettings(){
   $('colorblindChk').checked = s.colorblind;
   $('autoAdvanceChk').checked = s.autoAdvance;
   $('reminderChk').checked = s.reminder;
-  $('alarmChk').checked = s.alarm;
+  updateModeSelectUI();
+}
+
+function updateModeSelectUI(){
+  const m = save.settings.mode;
+  document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
+  $('modeDesc').textContent = t('mode.desc.' + m);
 }
 
 function wireSettings(){
@@ -1199,14 +1316,23 @@ function wireSettings(){
   $('musicRange').addEventListener('input', e => { save.settings.music = +e.target.value; setMusicVolume(save.settings.music); persist(); });
   $('hapticsChk').addEventListener('change', e => { save.settings.haptics = e.target.checked; setHapticsEnabled(e.target.checked); haptic('ui'); persist(); });
   $('colorblindChk').addEventListener('change', e => { save.settings.colorblind = e.target.checked; persist(); buildPieces(); });
-  $('alarmChk').addEventListener('change', e => {
-    save.settings.alarm = e.target.checked;
-    setAlarmMode(e.target.checked);
-    // Only start the track if the current attempt is already underway
-    // (moves > 0) — a fresh, unmoved board waits for the first move.
-    if(!solvedAnim && e.target.checked && moves > 0) startAlarmTrack();
-    persist(); updateHud();
-  });
+  document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.addEventListener('click', () => {
+    const m = b.dataset.mode;
+    if(save.settings.mode === m) return;
+    sfx('ui');
+    save.settings.mode = m;
+    setGameMode(m);
+    updateModeSelectUI();
+    persist();
+    // A mode switch never continues the level/day you were just on —
+    // each mode keeps its own campaign position; Daily just restarts
+    // fresh under the new mode's rules (there's only one board per day).
+    if(mode.type === 'daily'){
+      loadDailyLevel(mode.date);
+    } else {
+      loadLevel(Math.max(0, Math.min(save.modeLevel[m] ?? 0, campaignUpperBound())));
+    }
+  }));
   $('autoAdvanceChk').addEventListener('change', e => { save.settings.autoAdvance = e.target.checked; persist(); });
   $('reminderChk').addEventListener('change', e => {
     save.settings.reminder = e.target.checked; persist();
@@ -1238,6 +1364,7 @@ function applyStrings(){
   $('labMoves').textContent = t('hud.moves');
   $('labPar').textContent = t('hud.par');
   $('labAlarmBudget').textContent = t('hud.alarm');
+  $('labPursuitTime').textContent = t('hud.pursuit');
   $('labUndo').textContent = t('btn.undo');
   $('labHint').textContent = t('btn.hint');
   $('labReset').textContent = t('btn.reset');
@@ -1258,7 +1385,11 @@ function applyStrings(){
   $('labMusic').textContent = t('settings.music');
   $('labHaptics').textContent = t('settings.haptics');
   $('labColorblind').textContent = t('settings.colorblind');
-  $('labAlarm').textContent = t('settings.alarm');
+  $('labMode').textContent = t('mode.label');
+  $('modeRelaxedName').textContent = t('mode.relaxed');
+  $('modeHeistName').textContent = t('mode.heist');
+  $('modePursuitName').textContent = t('mode.pursuit');
+  updateModeSelectUI();
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labTheme').textContent = t('theme.label');
@@ -1276,13 +1407,13 @@ function applyStrings(){
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
   $('bustedRetryBtn').textContent = t('btn.retry');
-  $('bustedNoAlarmBtn').textContent = t('btn.noAlarm');
-  $('startSubtitle').textContent = t('start.subtitle');
-  $('startP1').textContent = t('start.p1');
-  $('startP2').textContent = t('start.p2');
-  $('startP3').textContent = t('start.p3');
+  $('bustedNoAlarmBtn').textContent = t('btn.relaxed');
   $('startPlayLabel').textContent = t('start.play');
-  $('startNote').textContent = t('start.note');
+  $('introTitle').textContent = t('intro.title');
+  $('introP1').textContent = t('start.p1');
+  $('introP2').textContent = t('start.p2');
+  $('introP3').textContent = t('start.p3');
+  $('introPlayLabel').textContent = t('intro.play');
 }
 
 function updateThemeButtonText(){
@@ -1305,7 +1436,7 @@ function wire(){
     if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-    if(e.target === o && o.id !== 'winOverlay' && o.id !== 'carRevealOverlay' && o.id !== 'bustedOverlay'){
+    if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
       o.classList.remove('show');
       if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
@@ -1314,14 +1445,21 @@ function wire(){
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
   $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); setTimeout(() => $('board').focus(), 100); });
   $('bustedNoAlarmBtn').addEventListener('click', () => {
+    // Deliberate exception to "modes don't share a level": this is a
+    // retry-easier escape hatch right after a bust, so it stays on the
+    // same level rather than jumping to Relaxed's own tracked position.
     sfx('ui');
-    save.settings.alarm = false;
-    setAlarmMode(false);
-    saveGame();
+    save.settings.mode = 'relaxed';
+    setGameMode('relaxed');
+    updateModeSelectUI();
+    if(mode.type === 'campaign') save.modeLevel.relaxed = cur;
+    persist();
     hideOverlay('bustedOverlay');
     startBoard();
     setTimeout(() => $('board').focus(), 100);
   });
+  $('pursuitPauseBtn').addEventListener('click', togglePursuitPause);
+  $('boardResumeBtn').addEventListener('click', togglePursuitPause);
   $('hintBtn').addEventListener('click', showHint);
   $('skipBtn').addEventListener('click', skipLevel);
   $('replayBtn').addEventListener('click', () => {
@@ -1359,9 +1497,19 @@ function wire(){
   board.addEventListener('contextmenu', e => e.preventDefault());
   $('startPlayBtn').addEventListener('click', () => {
     sfx('ui');
+    hideOverlay('startOverlay');
+    if(!save.introSeen){
+      showOverlay('introOverlay');
+      setTimeout(() => $('introPlayBtn').focus(), 100);
+    } else {
+      setTimeout(() => $('board').focus(), 100);
+    }
+  });
+  $('introPlayBtn').addEventListener('click', () => {
+    sfx('ui');
     save.introSeen = true;
     persist();
-    hideOverlay('startOverlay');
+    hideOverlay('introOverlay');
     setTimeout(() => $('board').focus(), 100);
   });
 }
@@ -1379,8 +1527,21 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   const loaded = await load('save_v1');
   if(loaded){
     save = Object.assign(save, loaded);
-    save.settings = Object.assign({ sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, alarm: false }, loaded.settings);
+    save.settings = Object.assign({ sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, mode: 'heist' }, loaded.settings);
+    // Migrate the old boolean alarm toggle: players who had it on keep
+    // Heist, players who had it off (or never set it) land on Relaxed —
+    // new installs get the new default (Heist) via the object above.
+    if(!loaded.settings?.mode && typeof loaded.settings?.alarm === 'boolean'){
+      save.settings.mode = loaded.settings.alarm ? 'heist' : 'relaxed';
+    }
+    delete save.settings.alarm;
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
+    // Older saves have no per-mode level tracking — seed all three modes
+    // from wherever the player's single shared progress pointer was.
+    if(!loaded.modeLevel){
+      const shared = Math.max(0, campaignUpperBound());
+      save.modeLevel = { relaxed: shared, heist: shared, pursuit: shared };
+    }
   }
   await loadDaily();
   await initAnalytics();
@@ -1389,12 +1550,11 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   wireSettings();
   wirePro();
   layout();
-  const startAt = Math.min(Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS), LEVELS.length) - 1;
-  loadLevel(Math.max(0, startAt));
+  const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
+  loadLevel(startAt);
   startMenuMusic();
-  // Show intro on first play
-  if(!save.introSeen){
-    showOverlay('startOverlay');
-    setTimeout(() => $('startPlayBtn').focus(), 100);
-  }
+  // Poster start screen shows on every launch; the how-to-play popup
+  // that follows it is gated to the first launch only (see startPlayBtn).
+  showOverlay('startOverlay');
+  setTimeout(() => $('startPlayBtn').focus(), 100);
 })();

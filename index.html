@@ -47,6 +47,11 @@
       <span class="lab" id="labAlarmBudget">Alarm</span>
       <span class="val" id="hudAlarmBudget">–</span>
     </div>
+    <div class="chip pursuit-chip" id="hudPursuitRow" hidden>
+      <span class="lab" id="labPursuitTime">Time</span>
+      <span class="val" id="hudPursuitTime">–:–</span>
+      <button class="pause-btn" id="pursuitPauseBtn" aria-label="Pause">⏸</button>
+    </div>
   </div>
 
   <div class="stage">
@@ -57,6 +62,11 @@
         <svg class="gridlines" id="gridlines"></svg>
         <div class="exit-lane"></div>
         <div class="exit-word">Exit</div>
+      </div>
+      <div class="board-pause-overlay" id="boardPauseOverlay" hidden>
+        <div class="board-paused-label" id="boardPausedLabel">PAUSED</div>
+        <div class="board-pauses-left" id="boardPausesLeftLabel"></div>
+        <button class="btn primary" id="boardResumeBtn">Resume</button>
       </div>
     </div>
   </div>
@@ -181,9 +191,14 @@
       <label class="switch"><input type="checkbox" id="colorblindChk"><span class="knob"></span></label>
     </div>
     <div class="set-row">
-      <span class="lab" id="labAlarm">Alarm mode (per-move budget)</span>
-      <label class="switch"><input type="checkbox" id="alarmChk"><span class="knob"></span></label>
+      <span class="lab" id="labMode">Game mode</span>
     </div>
+    <div class="mode-select" id="modeSelect">
+      <button class="mode-btn" data-mode="relaxed" id="modeRelaxedBtn"><span id="modeRelaxedName">Relaxed</span></button>
+      <button class="mode-btn" data-mode="heist" id="modeHeistBtn"><span id="modeHeistName">Heist</span></button>
+      <button class="mode-btn" data-mode="pursuit" id="modePursuitBtn"><span id="modePursuitName">Pursuit</span></button>
+    </div>
+    <p class="mode-desc" id="modeDesc"></p>
     <div class="set-row">
       <span class="lab" id="labAutoAdvance">Auto-advance on win</span>
       <label class="switch"><input type="checkbox" id="autoAdvanceChk"><span class="knob"></span></label>
@@ -222,28 +237,27 @@
   </div>
 </div>
 
-<!-- Pro Garage paywall -->
-<!-- Start/Intro Screen -->
+<!-- Start/Intro Screen (poster art, shown every launch) -->
 <div class="overlay" id="startOverlay">
-  <div class="sheet start-sheet">
-    <div class="start-header">
-      <div class="start-title">MIDNIGHT<br><span class="hr-red">GARAGE</span></div>
-      <div class="start-subtitle" id="startSubtitle">Operation: Clean Getaway</div>
-    </div>
-    <div class="start-body">
-      <div class="start-narration">
-        <p id="startP1"></p>
-        <p id="startP2"></p>
-        <p id="startP3" style="margin-top: 12px; font-size: 12px; opacity: 0.7;"></p>
-      </div>
-    </div>
-    <div class="start-footer">
-      <button class="btn primary" id="startPlayBtn" style="width:100%"><span id="startPlayLabel">Begin operation</span></button>
-      <p class="start-note" id="startNote">Tap to dismiss this intro in future plays.</p>
-    </div>
+  <div class="start-cta">
+    <button class="btn primary" id="startPlayBtn"><span id="startPlayLabel">Start</span></button>
   </div>
 </div>
 
+<!-- How-to-play popup, shown once after Start on the very first launch -->
+<div class="overlay" id="introOverlay">
+  <div class="sheet">
+    <h2 id="introTitle">How to Play</h2>
+    <div class="start-narration">
+      <p id="introP1"></p>
+      <p id="introP2"></p>
+      <p id="introP3"></p>
+    </div>
+    <button class="btn primary" id="introPlayBtn" style="width:100%;margin-top:6px"><span id="introPlayLabel">Let's Go</span></button>
+  </div>
+</div>
+
+<!-- Pro Garage paywall -->
 <div class="overlay" id="proOverlay">
   <div class="sheet pro-sheet">
     <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
