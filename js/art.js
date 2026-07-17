@@ -13,6 +13,32 @@
    procedural sedan body recolored per unlock (see vehicleSVG). */
 const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
 
+/* Photoreal traffic sedan: same idea as the hero photo, but recolored per
+   piece at render time via feColorMatrix hueRotate rather than pre-baking
+   one image per palette color. SEDAN_PHOTO_HUE is the source paint's own
+   hue (measured from the art), so the rotation for any target color is
+   just targetHue - sourceHue. Also reused for Garage hero skins, which
+   need the same per-instance recolor. */
+const SEDAN_PHOTO_IMG = 'assets/cars/traffic-sedan-1.png';
+const SEDAN_PHOTO_HUE = 23;
+
+function hexHue(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  if(d === 0) return 0;
+  let h;
+  if(max === r) h = ((g - b) / d) % 6;
+  else if(max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h *= 60;
+  return h < 0 ? h + 360 : h;
+}
+
+function hueRotationFor(targetHex, sourceHue){
+  return ((hexHue(targetHex) - sourceHue) % 360 + 360) % 360;
+}
+
 export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#ff4d5e','#b3111f','#41151d'],
   ['#37c8ab','#177a67','#0e2f2b'],
@@ -70,20 +96,6 @@ const headlights = (L, soft) => `
 const taillights = () => `
   <rect x="7" y="23" width="4.5" height="11" rx="2.2" fill="#ff6a4d"/>
   <rect x="7" y="66" width="4.5" height="11" rx="2.2" fill="#ff6a4d"/>`;
-
-function sedan(g, L, gid, extra){
-  return `
-  ${wheels(24, L - 56)}
-  <rect x="8" y="11" width="${L - 16}" height="78" rx="27" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="14" width="${L - 24}" height="13" rx="9" fill="#fff" opacity=".2"/>
-  <path d="M ${L * 0.30} 16 L ${L * 0.40} 26 L ${L * 0.40} 74 L ${L * 0.30} 84 Z" fill="url(#${gid}g)"/>
-  <path d="M ${L * 0.73} 18 L ${L * 0.64} 27 L ${L * 0.64} 73 L ${L * 0.73} 82 Z" fill="url(#${gid}g)" opacity=".92"/>
-  <rect x="${L * 0.42}" y="20" width="${L * 0.20}" height="60" rx="11" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.42}" y="23" width="${L * 0.20}" height="9" rx="4.5" fill="#fff" opacity=".33"/>
-  <line x1="${L * 0.42 + 6}" y1="50" x2="${L * 0.62 - 6}" y2="50" stroke="rgba(0,0,0,.18)" stroke-width="2"/>
-  ${extra}
-  ${taillights()}`;
-}
 
 function hatchback(g, L, gid, extra){
   return `
@@ -151,24 +163,6 @@ function tanker(g, L, gid, extra, base){
   ${taillights()}`;
 }
 
-/* Collection car trim (H0): a cosmetic-only "beltline" flourish keyed to
-   the equipped car's tier. Deliberately grounded in real collector-car
-   cues (pinstripe, chrome, an engraved plaque) rather than a fantasy glow —
-   this is a skin, not a power-up, and it should read that way. */
-function trimSVG(trim, L, H){
-  if(!trim || trim === 'none') return '';
-  if(trim === 'chrome'){
-    return `<rect x="10" y="${H * 0.66}" width="${L - 20}" height="2.6" rx="1.3" fill="#e7edf5" opacity=".85"/>
-            <rect x="10" y="${H * 0.66}" width="${L - 20}" height="1" rx=".5" fill="#fff" opacity=".6"/>`;
-  }
-  // 'plaque': chrome beltline pinstripe plus a small engraved trunk plaque
-  return `<rect x="10" y="${H * 0.66}" width="${L - 20}" height="2.6" rx="1.3" fill="#e7edf5" opacity=".85"/>
-          <rect x="10" y="${H * 0.66}" width="${L - 20}" height="1" rx=".5" fill="#fff" opacity=".6"/>
-          <rect x="${L * 0.16}" y="${H * 0.40}" width="${L * 0.09}" height="${H * 0.13}" rx="2" fill="#e7edf5" opacity=".9" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
-          <line x1="${L * 0.175}" y1="${H * 0.44}" x2="${L * 0.24}" y2="${H * 0.44}" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>
-          <line x1="${L * 0.175}" y1="${H * 0.48}" x2="${L * 0.24}" y2="${H * 0.48}" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>`;
-}
-
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
   const [base, dark, glassTint] = skin ? [skin.base, skin.dark, skin.glass] : (isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)]);
@@ -191,11 +185,6 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
       <stop offset="0" stop-color="#b9d2ea"/>
       <stop offset="1" stop-color="${glassTint}"/>
     </linearGradient>
-    <linearGradient id="${gid}beam" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ffe9b8" stop-opacity=".4"/>
-      <stop offset=".75" stop-color="#ffe9b8" stop-opacity=".1"/>
-      <stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/>
-    </linearGradient>
     <linearGradient id="${gid}beam2" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#fff6d8" stop-opacity=".85"/>
       <stop offset=".35" stop-color="#ffe9b8" stop-opacity=".4"/>
@@ -203,17 +192,8 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     </linearGradient>
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
     <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
+    <filter id="${gid}hue"><feColorMatrix type="hueRotate" values="${hueRotationFor(base, SEDAN_PHOTO_HUE)}"/></filter>
   </defs>`;
-
-  /* Hero (procedural sedan skins): headlight beam + glowing brake lights,
-     positioned to the sedan body's own edges (~8-unit margin each side).
-     The beam is part of the piece so it sweeps as the car slides. */
-  const heroExtra = (isHero && skin) ? `
-    <path d="M ${L - 10} 24 L ${L + 205} 6 L ${L + 205} 94 L ${L - 10} 76 Z" fill="url(#${gid}beam)"/>
-    <rect x="4" y="21" width="9" height="14" rx="4" fill="#ff4a3a" opacity=".4" filter="url(#${soft})"/>
-    <rect x="4" y="65" width="9" height="14" rx="4" fill="#ff4a3a" opacity=".4" filter="url(#${soft})"/>
-    <rect x="6.5" y="23" width="5" height="11" rx="2.4" fill="#ff4a3a"/>
-    <rect x="6.5" y="66" width="5" height="11" rx="2.4" fill="#ff4a3a"/>` : '';
 
   /* Hero (classic photo car): tuned to classic.png's actual bumper edges
      (front ~98% across, rear ~1.5%) and headlight height (~16%/84% of the
@@ -242,18 +222,28 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // Classic (default) hero: photoreal render in place of the procedural
     // sedan. Skinned/unlocked cars still use the recolorable sedan below.
     body = `<image href="${CLASSIC_CAR_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${photoHeroExtra}`;
+  } else if(isHero){
+    // Garage skin equipped: same photo body as the classic hero, recolored
+    // to the skin's paint via hueRotate, with the beam/glow tuned the same
+    // way (both photos fill the cell edge-to-edge so the positions carry
+    // over). trimSVG's beltline stripe was tuned to the old procedural
+    // sedan's silhouette (paint above/below a windshield greenhouse) — this
+    // car's canopy runs nearly the full width, so the same stripe cuts
+    // across the glass instead of following a body line. Skipping trim
+    // here until it gets a version designed for this car's proportions;
+    // paint color alone still distinguishes every unlocked skin.
+    body = `<image href="${SEDAN_PHOTO_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${photoHeroExtra}`;
   } else if(len >= 3){
     const variant = (idx * 7 + len) % 2;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
     body = variant === 0 ? boxtruck(0, L, gid, extra, dark) : tanker(0, L, gid, extra, base);
-  } else if(isHero){
-    body = sedan(0, L, gid, headlights(L, soft) + heroExtra + trimSVG(skin?.trim, L, H));
   } else {
     const variant = (idx * 5 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');
-    body = variant === 0 ? sedan(0, L, gid, extra)
-         : variant === 1 ? hatchback(0, L, gid, extra)
-         : pickup(0, L, gid, extra, dark);
+    body = variant === 0
+      ? `<image href="${SEDAN_PHOTO_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${cb ? decal(idx, L * 0.5, 50) : ''}`
+      : variant === 1 ? hatchback(0, L, gid, extra)
+      : pickup(0, L, gid, extra, dark);
   }
 
   const W = dir === 'h' ? L : H, Ht = dir === 'h' ? H : L;
