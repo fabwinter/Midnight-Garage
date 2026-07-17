@@ -124,6 +124,23 @@ export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#d98cff','#9b45d6','#2f1440'],
 ];
 
+/* Determine if a piece can self-propel, based on its length and type.
+   Trailers, caravans, and boats (certain truck indices) cannot move by themselves.
+   Sedan 14 (Ferrari) is a broken-down car that needs a tow. */
+export function isSelfPropelled(idx, len){
+  if(len >= 3){
+    // Trucks: check if it's a trailer/caravan/boat (indices 5, 6, 7)
+    const truckIdx = idx % TRUCK_PHOTOS.length;
+    return truckIdx !== 5 && truckIdx !== 6 && truckIdx !== 7;
+  }
+  // Sedan 14 (Ferrari) is broken-down and needs a tow
+  if(idx % SEDAN_PHOTOS.length === 13){  // index 13 is traffic-sedan-14
+    return false;
+  }
+  // All other sedans are self-propelled
+  return true;
+}
+
 const H = 100;
 
 /* Roof decals for color-blind mode — one distinct pattern per paint color,

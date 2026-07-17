@@ -14,7 +14,7 @@ import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, isSelfPropelled } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
 
 const $ = id => document.getElementById(id);
@@ -266,6 +266,8 @@ function attachDrag(el, i){
     // Prevent dragging inert trailers (only tow can move, trailer follows)
     const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
     if(isInertTrailer){ sfx('deny'); return; }
+    // Prevent dragging non-self-propelled vehicles (trailers, boats) unless in a hitch
+    if(!isSelfPropelled(i, p().len) && !hitches.some(h => h.trailer === i)){ sfx('deny'); return; }
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     dragging = true; hitWall = false;
@@ -370,6 +372,8 @@ function attachDrag(el, i){
     // Prevent keyboard control of inert trailers
     const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
     if(isInertTrailer){ sfx('deny'); return; }
+    // Prevent keyboard control of non-self-propelled vehicles unless in a hitch
+    if(!isSelfPropelled(i, p().len) && !hitches.some(h => h.trailer === i)){ sfx('deny'); return; }
     e.preventDefault();
     const pp = p();
     if(pp.dir !== m[1]){ sfx('deny'); return; }
