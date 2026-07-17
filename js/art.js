@@ -9,18 +9,22 @@
 
 /* Classic hero car: a top-down photoreal render, front at the right end
    (matches the procedural convention above) so it drops in with no flip.
-   Only the default/unowned-skin hero uses this — Garage skins keep the
-   procedural sedan body recolored per unlock (see vehicleSVG). */
+   Only the default/unowned-skin hero uses this — Garage skins use the
+   photoreal traffic sedan recolored to the skin's paint (see vehicleSVG). */
 const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
 
-/* Photoreal traffic sedan: same idea as the hero photo, but recolored per
+/* Photoreal traffic sedans: same idea as the hero photo, but recolored per
    piece at render time via feColorMatrix hueRotate rather than pre-baking
-   one image per palette color. SEDAN_PHOTO_HUE is the source paint's own
+   one image per palette color. Each entry's hue is its source paint's own
    hue (measured from the art), so the rotation for any target color is
-   just targetHue - sourceHue. Also reused for Garage hero skins, which
-   need the same per-instance recolor. */
-const SEDAN_PHOTO_IMG = 'assets/cars/traffic-sedan-1.png';
-const SEDAN_PHOTO_HUE = 23;
+   just targetHue - sourceHue. Traffic pieces cycle through all of them for
+   variety; Garage skins always use index 0, whose beam/glow geometry
+   (photoHeroExtra below) is tuned to that specific photo's edges. */
+const SEDAN_PHOTOS = [
+  { img: 'assets/cars/traffic-sedan-1.png', hue: 23 },
+  { img: 'assets/cars/traffic-sedan-2.png', hue: 12 },
+  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },
+];
 
 function hexHue(hex){
   const n = parseInt(hex.slice(1), 16);
@@ -169,6 +173,10 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
+  // idx%3 already decides sedan vs. hatchback vs. pickup shape below, so
+  // picking the photo with idx%3 too would always land on the same photo
+  // whenever a sedan is chosen — use a different stride to decorrelate them.
+  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[Math.floor(idx / 3) % SEDAN_PHOTOS.length];
 
   const defs = `
   <defs>
@@ -192,7 +200,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     </linearGradient>
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
     <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
-    <filter id="${gid}hue"><feColorMatrix type="hueRotate" values="${hueRotationFor(base, SEDAN_PHOTO_HUE)}"/></filter>
+    <filter id="${gid}hue"><feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue)}"/></filter>
   </defs>`;
 
   /* Hero (classic photo car): tuned to classic.png's actual bumper edges
@@ -232,7 +240,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // across the glass instead of following a body line. Skipping trim
     // here until it gets a version designed for this car's proportions;
     // paint color alone still distinguishes every unlocked skin.
-    body = `<image href="${SEDAN_PHOTO_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${photoHeroExtra}`;
+    body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${photoHeroExtra}`;
   } else if(len >= 3){
     const variant = (idx * 7 + len) % 2;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
@@ -241,7 +249,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     const variant = (idx * 5 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');
     body = variant === 0
-      ? `<image href="${SEDAN_PHOTO_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${cb ? decal(idx, L * 0.5, 50) : ''}`
+      ? `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${cb ? decal(idx, L * 0.5, 50) : ''}`
       : variant === 1 ? hatchback(0, L, gid, extra)
       : pickup(0, L, gid, extra, dark);
   }
