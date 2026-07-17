@@ -19,18 +19,27 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    hue (measured from the art), so the rotation for any target color is
    just targetHue - sourceHue. Traffic pieces cycle through all of them for
    variety; Garage skins always use index 0, whose beam/glow geometry
-   (photoHeroExtra below) is tuned to that specific photo's edges. */
+   (photoHeroExtra below) is tuned to that specific photo's edges.
+
+   `fixed: true` opts a photo out of recoloring entirely — for liveries with
+   their own branding (racing stripes, a specific fleet color) hueRotate just
+   shifts the whole photo to an arbitrary hue instead of producing something
+   that reads as "that car, but blue"; better to show it in its real color on
+   every piece than a randomly-tinted stripe. */
 // traffic-sedan-2 has a soft shadow fringe baked into its cutout (visible as
 // speckle against the dark board) and no clean re-shoot has replaced it yet,
 // so it's left out of rotation rather than shipping a visibly dirty edge.
 const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-1.png', hue: 14 },
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },
+  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },
+  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker slot). */
 const TRUCK_PHOTOS = [
-  { img: 'assets/cars/traffic-truck-1.png', hue: 157 },
+  { img: 'assets/cars/traffic-truck-1.png', fixed: true },
   { img: 'assets/cars/traffic-truck-2.png', hue: 41 },
 ];
 
@@ -202,6 +211,8 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   // whenever a sedan is chosen — use a different stride to decorrelate them.
   const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[Math.floor(idx / 3) % SEDAN_PHOTOS.length];
   const truckPhoto = TRUCK_PHOTOS[Math.floor(idx / 4) % TRUCK_PHOTOS.length];
+  const hueAttr = sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`;
+  const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
 
   const defs = `
   <defs>
@@ -226,11 +237,11 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
     <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
     <filter id="${gid}hue">
-      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue)}"/>
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue || 0)}"/>
       <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
     </filter>
     <filter id="${gid}hue2">
-      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, truckPhoto.hue)}"/>
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, truckPhoto.hue || 0)}"/>
       <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
     </filter>
   </defs>`;
@@ -272,19 +283,19 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // across the glass instead of following a body line. Skipping trim
     // here until it gets a version designed for this car's proportions;
     // paint color alone still distinguishes every unlocked skin.
-    body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${photoHeroExtra}`;
+    body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${photoHeroExtra}`;
   } else if(len >= 3){
     const variant = (idx * 7 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
     body = variant === 0
-      ? `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue2)"/>${cb ? decal(idx, L * 0.5, 50) : ''}`
+      ? `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr2}/>${cb ? decal(idx, L * 0.5, 50) : ''}`
       : variant === 1 ? boxtruck(0, L, gid, extra, dark)
       : tanker(0, L, gid, extra, base);
   } else {
     const variant = (idx * 5 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');
     body = variant === 0
-      ? `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${cb ? decal(idx, L * 0.5, 50) : ''}`
+      ? `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${cb ? decal(idx, L * 0.5, 50) : ''}`
       : variant === 1 ? hatchback(0, L, gid, extra)
       : pickup(0, L, gid, extra, dark);
   }
