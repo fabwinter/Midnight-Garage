@@ -4,8 +4,10 @@
 
    All bodies are drawn horizontally with the FRONT at the right end, in
    100-unit cell coordinates, then rotated as a group for vertical pieces.
-   Body type varies by piece index so a full board reads as traffic, not
-   clones: sedans, hatchbacks, pickups (len 2); box trucks, tankers (len 3). */
+   Every traffic piece is a photoreal car/truck (see SEDAN_PHOTOS and
+   TRUCK_PHOTOS below) cycled by piece index so a full board reads as
+   varied traffic, not clones. There is no procedural fallback body
+   anymore — the photo library is the only source of vehicle art. */
 
 /* Classic hero car: a top-down photoreal render, front at the right end
    (matches the procedural convention above) so it drops in with no flip.
@@ -46,15 +48,24 @@ const SEDAN_PHOTOS = [
   // specific numbered race car, stripes and all).
   { img: 'assets/cars/traffic-sedan-10.png', fixed: true },
   { img: 'assets/cars/traffic-sedan-11.png', fixed: true },
+  // silver Aston Martin and a plain white sedan — both near-achromatic.
+  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },
+  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },
 ];
 
-/* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker slot). */
+/* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker /
+   trailer slot). */
 const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-1.png', fixed: true },
   { img: 'assets/cars/traffic-truck-2.png', hue: 41 },
   { img: 'assets/cars/traffic-truck-3.png', fixed: true },
   { img: 'assets/cars/traffic-truck-4.png', hue: 358 },
   { img: 'assets/cars/traffic-truck-5.png', fixed: true },
+  // Airstream trailer (bare aluminum), wood-deck utility trailer, and a
+  // boat — all natural material colors, not paint, so none recolor.
+  { img: 'assets/cars/traffic-truck-6.png', fixed: true },
+  { img: 'assets/cars/traffic-truck-7.png', fixed: true },
+  { img: 'assets/cars/traffic-truck-8.png', fixed: true },
 ];
 
 function hexHue(hex){
@@ -107,13 +118,6 @@ export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#d98cff','#9b45d6','#2f1440'],
 ];
 
-export function lighten(hex, amt){
-  const n = parseInt(hex.slice(1), 16);
-  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  r = Math.round(r + (255 - r) * amt); g = Math.round(g + (255 - g) * amt); b = Math.round(b + (255 - b) * amt);
-  return `rgb(${r},${g},${b})`;
-}
-
 const H = 100;
 
 /* Roof decals for color-blind mode — one distinct pattern per paint color,
@@ -131,118 +135,19 @@ function decal(idx, cx, cy){
   }
 }
 
-/* wheels sit OUTSIDE the body silhouette — the single biggest "real car" cue */
-const wheels = (...xs) => xs.map(x => `
-  <rect x="${x}" y="2" width="30" height="14" rx="6" fill="#0c0f15"/>
-  <rect x="${x + 5}" y="5" width="20" height="4" rx="2" fill="#2a3140"/>
-  <rect x="${x}" y="84" width="30" height="14" rx="6" fill="#0c0f15"/>
-  <rect x="${x + 5}" y="91" width="20" height="4" rx="2" fill="#2a3140"/>`).join('');
-
-const headlights = (L, soft) => `
-  <circle cx="${L - 13}" cy="27" r="4.6" fill="#fff6d8"/>
-  <circle cx="${L - 13}" cy="73" r="4.6" fill="#fff6d8"/>
-  <circle cx="${L - 13}" cy="27" r="9" fill="#fff3c2" opacity=".35" filter="url(#${soft})"/>
-  <circle cx="${L - 13}" cy="73" r="9" fill="#fff3c2" opacity=".35" filter="url(#${soft})"/>`;
-
-const taillights = () => `
-  <rect x="7" y="23" width="4.5" height="11" rx="2.2" fill="#ff6a4d"/>
-  <rect x="7" y="66" width="4.5" height="11" rx="2.2" fill="#ff6a4d"/>`;
-
-function hatchback(g, L, gid, extra){
-  return `
-  ${wheels(26, L - 58)}
-  <rect x="8" y="12" width="${L - 16}" height="76" rx="30" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="15" width="${L - 24}" height="12" rx="8" fill="#fff" opacity=".2"/>
-  <path d="M ${L * 0.16} 18 L ${L * 0.30} 27 L ${L * 0.30} 73 L ${L * 0.16} 82 Z" fill="url(#${gid}g)"/>
-  <path d="M ${L * 0.68} 19 L ${L * 0.58} 28 L ${L * 0.58} 72 L ${L * 0.68} 81 Z" fill="url(#${gid}g)" opacity=".92"/>
-  <rect x="${L * 0.32}" y="21" width="${L * 0.24}" height="58" rx="12" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.32}" y="24" width="${L * 0.24}" height="8" rx="4" fill="#fff" opacity=".3"/>
-  <line x1="${L * 0.34}" y1="26" x2="${L * 0.54}" y2="26" stroke="rgba(0,0,0,.22)" stroke-width="2.4"/>
-  <line x1="${L * 0.34}" y1="74" x2="${L * 0.54}" y2="74" stroke="rgba(0,0,0,.22)" stroke-width="2.4"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function pickup(g, L, gid, extra, dark){
-  return `
-  ${wheels(22, L - 56)}
-  <rect x="8" y="12" width="${L - 16}" height="76" rx="16" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="15" width="${L - 24}" height="12" rx="8" fill="#fff" opacity=".2"/>
-  <!-- open bed -->
-  <rect x="16" y="20" width="${L * 0.42}" height="60" rx="7" fill="rgba(0,0,0,.42)" stroke="${dark}" stroke-width="1.6"/>
-  <line x1="${16 + L * 0.14}" y1="22" x2="${16 + L * 0.14}" y2="78" stroke="${dark}" stroke-width="1.8" opacity=".8"/>
-  <line x1="${16 + L * 0.28}" y1="22" x2="${16 + L * 0.28}" y2="78" stroke="${dark}" stroke-width="1.8" opacity=".8"/>
-  <rect x="${20 + L * 0.05}" y="32" width="${L * 0.15}" height="36" rx="4" fill="${dark}" opacity=".9"/>
-  <!-- cab -->
-  <path d="M ${L * 0.70} 17 L ${L * 0.60} 26 L ${L * 0.60} 74 L ${L * 0.70} 83 Z" fill="url(#${gid}g)"/>
-  <rect x="${L * 0.72}" y="19" width="${L * 0.16}" height="62" rx="10" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.72}" y="22" width="${L * 0.16}" height="8" rx="4" fill="#fff" opacity=".3"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function boxtruck(g, L, gid, extra, dark){
-  return `
-  ${wheels(22, L * 0.40, L - 54)}
-  <!-- cargo box -->
-  <rect x="8" y="12" width="${L * 0.70}" height="76" rx="10" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="15" width="${L * 0.70 - 8}" height="11" rx="6" fill="#fff" opacity=".17"/>
-  ${[0.14, 0.28, 0.42, 0.56].map(f => `<line x1="${8 + L * f}" y1="17" x2="${8 + L * f}" y2="83" stroke="rgba(0,0,0,.24)" stroke-width="2"/>`).join('')}
-  <rect x="12" y="24" width="7" height="52" rx="3" fill="rgba(0,0,0,.3)"/>
-  <!-- cab -->
-  <rect x="${L * 0.72}" y="9" width="${L * 0.25}" height="82" rx="14" fill="url(#${gid}b)" stroke="rgba(0,0,0,.45)" stroke-width="1.6"/>
-  <path d="M ${L * 0.84} 17 L ${L * 0.77} 26 L ${L * 0.77} 74 L ${L * 0.84} 83 Z" fill="url(#${gid}g)"/>
-  <rect x="${L * 0.86}" y="21" width="${L * 0.08}" height="58" rx="8" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.735}" y="12" width="${L * 0.225}" height="8" rx="4" fill="#fff" opacity=".22"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function tanker(g, L, gid, extra, base){
-  return `
-  ${wheels(22, L * 0.40, L - 54)}
-  <!-- tank -->
-  <rect x="8" y="14" width="${L * 0.70}" height="72" rx="34" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="14" y="18" width="${L * 0.70 - 12}" height="13" rx="7" fill="#fff" opacity=".25"/>
-  <circle cx="${8 + L * 0.35}" cy="50" r="13" fill="rgba(0,0,0,.45)" stroke="${lighten(base, .3)}" stroke-width="2"/>
-  <rect x="20" y="47" width="${L * 0.70 - 24}" height="5" rx="2.5" fill="rgba(0,0,0,.3)"/>
-  <!-- cab -->
-  <rect x="${L * 0.72}" y="9" width="${L * 0.25}" height="82" rx="14" fill="url(#${gid}b)" stroke="rgba(0,0,0,.45)" stroke-width="1.6"/>
-  <path d="M ${L * 0.84} 17 L ${L * 0.77} 26 L ${L * 0.77} 74 L ${L * 0.84} 83 Z" fill="url(#${gid}g)"/>
-  <rect x="${L * 0.86}" y="21" width="${L * 0.08}" height="58" rx="8" fill="url(#${gid}r)"/>
-  ${extra}
-  ${taillights()}`;
-}
-
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
-  const [base, dark, glassTint] = skin ? [skin.base, skin.dark, skin.glass] : (isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)]);
+  const base = skin ? skin.base : (isHero ? PALETTE[0][0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)][0]);
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
-  // idx%3 already decides sedan vs. hatchback vs. pickup shape below, so
-  // picking the photo with idx%3 too would always land on the same photo
-  // whenever a sedan is chosen — use a different stride to decorrelate them.
-  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[Math.floor(idx / 3) % SEDAN_PHOTOS.length];
-  const truckPhoto = TRUCK_PHOTOS[Math.floor(idx / 4) % TRUCK_PHOTOS.length];
+  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[idx % SEDAN_PHOTOS.length];
+  const truckPhoto = TRUCK_PHOTOS[idx % TRUCK_PHOTOS.length];
   const hueAttr = sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`;
   const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
 
   const defs = `
   <defs>
-    <linearGradient id="${gid}b" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(base, .3)}"/>
-      <stop offset=".45" stop-color="${base}"/>
-      <stop offset="1" stop-color="${dark}"/>
-    </linearGradient>
-    <linearGradient id="${gid}r" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(base, .48)}"/>
-      <stop offset="1" stop-color="${base}"/>
-    </linearGradient>
-    <linearGradient id="${gid}g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#b9d2ea"/>
-      <stop offset="1" stop-color="${glassTint}"/>
-    </linearGradient>
     <linearGradient id="${gid}beam2" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#fff6d8" stop-opacity=".85"/>
       <stop offset=".35" stop-color="#ffe9b8" stop-opacity=".4"/>
@@ -299,19 +204,9 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // paint color alone still distinguishes every unlocked skin.
     body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${photoHeroExtra}`;
   } else if(len >= 3){
-    const variant = (idx * 7 + len) % 3;
-    const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
-    body = variant === 0
-      ? `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr2}/>${cb ? decal(idx, L * 0.5, 50) : ''}`
-      : variant === 1 ? boxtruck(0, L, gid, extra, dark)
-      : tanker(0, L, gid, extra, base);
+    body = `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr2}/>${cb ? decal(idx, L * 0.5, 50) : ''}`;
   } else {
-    const variant = (idx * 5 + len) % 3;
-    const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');
-    body = variant === 0
-      ? `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${cb ? decal(idx, L * 0.5, 50) : ''}`
-      : variant === 1 ? hatchback(0, L, gid, extra)
-      : pickup(0, L, gid, extra, dark);
+    body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${cb ? decal(idx, L * 0.5, 50) : ''}`;
   }
 
   const W = dir === 'h' ? L : H, Ht = dir === 'h' ? H : L;
