@@ -33,8 +33,14 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-1.png', hue: 14 },
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },
   { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },
+  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },
   { img: 'assets/cars/traffic-sedan-4.png', fixed: true },
   { img: 'assets/cars/traffic-sedan-5.png', fixed: true },
+  // white paint + gray stripe and matte olive-drab are both near-desaturated
+  // in the source photo — hueRotate can't manufacture chroma that isn't
+  // there, so these stay fixed like the other branded/utility liveries.
+  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },
+  { img: 'assets/cars/traffic-sedan-9.png', fixed: true },
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker slot). */
