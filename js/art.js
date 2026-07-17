@@ -41,12 +41,20 @@ const SEDAN_PHOTOS = [
   // there, so these stay fixed like the other branded/utility liveries.
   { img: 'assets/cars/traffic-sedan-7.png', fixed: true },
   { img: 'assets/cars/traffic-sedan-9.png', fixed: true },
+  // GT3 RS's factory sage green is quite desaturated too (~.2-.3), same
+  // reasoning as above; the Gulf liveried GT40 is obviously fixed (it's a
+  // specific numbered race car, stripes and all).
+  { img: 'assets/cars/traffic-sedan-10.png', fixed: true },
+  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker slot). */
 const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-1.png', fixed: true },
   { img: 'assets/cars/traffic-truck-2.png', hue: 41 },
+  { img: 'assets/cars/traffic-truck-3.png', fixed: true },
+  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },
+  { img: 'assets/cars/traffic-truck-5.png', fixed: true },
 ];
 
 function hexHue(hex){
