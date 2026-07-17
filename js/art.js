@@ -31,49 +31,46 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
 // traffic-sedan-2 has a soft shadow fringe baked into its cutout (visible as
 // speckle against the dark board) and no clean re-shoot has replaced it yet,
 // so it's left out of rotation rather than shipping a visibly dirty edge.
+/* One entry per real-world car model — no duplicate models. When the same
+   car existed in several source colors, one recolorable cutout was kept and
+   the rest deleted; the near-dupes (Countach, yellow-striped Ferrari, navy
+   GT, striped silver GT, GT3 RS) were pruned in the July '26 pass. Index 0
+   is the Garage-skin body — keep it a clean recolorable cutout. */
 const SEDAN_PHOTOS = [
-  { img: 'assets/cars/traffic-sedan-1.png', hue: 14 },
-  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },
-  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },
-  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },
-  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },
-  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },
+  { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },      // orange Countach (skin body)
+  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar
+  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
+  { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },     // Biarritz blue sedan
   // white paint + gray stripe and matte olive-drab are both near-desaturated
   // in the source photo — hueRotate can't manufacture chroma that isn't
   // there, so these stay fixed like the other branded/utility liveries.
-  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },
-  { img: 'assets/cars/traffic-sedan-9.png', fixed: true },
-  // GT3 RS's factory sage green is quite desaturated too (~.2-.3), same
-  // reasoning as above; the Gulf liveried GT40 is obviously fixed (it's a
-  // specific numbered race car, stripes and all).
-  { img: 'assets/cars/traffic-sedan-10.png', fixed: true },
-  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },
-  // silver Aston Martin and a plain white sedan — both near-achromatic.
-  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },
-  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },
-  // Sports cars with distinctive branding/livery
-  { img: 'assets/cars/traffic-sedan-14.png', fixed: true },  // Ferrari (branded, broken-down car)
-  { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },      // orange sedan
-  { img: 'assets/cars/traffic-sedan-17.png', hue: 209 },     // navy sedan
-  { img: 'assets/cars/traffic-sedan-18.png', fixed: true },  // silverstripe (branded)
-  // Biarritz blue and other distinct top-down sedans
-  { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },     // Biarritz blue
-  // Service vehicles with distinctive livery
-  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi (branded)
-  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit (branded)
-  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple with yellow stripes (branded)
+  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },   // silver + yellow stripe GT
+  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },   // yellow Ferrari, tricolor stripe
+  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },   // white classic 911, black stripe
+  { img: 'assets/cars/traffic-sedan-9.png', fixed: true },   // olive G-wagon
+  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
+  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
+  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // plain white sedan
+  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple + yellow stripes
+  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
+  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
 ];
 
-/* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker /
-   trailer slot). */
+/* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
+   are chosen by gameplay role (hitch trailer), never by index accident. */
 const TRUCK_PHOTOS = [
-  { img: 'assets/cars/traffic-truck-1.png', fixed: true },
-  { img: 'assets/cars/traffic-truck-2.png', hue: 41 },
-  { img: 'assets/cars/traffic-truck-3.png', fixed: true },
-  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },
-  { img: 'assets/cars/traffic-truck-5.png', fixed: true },
-  // Airstream trailer (bare aluminum), wood-deck utility trailer, and a
-  // boat — all natural material colors, not paint, so none recolor.
+  { img: 'assets/cars/traffic-truck-1.png', fixed: true },   // garbage truck
+  { img: 'assets/cars/traffic-truck-2.png', hue: 41 },       // school bus
+  { img: 'assets/cars/traffic-truck-3.png', fixed: true },   // tanker
+  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },      // tow truck
+  { img: 'assets/cars/traffic-truck-5.png', fixed: true },   // chrome tanker
+];
+
+/* Vehicles that cannot move by themselves: only pieces a level marks as a
+   hitch trailer render with these (Airstream caravan, wood-deck utility
+   trailer, boat — natural material colors, none recolor). */
+const TRAILER_PHOTOS = [
   { img: 'assets/cars/traffic-truck-6.png', fixed: true },
   { img: 'assets/cars/traffic-truck-7.png', fixed: true },
   { img: 'assets/cars/traffic-truck-8.png', fixed: true },
@@ -129,23 +126,6 @@ export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#d98cff','#9b45d6','#2f1440'],
 ];
 
-/* Determine if a piece can self-propel, based on its length and type.
-   Trailers, caravans, and boats (certain truck indices) cannot move by themselves.
-   Sedan 14 (Ferrari) is a broken-down car that needs a tow. */
-export function isSelfPropelled(idx, len){
-  if(len >= 3){
-    // Trucks: check if it's a trailer/caravan/boat (indices 5, 6, 7)
-    const truckIdx = idx % TRUCK_PHOTOS.length;
-    return truckIdx !== 5 && truckIdx !== 6 && truckIdx !== 7;
-  }
-  // Sedan 14 (Ferrari) is broken-down and needs a tow
-  if(idx % SEDAN_PHOTOS.length === 13){  // index 13 is traffic-sedan-14
-    return false;
-  }
-  // All other sedans are self-propelled
-  return true;
-}
-
 const H = 100;
 
 /* Roof decals for color-blind mode — one distinct pattern per paint color,
@@ -163,15 +143,27 @@ function decal(idx, cx, cy){
   }
 }
 
+/* opts.photoIdx — this piece's ordinal among pieces of the same class
+   (sedan / truck / trailer) in the level, so every piece in one level gets
+   a different photo. Falls back to the global piece index for callers that
+   don't pass it. opts.trailer — this piece is a hitch trailer: len-3 draws
+   from TRAILER_PHOTOS (caravan / utility trailer / boat); a len-2 trailer
+   is a broken-down car and renders desaturated + dimmed so "needs a tow"
+   reads at a glance. */
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
   const base = skin ? skin.base : (isHero ? PALETTE[0][0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)][0]);
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
-  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[idx % SEDAN_PHOTOS.length];
-  const truckPhoto = TRUCK_PHOTOS[idx % TRUCK_PHOTOS.length];
-  const hueAttr = sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`;
+  const photoIdx = opts.photoIdx ?? idx;
+  const isTrailer = !!opts.trailer && !isHero;
+  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[photoIdx % SEDAN_PHOTOS.length];
+  const truckPhoto = isTrailer
+    ? TRAILER_PHOTOS[photoIdx % TRAILER_PHOTOS.length]
+    : TRUCK_PHOTOS[photoIdx % TRUCK_PHOTOS.length];
+  const brokenDown = isTrailer && len < 3;
+  const hueAttr = brokenDown ? ` filter="url(#${gid}broke)"` : (sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`);
   const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
 
   const defs = `
@@ -190,6 +182,12 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     <filter id="${gid}hue2">
       <feColorMatrix type="hueRotate" values="${hueRotationFor(base, truckPhoto.hue || 0)}"/>
       <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+    </filter>
+    <filter id="${gid}broke">
+      <feColorMatrix type="saturate" values="0.18"/>
+      <feComponentTransfer>
+        <feFuncR type="linear" slope="0.72"/><feFuncG type="linear" slope="0.72"/><feFuncB type="linear" slope="0.72"/>
+      </feComponentTransfer>
     </filter>
   </defs>`;
 
