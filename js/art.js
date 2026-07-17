@@ -199,21 +199,32 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
   </defs>`;
 
-  /* Hero: headlight beams reaching ~2 cells ahead + glowing brake lights.
+  /* Hero (procedural sedan skins): headlight beam + glowing brake lights,
+     positioned to the sedan body's own edges (~8-unit margin each side).
      The beam is part of the piece so it sweeps as the car slides. */
-  const heroExtra = isHero ? `
+  const heroExtra = (isHero && skin) ? `
     <path d="M ${L - 10} 24 L ${L + 205} 6 L ${L + 205} 94 L ${L - 10} 76 Z" fill="url(#${gid}beam)"/>
     <rect x="4" y="21" width="9" height="14" rx="4" fill="#ff4a3a" opacity=".4" filter="url(#${soft})"/>
     <rect x="4" y="65" width="9" height="14" rx="4" fill="#ff4a3a" opacity=".4" filter="url(#${soft})"/>
     <rect x="6.5" y="23" width="5" height="11" rx="2.4" fill="#ff4a3a"/>
     <rect x="6.5" y="66" width="5" height="11" rx="2.4" fill="#ff4a3a"/>` : '';
 
+  /* Hero (classic photo car): same idea, but tuned to classic.png's actual
+     bumper edges (front ~98% across, rear ~1.5%) and headlight height
+     (~16%/84% of the cell) — measured from the source art so the beam and
+     brake glow sit flush against the body with no visible gap. */
+  const photoHeroExtra = (isHero && !skin) ? `
+    <path d="M ${L - 6} 14 L ${L + 200} 2 L ${L + 200} 98 L ${L - 6} 86 Z" fill="url(#${gid}beam)"/>
+    <ellipse cx="5" cy="16" rx="6" ry="9" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
+    <ellipse cx="5" cy="84" rx="6" ry="9" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
+    <ellipse cx="3" cy="50" rx="6" ry="32" fill="#ff3b2e" opacity=".26" filter="url(#${soft})"/>` : '';
+
   const cb = opts.colorblind && !isHero;
   let body;
   if(isHero && !skin){
     // Classic (default) hero: photoreal render in place of the procedural
     // sedan. Skinned/unlocked cars still use the recolorable sedan below.
-    body = `<image href="${CLASSIC_CAR_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${heroExtra}`;
+    body = `<image href="${CLASSIC_CAR_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${photoHeroExtra}`;
   } else if(len >= 3){
     const variant = (idx * 7 + len) % 2;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
