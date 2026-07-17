@@ -51,21 +51,17 @@ const SEDAN_PHOTOS = [
   // silver Aston Martin and a plain white sedan — both near-achromatic.
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true },
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true },
-  // Five new colored vehicles: yellow sports cars (fixed livery), generic colors, and striped variant
-  { img: 'assets/cars/traffic-sedan-14.png', fixed: true },  // Ferrari (branded)
-  { img: 'assets/cars/traffic-sedan-15.png', hue: 48 },       // Porsche (yellow)
-  { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },       // orange
-  { img: 'assets/cars/traffic-sedan-17.png', hue: 209 },      // navy
-  { img: 'assets/cars/traffic-sedan-18.png', fixed: true },   // silverstripe (branded)
-  // Five more top-down sedans for additional variety
-  { img: 'assets/cars/traffic-sedan-19.png', hue: 35 },       // gold
-  { img: 'assets/cars/traffic-sedan-20.png', hue: 22 },       // orange
-  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },   // purple with yellow stripes (branded)
-  { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },      // light blue
-  { img: 'assets/cars/traffic-sedan-23.png', hue: 32 },       // brown
-  // Two service vehicles with distinctive livery
-  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },   // yellow taxi (branded)
-  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },   // police K-9 unit (branded)
+  // Sports cars with distinctive branding/livery
+  { img: 'assets/cars/traffic-sedan-14.png', fixed: true },  // Ferrari (branded, broken-down car)
+  { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },      // orange sedan
+  { img: 'assets/cars/traffic-sedan-17.png', hue: 209 },     // navy sedan
+  { img: 'assets/cars/traffic-sedan-18.png', fixed: true },  // silverstripe (branded)
+  // Biarritz blue and other distinct top-down sedans
+  { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },     // Biarritz blue
+  // Service vehicles with distinctive livery
+  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi (branded)
+  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit (branded)
+  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple with yellow stripes (branded)
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker /
