@@ -57,6 +57,12 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },       // orange
   { img: 'assets/cars/traffic-sedan-17.png', hue: 209 },      // navy
   { img: 'assets/cars/traffic-sedan-18.png', fixed: true },   // silverstripe (branded)
+  // Five more top-down sedans for additional variety
+  { img: 'assets/cars/traffic-sedan-19.png', hue: 35 },       // gold
+  { img: 'assets/cars/traffic-sedan-20.png', hue: 22 },       // orange
+  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },   // purple with yellow stripes (branded)
+  { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },      // light blue
+  { img: 'assets/cars/traffic-sedan-23.png', hue: 32 },       // brown
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker /
