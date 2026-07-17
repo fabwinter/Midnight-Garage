@@ -63,6 +63,9 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-21.png', fixed: true },   // purple with yellow stripes (branded)
   { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },      // light blue
   { img: 'assets/cars/traffic-sedan-23.png', hue: 32 },       // brown
+  // Two service vehicles with distinctive livery
+  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },   // yellow taxi (branded)
+  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },   // police K-9 unit (branded)
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker /
