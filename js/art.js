@@ -51,6 +51,12 @@ const SEDAN_PHOTOS = [
   // silver Aston Martin and a plain white sedan — both near-achromatic.
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true },
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true },
+  // Five new colored vehicles: yellow sports cars (fixed livery), generic colors, and striped variant
+  { img: 'assets/cars/traffic-sedan-14.png', fixed: true },  // Ferrari (branded)
+  { img: 'assets/cars/traffic-sedan-15.png', hue: 48 },       // Porsche (yellow)
+  { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },       // orange
+  { img: 'assets/cars/traffic-sedan-17.png', hue: 209 },      // navy
+  { img: 'assets/cars/traffic-sedan-18.png', fixed: true },   // silverstripe (branded)
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker /
