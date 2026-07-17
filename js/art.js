@@ -21,9 +21,15 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    variety; Garage skins always use index 0, whose beam/glow geometry
    (photoHeroExtra below) is tuned to that specific photo's edges. */
 const SEDAN_PHOTOS = [
-  { img: 'assets/cars/traffic-sedan-1.png', hue: 23 },
+  { img: 'assets/cars/traffic-sedan-1.png', hue: 14 },
   { img: 'assets/cars/traffic-sedan-2.png', hue: 12 },
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },
+];
+
+/* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker slot). */
+const TRUCK_PHOTOS = [
+  { img: 'assets/cars/traffic-truck-1.png', hue: 156 },
+  { img: 'assets/cars/traffic-truck-2.png', hue: 37 },
 ];
 
 function hexHue(hex){
@@ -41,6 +47,22 @@ function hexHue(hex){
 
 function hueRotationFor(targetHex, sourceHue){
   return ((hexHue(targetHex) - sourceHue) % 360 + 360) % 360;
+}
+
+function hexSat(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+/* hueRotate alone can't reproduce a muted/dark target like the
+   midnight-phantom skin from a vividly-painted source photo — it only
+   rotates hue, so a saturated photo stays saturated at any angle. Scale
+   saturation toward the target's own (relative to the photos' typical
+   ~.75 paint saturation) so low-chroma skins don't come out neon. */
+function satScaleFor(targetHex){
+  return Math.max(0.3, Math.min(1.3, hexSat(targetHex) / 0.75));
 }
 
 export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
@@ -177,6 +199,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   // picking the photo with idx%3 too would always land on the same photo
   // whenever a sedan is chosen — use a different stride to decorrelate them.
   const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[Math.floor(idx / 3) % SEDAN_PHOTOS.length];
+  const truckPhoto = TRUCK_PHOTOS[Math.floor(idx / 4) % TRUCK_PHOTOS.length];
 
   const defs = `
   <defs>
@@ -200,7 +223,14 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     </linearGradient>
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
     <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
-    <filter id="${gid}hue"><feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue)}"/></filter>
+    <filter id="${gid}hue">
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue)}"/>
+      <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+    </filter>
+    <filter id="${gid}hue2">
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, truckPhoto.hue)}"/>
+      <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+    </filter>
   </defs>`;
 
   /* Hero (classic photo car): tuned to classic.png's actual bumper edges
@@ -242,9 +272,12 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // paint color alone still distinguishes every unlocked skin.
     body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue)"/>${photoHeroExtra}`;
   } else if(len >= 3){
-    const variant = (idx * 7 + len) % 2;
+    const variant = (idx * 7 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
-    body = variant === 0 ? boxtruck(0, L, gid, extra, dark) : tanker(0, L, gid, extra, base);
+    body = variant === 0
+      ? `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none" filter="url(#${gid}hue2)"/>${cb ? decal(idx, L * 0.5, 50) : ''}`
+      : variant === 1 ? boxtruck(0, L, gid, extra, dark)
+      : tanker(0, L, gid, extra, base);
   } else {
     const variant = (idx * 5 + len) % 3;
     const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');
