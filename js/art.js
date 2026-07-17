@@ -196,7 +196,13 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
       <stop offset=".75" stop-color="#ffe9b8" stop-opacity=".1"/>
       <stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/>
     </linearGradient>
+    <linearGradient id="${gid}beam2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff6d8" stop-opacity=".85"/>
+      <stop offset=".35" stop-color="#ffe9b8" stop-opacity=".4"/>
+      <stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/>
+    </linearGradient>
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
   </defs>`;
 
   /* Hero (procedural sedan skins): headlight beam + glowing brake lights,
@@ -209,12 +215,23 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     <rect x="6.5" y="23" width="5" height="11" rx="2.4" fill="#ff4a3a"/>
     <rect x="6.5" y="66" width="5" height="11" rx="2.4" fill="#ff4a3a"/>` : '';
 
-  /* Hero (classic photo car): same idea, but tuned to classic.png's actual
-     bumper edges (front ~98% across, rear ~1.5%) and headlight height
-     (~16%/84% of the cell) — measured from the source art so the beam and
-     brake glow sit flush against the body with no visible gap. */
+  /* Hero (classic photo car): tuned to classic.png's actual bumper edges
+     (front ~98% across, rear ~1.5%) and headlight height (~16%/84% of the
+     cell) — measured from the source art. Two separate cones (one per
+     headlight) rather than one merged trapezoid, each blurred so the edge
+     reads as light falloff instead of a flat polygon. A tight bright core
+     sits right at each lens as the visible "source" the cones grow from.
+     (mix-blend-mode:screen was tried for a true additive glow, but at this
+     SVG's overflow:visible boundary it produced a visible seam where the
+     beam crosses the piece's own viewBox — plain opaque-fading-to-transparent
+     reads bright enough against the dark board without that artifact.) */
   const photoHeroExtra = (isHero && !skin) ? `
-    <path d="M ${L - 6} 14 L ${L + 200} 2 L ${L + 200} 98 L ${L - 6} 86 Z" fill="url(#${gid}beam)"/>
+    <path d="M ${L - 8} 12 L ${L + 185} -8 L ${L + 185} 46 L ${L - 8} 20 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
+    <path d="M ${L - 8} 88 L ${L + 185} 108 L ${L + 185} 54 L ${L - 8} 80 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
+    <ellipse cx="${L - 2}" cy="16" rx="13" ry="10" fill="#fff3c2" opacity=".6" filter="url(#${gid}bblur)"/>
+    <ellipse cx="${L - 2}" cy="84" rx="13" ry="10" fill="#fff3c2" opacity=".6" filter="url(#${gid}bblur)"/>
+    <circle cx="${L - 3}" cy="16" r="3.2" fill="#fffbe8"/>
+    <circle cx="${L - 3}" cy="84" r="3.2" fill="#fffbe8"/>
     <ellipse cx="5" cy="16" rx="6" ry="9" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
     <ellipse cx="5" cy="84" rx="6" ry="9" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
     <ellipse cx="3" cy="50" rx="6" ry="32" fill="#ff3b2e" opacity=".26" filter="url(#${soft})"/>` : '';
