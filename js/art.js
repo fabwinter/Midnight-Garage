@@ -20,16 +20,18 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    just targetHue - sourceHue. Traffic pieces cycle through all of them for
    variety; Garage skins always use index 0, whose beam/glow geometry
    (photoHeroExtra below) is tuned to that specific photo's edges. */
+// traffic-sedan-2 has a soft shadow fringe baked into its cutout (visible as
+// speckle against the dark board) and no clean re-shoot has replaced it yet,
+// so it's left out of rotation rather than shipping a visibly dirty edge.
 const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-1.png', hue: 14 },
-  { img: 'assets/cars/traffic-sedan-2.png', hue: 12 },
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },
 ];
 
 /* Same idea as SEDAN_PHOTOS but for len-3 pieces (box truck / tanker slot). */
 const TRUCK_PHOTOS = [
-  { img: 'assets/cars/traffic-truck-1.png', hue: 156 },
-  { img: 'assets/cars/traffic-truck-2.png', hue: 37 },
+  { img: 'assets/cars/traffic-truck-1.png', hue: 157 },
+  { img: 'assets/cars/traffic-truck-2.png', hue: 41 },
 ];
 
 function hexHue(hex){
