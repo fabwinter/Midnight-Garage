@@ -43,12 +43,18 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    front at the RIGHT end, scaled to 97% of the canvas length with the car's
    true aspect ratio preserved (boxy vehicles cap at 97% height instead), and
    centered. No cutout is stretched to fill the box, so cars keep consistent
-   relative proportions on the board. */
+   relative proportions on the board.
+
+   The generic hatchback body (sedan-13/21/22/24/25 and 26-34) is shot
+   as real photos in ~13 factory colors including taxi and police liveries,
+   so it's fixed-livery across the board rather than hue-rotated — hueRotate
+   was shifting each photo's own baked taillight red along with the body
+   paint, which read as a lighting bug (green/purple taillights) rather than
+   "recolored car". Real photos any time they exist beats simulating them. */
 const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar (skin body)
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
   { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
-  { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },     // Biarritz blue sedan
   // white paint + gray stripe and matte olive-drab are both near-desaturated
   // in the source photo — hueRotate can't manufacture chroma that isn't
   // there, so these stay fixed like the other branded/utility liveries.
@@ -62,10 +68,21 @@ const SEDAN_PHOTOS = [
   // board — same "doesn't belong in rotation" call as the shadowed Countach.
   { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
-  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // plain white sedan
+  // generic hatchback body, all real-photo colors (see note above):
+  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // white
   { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple + yellow stripes
+  { img: 'assets/cars/traffic-sedan-22.png', fixed: true },  // Biarritz blue
   { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
   { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
+  { img: 'assets/cars/traffic-sedan-26.png', fixed: true },  // silver
+  { img: 'assets/cars/traffic-sedan-27.png', fixed: true },  // dark green
+  { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
+  { img: 'assets/cars/traffic-sedan-29.png', fixed: true },  // gunmetal gray
+  { img: 'assets/cars/traffic-sedan-30.png', fixed: true },  // teal
+  { img: 'assets/cars/traffic-sedan-31.png', fixed: true },  // pink
+  { img: 'assets/cars/traffic-sedan-32.png', fixed: true },  // gold
+  { img: 'assets/cars/traffic-sedan-33.png', fixed: true },  // orange
+  { img: 'assets/cars/traffic-sedan-34.png', fixed: true },  // brown
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
