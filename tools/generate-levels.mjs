@@ -69,7 +69,15 @@ const PER_CHAPTER = 50;
    (9–12 / 13–16 / 17–20 / 22–90-nominally-but-36-actual): every chapter's
    floor moves up, and Gridlock's floor moves from 22 to 23 with a MUCH
    better-populated 23–40 range backing it, instead of an unreachable
-   "maxM: 90" that nothing ever actually filled. */
+   "maxM: 90" that nothing ever actually filled.
+
+   Gridlock's 40 here is still this generator's own honest ceiling — a
+   from-scratch regen produces exactly that. The shipped game reaches
+   further: tools/add-fogleman-levels.mjs runs afterward and splices in
+   par 41–60 boards imported from Michael Fogleman's exhaustively-
+   enumerated database (michaelfogleman.com/rush), raising Gridlock's
+   *declared* maxM to 60 in the checked-in js/levels.data.js. Same
+   after-the-fact-splice shape as add-hitch-levels.mjs for Neon District. */
 const BANDS = [
   { name: 'Night Shift',    accent: '#ffb454', minM: 10, maxM: 14 },
   { name: 'Neon District',  accent: '#4fd2f0', minM: 15, maxM: 18 },
