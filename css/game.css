@@ -658,6 +658,9 @@ input[type=range]::-moz-range-thumb{
 .sb-actions{display:flex;gap:8px;margin:8px 0}
 .sb-actions .btn{flex:1}
 .sb-save-row{display:flex;gap:8px;margin-bottom:10px}
+.sb-saved-header{display:flex;align-items:center;justify-content:space-between;margin:2px 0 8px}
+.sb-saved-lab{font-family:var(--disp);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+#sbExportAllBtn{padding:6px 12px;font-size:11px}
 .sb-saved{display:flex;flex-direction:column;gap:6px}
 .sb-saved-row{
   display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:11px;
@@ -666,3 +669,5 @@ input[type=range]::-moz-range-thumb{
 .sb-saved-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .sb-saved-row .par{font-size:11px;color:var(--muted)}
 .sb-saved-row .btn{padding:6px 10px;font-size:11px}
+.sb-export-note{margin:10px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+.sb-export-note code{background:#0d1119;border-radius:5px;padding:1px 5px;font-size:10px}

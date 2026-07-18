@@ -1924,6 +1924,37 @@ async function sbPersistSaved(){
   await store(SB_KEY, sbSaved);
 }
 
+/* Exported shape matches exactly what tools/promote-sandbox-levels.mjs and
+   the LEVELS array both expect: {name, m, p, w?}. m===99 means "not yet
+   verified solvable" (sbLevelObj()'s placeholder) — the promote script
+   recomputes par itself regardless, so an unsolved-looking export is still
+   safe to hand off, just not guaranteed to go anywhere. */
+function sbLevelExportObj(lv){
+  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}) };
+}
+
+/* Plain clipboard copy, deliberately skipping shareText()'s navigator.share
+   path — this is a dev/technical handoff (paste into a script or chat), not
+   social sharing, so popping the OS share sheet would be the wrong UI. */
+async function copyToClipboard(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(_){}
+    ta.remove();
+    return ok;
+  }
+}
+
+async function sbExportOne(lv){
+  const ok = await copyToClipboard(JSON.stringify(sbLevelExportObj(lv), null, 2));
+  toast(ok ? t('toast.copied') : t('toast.copyfail'));
+}
+
 function sbRenderSaved(){
   const list = $('sbSavedList');
   list.innerHTML = '';
@@ -1944,6 +1975,8 @@ function sbRenderSaved(){
       $('sbName').value = lv.name;
       sbRender();
     });
+    const exp = document.createElement('button'); exp.className = 'btn'; exp.textContent = 'Export';
+    exp.addEventListener('click', async () => { sfx('ui'); await sbExportOne(lv); });
     const del = document.createElement('button'); del.className = 'btn'; del.textContent = '✕';
     del.addEventListener('click', async () => {
       sfx('ui');
@@ -1951,7 +1984,7 @@ function sbRenderSaved(){
       await sbPersistSaved();
       sbRenderSaved();
     });
-    row.append(nm, par, play, edit, del);
+    row.append(nm, par, play, edit, exp, del);
     list.appendChild(row);
   });
 }
@@ -1981,6 +2014,12 @@ function wireSandbox(){
     sbRenderSaved();
     sfx('ui');
     toast(`Saved “${name}”` + (lv.m === 99 ? ' (not solvable yet)' : ` · par ${lv.m}`));
+  });
+  $('sbExportAllBtn').addEventListener('click', async () => {
+    sfx('ui');
+    if(!sbSaved.length){ toast('No saved levels to export'); return; }
+    const ok = await copyToClipboard(JSON.stringify(sbSaved.map(sbLevelExportObj), null, 2));
+    toast(ok ? `Copied ${sbSaved.length} level(s)` : t('toast.copyfail'));
   });
   sbAttachBoard();
 }

@@ -279,7 +279,14 @@
       <input id="sbName" type="text" placeholder="Level name" autocomplete="off">
       <button class="btn" id="sbSaveBtn" type="button">Save</button>
     </div>
+    <div class="sb-saved-header">
+      <span class="sb-saved-lab">Saved levels</span>
+      <button class="btn" id="sbExportAllBtn" type="button">Export all</button>
+    </div>
     <div class="sb-saved" id="sbSavedList"></div>
+    <p class="sb-export-note">Export copies level JSON to your clipboard.
+      Hand it to <code>tools/promote-sandbox-levels.mjs</code> (or paste it
+      into chat) to verify and add it to the shipped campaign.</p>
   </div>
 </div>
 
