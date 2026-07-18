@@ -57,6 +57,7 @@ let save = {
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
+  hitchSeen: false,
   admin: false,
 };
 let memOnly = false;
@@ -107,15 +108,28 @@ function drawGrid(){
 }
 
 function grid(exclude = -1){
+  const ex = Array.isArray(exclude) ? new Set(exclude) : new Set([exclude]);
   const g = Array.from({ length: N }, () => Array(N).fill(-1));
   for(const [wr, wc] of walls) g[wr][wc] = -2;   // roadworks: never empty
   pieces.forEach((p, i) => {
-    if(i === exclude) return;
+    if(ex.has(i)) return;
     for(let k = 0; k < p.len; k++){
       g[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] = i;
     }
   });
   return g;
+}
+function rangeForWithGrid(i, g){
+  const p = pieces[i];
+  let lo, hi;
+  if(p.dir === 'h'){
+    lo = p.c; while(lo > 0 && g[p.r][lo - 1] === -1) lo--;
+    hi = p.c; while(hi + p.len < N && g[p.r][hi + p.len] === -1) hi++;
+  } else {
+    lo = p.r; while(lo > 0 && g[lo - 1][p.c] === -1) lo--;
+    hi = p.r; while(hi + p.len < N && g[hi + p.len][p.c] === -1) hi++;
+  }
+  return [lo, hi];
 }
 
 /* Weight (plan 0.5): trucks settle slower and heavier than cars. */
@@ -234,10 +248,10 @@ function updatePieceAria(){
   board.querySelectorAll('.piece').forEach(el => {
     const i = +el.dataset.idx, p = pieces[i];
     if(!p) return;
-    const isTrailer = hitches.some(h => h.trailer === i);
+    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
     el.setAttribute('aria-label',
       (i === 0 ? 'Red car — escape this one'
-        : isTrailer ? `Vehicle ${i}, trailer — moves only with its tow vehicle`
+        : isInertTrailer ? `Vehicle ${i}, trailer — moves only with its tow vehicle`
         : `Vehicle ${i}, ${p.len === 3 ? 'truck' : 'car'}`) +
       `, row ${p.r + 1}, column ${p.c + 1}, ` +
       (p.dir === 'h' ? 'moves left and right' : 'moves up and down'));
@@ -260,7 +274,7 @@ function renderPositions(animate = true){
   });
   board.querySelectorAll('.hitch').forEach(el => {
     const hi = +el.dataset.hi, h = hitches[hi];
-    if(!h || decoupledHitches.has(hi)) return;  // Skip decoupled hitches
+    if(!h || decoupledHitches.has(hi)){ el.innerHTML = ''; return; }   // decoupled: no connector line
     const tow = pieces[h.tow], trailer = pieces[h.trailer];
     if(!tow || !trailer) return;
     // Center of tow piece
@@ -274,17 +288,32 @@ function renderPositions(animate = true){
 }
 
 /* ================== DRAG + FLICK ================== */
+/* For a coupled tow, dragging also drags its trailer by the identical
+   delta (see the auto-couple block in finish()/keydown below) — so the
+   draggable range has to be the INTERSECTION of what the tow's own lane
+   allows and what the trailer's own lane allows, not just the tow's.
+   Without this a tow whose own lane is clear could be dragged past a
+   point where its trailer (elsewhere on the board, moving in lockstep)
+   would collide with something — the solver's legalMoves rejects that
+   compound move, so the board has to match or a "verified" par could be
+   undercut by a drag the solver never considered legal. */
 function rangeFor(i){
-  const p = pieces[i], g = grid(i);
-  let lo, hi;
-  if(p.dir === 'h'){
-    lo = p.c; while(lo > 0 && g[p.r][lo - 1] === -1) lo--;
-    hi = p.c; while(hi + p.len < N && g[p.r][hi + p.len] === -1) hi++;
-  } else {
-    lo = p.r; while(lo > 0 && g[lo - 1][p.c] === -1) lo--;
-    hi = p.r; while(hi + p.len < N && g[hi + p.len][p.c] === -1) hi++;
+  const hIdx = hitches.findIndex((h, hi) => h.tow === i && !decoupledHitches.has(hi));
+  if(hIdx !== -1){
+    const trailerI = hitches[hIdx].trailer;
+    const tow = pieces[i], trailer = pieces[trailerI];
+    if(trailer && trailer.dir === tow.dir){
+      const g2 = grid([i, trailerI]);
+      const [towLo, towHi] = rangeForWithGrid(i, g2);
+      const [trLo, trHi] = rangeForWithGrid(trailerI, g2);
+      const towCur = tow.dir === 'h' ? tow.c : tow.r;
+      const trCur = trailer.dir === 'h' ? trailer.c : trailer.r;
+      const deltaLo = Math.max(towLo - towCur, trLo - trCur);
+      const deltaHi = Math.min(towHi - towCur, trHi - trCur);
+      return [towCur + deltaLo, towCur + deltaHi];
+    }
   }
-  return [lo, hi];
+  return rangeForWithGrid(i, grid(i));
 }
 
 function attachDrag(el, i){
@@ -301,6 +330,7 @@ function attachDrag(el, i){
       if(decoupleTow(i)){
         renderPositions(true);
         updateHud();
+        updatePieceAria();
       }
       lastTapT = 0;
       return;
@@ -774,6 +804,11 @@ function startBoard(){
   updateCoach();
   scheduleHand();
   stopAttemptTrack(); // reset any track from the previous attempt; this attempt's track (if heist/pursuit) starts on first move
+  if(hitches.length && !save.hitchSeen){
+    save.hitchSeen = true;
+    persist();
+    setTimeout(() => toast(t('toast.hitch')), 700);
+  }
 }
 
 function undo(){
@@ -835,6 +870,25 @@ function showHint(){
   hintsUsed++;
   sfx('ui');
   track('hint_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+
+  if(mv.decouple !== undefined){
+    // No destination to point at — the optimal move is to unhitch this
+    // tow (double-tap it), not slide it anywhere.
+    const el = board.querySelector(`.piece[data-idx="${mv.decouple}"]`);
+    el.classList.add('hint-glow');
+    const p = pieces[mv.decouple];
+    const badge = document.createElement('div');
+    badge.className = 'hint-arrow hint-decouple';
+    badge.textContent = '⛓️‍💥';
+    badge.style.left = p.c * CELL + 'px';
+    badge.style.top = p.r * CELL + 'px';
+    badge.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
+    badge.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
+    board.appendChild(badge);
+    hintTimer = setTimeout(clearHint, 3200);
+    return;
+  }
+
   const el = board.querySelector(`.piece[data-idx="${mv.idx}"]`);
   el.classList.add('hint-glow');
   const p = pieces[mv.idx];
@@ -877,7 +931,7 @@ function scheduleHand(){
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
   const mv = firstOptimalMove(pieces, { walls, gates, hitches });
-  if(!mv) return;
+  if(!mv || mv.decouple !== undefined) return;   // hitches never appear in the intro ramp
   const p = pieces[mv.idx];
   const hand = document.createElement('div');
   hand.className = 'hand';
