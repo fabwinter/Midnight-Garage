@@ -37,6 +37,10 @@ planned:
   tracked per-attempt.
 - **Rewards:** extend `js/collection.js` with bounty-gated cars (rarity
   tiers matched to board par). Covenant intact: skill-gated, cosmetic-only.
+  This is where NEW CAR ART goes (see N3): 6–10 new collectible hero cars,
+  not more traffic variety — 22 sedans/8 trucks already keeps ~12-piece
+  boards repeat-free, so another generic sedan buys nothing, but rare marks
+  are what the garage's empty bays advertise.
 - **Surfaces:** "Tonight's Mark" slot on the start screen; bounty state in
   `save.bounties`; `bounty_complete` analytics event; i18n ×10.
 - **Verify:** extend `tools/verify-levels.mjs` to solve the whole bounty
@@ -54,15 +58,72 @@ boards with their par, best, and stars. Cheap because it reuses the level
 list UI and the pool is pre-verified. Also the natural landing place for
 levels promoted from the sandbox via `tools/promote-sandbox-levels.mjs`.
 
-## N3 — Small polish with no dependencies
+## N3 — Presentation pass (art, audio, animation)
 
-- **Solution replay** (v1.1 item): the solver already returns the optimal
-  path; play it back on the win sheet / after skip. Small `game.js` work.
+Audit findings (2026-07) that shape this: `assets/audio` is **49MB of the
+app's 61MB** because two menu tracks ship as uncompressed WAV
+(`velvet-glove.wav` 30MB, `clean-getaway.wav` 16MB); `js/audio.js` points
+Pursuit mode at a placeholder `assets/audio/pursuit.mp3` that was never
+added, so Pursuit has no music; all SFX are synthesized WebAudio (zero
+download weight — a strength to keep, not replace).
+
+### N3a — Asset hygiene *(no design input needed, do first)*
+
+- **Compress the WAVs** to AAC/M4A (~2–3MB total for both, inaudible
+  difference for ambient loops). Biggest single win for app size; a
+  store-submission prerequisite in practice.
+- **Pursuit track:** source/drop in the missing `pursuit.mp3` (or point
+  the constant at an existing track until one exists).
+- **SFX gap-fill** in the existing synth system: hitch couple/decouple,
+  gate activation, garage car-reveal fanfare, hint reveal.
+
+### N3b — Adaptive Alarm music *(v1.5 item, pulled forward)*
+
+Two or three intensity stems for Alarm/Pursuit that layer in as the move
+budget shrinks — the per-attempt audio lifecycle (start on first move,
+stop on win/busted) already exists, so this is stem playback + a
+crossfade, not new infrastructure. Bigger felt upgrade than adding more
+static tracks.
+
+### N3c — Collection car art *(feeds N1)*
+
+6–10 new collectible hero cars with rarity tiers for bounty rewards.
+Traffic art stays as-is (see N1). Wall-tile visual variety (dumpster,
+jersey barrier, cones alongside the hazard-stripe tile) rides along as
+cheap flavor whenever this batch happens.
+
+### N3d — Chapter environments *(one chapter first, then judge)*
+
+The chapter names are ready-made locations (Night Shift / Neon District /
+Harbor Freight / Gridlock) and today's board is CSS asphalt gradients with
+an accent swap, so real environments are a big visible upgrade. Rules:
+
+- **Readability is king.** Environments live *around* the board (margins,
+  skyline, dock cranes) — the play surface stays dark and quiet, at most a
+  heavily-darkened texture. Must not fight piece recognition or the
+  colorblind roof decals; contrast-check before shipping.
+- **Ship Harbor Freight first** (strongest identity), evaluate, then roll
+  the pattern to the other three. v1.5's planned rain environment slots in
+  here.
+- **Car-matched sets:** HEIST-PLAN §3 already sanctions matched board
+  palettes per hero skin — a rare car unlocking its matching environment
+  is a natural *fixed-contents* cosmetic pack (no PEGI trigger).
+
+### N3e — Reward-loop animations
+
+Spend animation effort on the reward loop, not ambience: garage reveal
+moment, hero drive-out on win, headlight sweep at level start, and
+**solution replay** (v1.1 item — the solver already returns the optimal
+path; play it back on the win sheet / after skip). All respecting the
+existing reduced-motion handling.
+
+## N4 — Small polish with no dependencies
+
 - **P2 leftovers audit** from [SHIP-POLISH-PLAN.md](SHIP-POLISH-PLAN.md):
   alarm audio/visual details, accessibility pass on newer surfaces
   (garage, sandbox, bounties once N1 lands), dead-wiring sweep.
 
-## N4 — Blocked here, needs your side
+## N5 — Blocked here, needs your side
 
 Can't be done from this cloud environment; unchanged from
 [PLAN-STATUS.md](PLAN-STATUS.md)'s 🔶 items:
@@ -76,7 +137,9 @@ Can't be done from this cloud environment; unchanged from
 
 ---
 
-**Recommended order: N1 → N2 → N3**, with N4 whenever you're ready on the
-native/business side. N1 first because it's the last heist phase, the
-strongest retention lever, and the Fogleman surplus just removed its only
-expensive part.
+**Recommended order: N3a (quick, unblocks store size) → N1 (with N3c art)
+→ N2 → N3b/d/e → N4**, with N5 whenever you're ready on the
+native/business side. N1 stays the headline: it's the last heist phase,
+the strongest retention lever, and the Fogleman surplus just removed its
+only expensive part — N3a just slips in front because it's an hour of
+work that fixes a 49MB problem.
