@@ -4,8 +4,151 @@
 
    All bodies are drawn horizontally with the FRONT at the right end, in
    100-unit cell coordinates, then rotated as a group for vertical pieces.
-   Body type varies by piece index so a full board reads as traffic, not
-   clones: sedans, hatchbacks, pickups (len 2); box trucks, tankers (len 3). */
+   Every traffic piece is a photoreal car/truck (see SEDAN_PHOTOS and
+   TRUCK_PHOTOS below) cycled by piece index so a full board reads as
+   varied traffic, not clones. There is no procedural fallback body
+   anymore — the photo library is the only source of vehicle art. */
+
+/* Classic hero car: a top-down photoreal render, front at the right end
+   (matches the procedural convention above) so it drops in with no flip.
+   Only the default/unowned-skin hero uses this — Garage skins use the
+   photoreal traffic sedan recolored to the skin's paint (see vehicleSVG). */
+const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
+
+/* Photoreal traffic sedans: same idea as the hero photo, but recolored per
+   piece at render time via feColorMatrix hueRotate rather than pre-baking
+   one image per palette color. Each entry's hue is its source paint's own
+   hue (measured from the art), so the rotation for any target color is
+   just targetHue - sourceHue. Traffic pieces cycle through all of them for
+   variety; Garage skins always use index 0, whose beam/glow geometry
+   (photoHeroExtra below) is tuned to that specific photo's edges.
+
+   `fixed: true` opts a photo out of recoloring entirely — for liveries with
+   their own branding (racing stripes, a specific fleet color) hueRotate just
+   shifts the whole photo to an arbitrary hue instead of producing something
+   that reads as "that car, but blue"; better to show it in its real color on
+   every piece than a randomly-tinted stripe. */
+// traffic-sedan-2 has a soft shadow fringe baked into its cutout (visible as
+// speckle against the dark board) and no clean re-shoot has replaced it yet,
+// so it's left out of rotation rather than shipping a visibly dirty edge.
+/* One entry per real-world car model — no duplicate models. When the same
+   car existed in several source colors, one recolorable cutout was kept and
+   the rest deleted; the near-dupes (Countach, yellow-striped Ferrari, navy
+   GT, striped silver GT, GT3 RS) were pruned in the July '26 pass, and the
+   Countach itself went next — its only cutout had a baked grey shadow strip
+   that survived recoloring. Index 0 is the Garage-skin body — keep it a
+   clean recolorable cutout.
+
+   Every canvas here is normalized the same way: content cropped to the car,
+   front at the RIGHT end, scaled to 97% of the canvas length with the car's
+   true aspect ratio preserved (boxy vehicles cap at 97% height instead), and
+   centered. No cutout is stretched to fill the box, so cars keep consistent
+   relative proportions on the board.
+
+   The generic hatchback body (sedan-13/21/22/24/25 and 26-34) is shot
+   as real photos in ~13 factory colors including taxi and police liveries,
+   so it's fixed-livery across the board rather than hue-rotated — hueRotate
+   was shifting each photo's own baked taillight red along with the body
+   paint, which read as a lighting bug (green/purple taillights) rather than
+   "recolored car". Real photos any time they exist beats simulating them. */
+const SEDAN_PHOTOS = [
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar (skin body)
+  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
+  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
+  // white paint + gray stripe and matte olive-drab are both near-desaturated
+  // in the source photo — hueRotate can't manufacture chroma that isn't
+  // there, so these stay fixed like the other branded/utility liveries.
+  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },   // silver + yellow stripe GT
+  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },   // yellow Ferrari, tricolor stripe
+  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },   // white classic 911, black stripe
+  // the olive G-wagon (sedan-9) was dropped: its source photo is stubby
+  // enough (~1.7:1) that fitting it to the shared 97%-of-length norm every
+  // other car uses would overflow the cell's height, and shrinking it to
+  // fit instead left it visibly shorter than every other piece on the
+  // board — same "doesn't belong in rotation" call as the shadowed Countach.
+  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
+  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
+  // generic hatchback body, all real-photo colors (see note above). Every
+  // entry here shares the exact same fitted footprint (776x343 within the
+  // 800x400 canvas) rather than each being scaled from its own measured
+  // bbox — sedan-13's source photo turns out to be from a different shoot
+  // than the other twelve (they share identical raw dimensions; it doesn't)
+  // and independently measured ~12% "fatter", which is what actually caused
+  // the "colored cars are narrower than the white one" bug: it wasn't the
+  // colored ones that were wrong, sedan-13 was oversized. A second same-body
+  // photo (traffic-sedan-26, meant to be a silver variant) turned out on
+  // inspection to be white too — dropped as a duplicate color rather than
+  // kept alongside sedan-13.
+  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // white
+  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple + yellow stripes
+  { img: 'assets/cars/traffic-sedan-22.png', fixed: true },  // Biarritz blue
+  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
+  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
+  { img: 'assets/cars/traffic-sedan-27.png', fixed: true },  // dark green
+  { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
+  { img: 'assets/cars/traffic-sedan-29.png', fixed: true },  // gunmetal gray
+  { img: 'assets/cars/traffic-sedan-30.png', fixed: true },  // teal
+  { img: 'assets/cars/traffic-sedan-31.png', fixed: true },  // pink
+  { img: 'assets/cars/traffic-sedan-32.png', fixed: true },  // gold
+  { img: 'assets/cars/traffic-sedan-33.png', fixed: true },  // orange
+  { img: 'assets/cars/traffic-sedan-34.png', fixed: true },  // brown
+];
+
+/* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
+   are chosen by gameplay role (hitch trailer), never by index accident. */
+const TRUCK_PHOTOS = [
+  { img: 'assets/cars/traffic-truck-1.png', fixed: true },   // garbage truck
+  // school bus was hue-rotatable but its roof is one large, almost
+  // unshaded panel — hueRotate turns that into a flat, featureless block
+  // of whatever the target color is (worst on a piece landing on a purple
+  // palette slot), and a non-yellow school bus reads wrong anyway.
+  { img: 'assets/cars/traffic-truck-2.png', fixed: true },   // school bus
+  { img: 'assets/cars/traffic-truck-3.png', fixed: true },   // tanker
+  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },      // tow truck
+  { img: 'assets/cars/traffic-truck-5.png', fixed: true },   // chrome tanker
+];
+
+/* Vehicles that cannot move by themselves: only pieces a level marks as a
+   hitch trailer render with these (Airstream caravan, wood-deck utility
+   trailer, boat — natural material colors, none recolor). */
+const TRAILER_PHOTOS = [
+  { img: 'assets/cars/traffic-truck-6.png', fixed: true },
+  { img: 'assets/cars/traffic-truck-7.png', fixed: true },
+  { img: 'assets/cars/traffic-truck-8.png', fixed: true },
+];
+
+function hexHue(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  if(d === 0) return 0;
+  let h;
+  if(max === r) h = ((g - b) / d) % 6;
+  else if(max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h *= 60;
+  return h < 0 ? h + 360 : h;
+}
+
+function hueRotationFor(targetHex, sourceHue){
+  return ((hexHue(targetHex) - sourceHue) % 360 + 360) % 360;
+}
+
+function hexSat(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+/* hueRotate alone can't reproduce a muted/dark target like the
+   midnight-phantom skin from a vividly-painted source photo — it only
+   rotates hue, so a saturated photo stays saturated at any angle. Scale
+   saturation toward the target's own (relative to the photos' typical
+   ~.75 paint saturation) so low-chroma skins don't come out neon. */
+function satScaleFor(targetHex){
+  return Math.max(0.3, Math.min(1.3, hexSat(targetHex) / 0.75));
+}
 
 export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#ff4d5e','#b3111f','#41151d'],
@@ -24,13 +167,6 @@ export const PALETTE = [ // [base, dark, glass-tint] — 0 reserved for hero red
   ['#d98cff','#9b45d6','#2f1440'],
 ];
 
-export function lighten(hex, amt){
-  const n = parseInt(hex.slice(1), 16);
-  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  r = Math.round(r + (255 - r) * amt); g = Math.round(g + (255 - g) * amt); b = Math.round(b + (255 - b) * amt);
-  return `rgb(${r},${g},${b})`;
-}
-
 const H = 100;
 
 /* Roof decals for color-blind mode — one distinct pattern per paint color,
@@ -48,174 +184,98 @@ function decal(idx, cx, cy){
   }
 }
 
-/* wheels sit OUTSIDE the body silhouette — the single biggest "real car" cue */
-const wheels = (...xs) => xs.map(x => `
-  <rect x="${x}" y="2" width="30" height="14" rx="6" fill="#0c0f15"/>
-  <rect x="${x + 5}" y="5" width="20" height="4" rx="2" fill="#2a3140"/>
-  <rect x="${x}" y="84" width="30" height="14" rx="6" fill="#0c0f15"/>
-  <rect x="${x + 5}" y="91" width="20" height="4" rx="2" fill="#2a3140"/>`).join('');
-
-const headlights = (L, soft) => `
-  <circle cx="${L - 13}" cy="27" r="4.6" fill="#fff6d8"/>
-  <circle cx="${L - 13}" cy="73" r="4.6" fill="#fff6d8"/>
-  <circle cx="${L - 13}" cy="27" r="9" fill="#fff3c2" opacity=".35" filter="url(#${soft})"/>
-  <circle cx="${L - 13}" cy="73" r="9" fill="#fff3c2" opacity=".35" filter="url(#${soft})"/>`;
-
-const taillights = () => `
-  <rect x="7" y="23" width="4.5" height="11" rx="2.2" fill="#ff6a4d"/>
-  <rect x="7" y="66" width="4.5" height="11" rx="2.2" fill="#ff6a4d"/>`;
-
-function sedan(g, L, gid, extra){
-  return `
-  ${wheels(24, L - 56)}
-  <rect x="8" y="11" width="${L - 16}" height="78" rx="27" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="14" width="${L - 24}" height="13" rx="9" fill="#fff" opacity=".2"/>
-  <path d="M ${L * 0.30} 16 L ${L * 0.40} 26 L ${L * 0.40} 74 L ${L * 0.30} 84 Z" fill="url(#${gid}g)"/>
-  <path d="M ${L * 0.73} 18 L ${L * 0.64} 27 L ${L * 0.64} 73 L ${L * 0.73} 82 Z" fill="url(#${gid}g)" opacity=".92"/>
-  <rect x="${L * 0.42}" y="20" width="${L * 0.20}" height="60" rx="11" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.42}" y="23" width="${L * 0.20}" height="9" rx="4.5" fill="#fff" opacity=".33"/>
-  <line x1="${L * 0.42 + 6}" y1="50" x2="${L * 0.62 - 6}" y2="50" stroke="rgba(0,0,0,.18)" stroke-width="2"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function hatchback(g, L, gid, extra){
-  return `
-  ${wheels(26, L - 58)}
-  <rect x="8" y="12" width="${L - 16}" height="76" rx="30" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="15" width="${L - 24}" height="12" rx="8" fill="#fff" opacity=".2"/>
-  <path d="M ${L * 0.16} 18 L ${L * 0.30} 27 L ${L * 0.30} 73 L ${L * 0.16} 82 Z" fill="url(#${gid}g)"/>
-  <path d="M ${L * 0.68} 19 L ${L * 0.58} 28 L ${L * 0.58} 72 L ${L * 0.68} 81 Z" fill="url(#${gid}g)" opacity=".92"/>
-  <rect x="${L * 0.32}" y="21" width="${L * 0.24}" height="58" rx="12" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.32}" y="24" width="${L * 0.24}" height="8" rx="4" fill="#fff" opacity=".3"/>
-  <line x1="${L * 0.34}" y1="26" x2="${L * 0.54}" y2="26" stroke="rgba(0,0,0,.22)" stroke-width="2.4"/>
-  <line x1="${L * 0.34}" y1="74" x2="${L * 0.54}" y2="74" stroke="rgba(0,0,0,.22)" stroke-width="2.4"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function pickup(g, L, gid, extra, dark){
-  return `
-  ${wheels(22, L - 56)}
-  <rect x="8" y="12" width="${L - 16}" height="76" rx="16" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="15" width="${L - 24}" height="12" rx="8" fill="#fff" opacity=".2"/>
-  <!-- open bed -->
-  <rect x="16" y="20" width="${L * 0.42}" height="60" rx="7" fill="rgba(0,0,0,.42)" stroke="${dark}" stroke-width="1.6"/>
-  <line x1="${16 + L * 0.14}" y1="22" x2="${16 + L * 0.14}" y2="78" stroke="${dark}" stroke-width="1.8" opacity=".8"/>
-  <line x1="${16 + L * 0.28}" y1="22" x2="${16 + L * 0.28}" y2="78" stroke="${dark}" stroke-width="1.8" opacity=".8"/>
-  <rect x="${20 + L * 0.05}" y="32" width="${L * 0.15}" height="36" rx="4" fill="${dark}" opacity=".9"/>
-  <!-- cab -->
-  <path d="M ${L * 0.70} 17 L ${L * 0.60} 26 L ${L * 0.60} 74 L ${L * 0.70} 83 Z" fill="url(#${gid}g)"/>
-  <rect x="${L * 0.72}" y="19" width="${L * 0.16}" height="62" rx="10" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.72}" y="22" width="${L * 0.16}" height="8" rx="4" fill="#fff" opacity=".3"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function boxtruck(g, L, gid, extra, dark){
-  return `
-  ${wheels(22, L * 0.40, L - 54)}
-  <!-- cargo box -->
-  <rect x="8" y="12" width="${L * 0.70}" height="76" rx="10" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="12" y="15" width="${L * 0.70 - 8}" height="11" rx="6" fill="#fff" opacity=".17"/>
-  ${[0.14, 0.28, 0.42, 0.56].map(f => `<line x1="${8 + L * f}" y1="17" x2="${8 + L * f}" y2="83" stroke="rgba(0,0,0,.24)" stroke-width="2"/>`).join('')}
-  <rect x="12" y="24" width="7" height="52" rx="3" fill="rgba(0,0,0,.3)"/>
-  <!-- cab -->
-  <rect x="${L * 0.72}" y="9" width="${L * 0.25}" height="82" rx="14" fill="url(#${gid}b)" stroke="rgba(0,0,0,.45)" stroke-width="1.6"/>
-  <path d="M ${L * 0.84} 17 L ${L * 0.77} 26 L ${L * 0.77} 74 L ${L * 0.84} 83 Z" fill="url(#${gid}g)"/>
-  <rect x="${L * 0.86}" y="21" width="${L * 0.08}" height="58" rx="8" fill="url(#${gid}r)"/>
-  <rect x="${L * 0.735}" y="12" width="${L * 0.225}" height="8" rx="4" fill="#fff" opacity=".22"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-function tanker(g, L, gid, extra, base){
-  return `
-  ${wheels(22, L * 0.40, L - 54)}
-  <!-- tank -->
-  <rect x="8" y="14" width="${L * 0.70}" height="72" rx="34" fill="url(#${gid}b)" stroke="rgba(0,0,0,.4)" stroke-width="1.6"/>
-  <rect x="14" y="18" width="${L * 0.70 - 12}" height="13" rx="7" fill="#fff" opacity=".25"/>
-  <circle cx="${8 + L * 0.35}" cy="50" r="13" fill="rgba(0,0,0,.45)" stroke="${lighten(base, .3)}" stroke-width="2"/>
-  <rect x="20" y="47" width="${L * 0.70 - 24}" height="5" rx="2.5" fill="rgba(0,0,0,.3)"/>
-  <!-- cab -->
-  <rect x="${L * 0.72}" y="9" width="${L * 0.25}" height="82" rx="14" fill="url(#${gid}b)" stroke="rgba(0,0,0,.45)" stroke-width="1.6"/>
-  <path d="M ${L * 0.84} 17 L ${L * 0.77} 26 L ${L * 0.77} 74 L ${L * 0.84} 83 Z" fill="url(#${gid}g)"/>
-  <rect x="${L * 0.86}" y="21" width="${L * 0.08}" height="58" rx="8" fill="url(#${gid}r)"/>
-  ${extra}
-  ${taillights()}`;
-}
-
-/* Collection car trim (H0): a cosmetic-only "beltline" flourish keyed to
-   the equipped car's tier. Deliberately grounded in real collector-car
-   cues (pinstripe, chrome, an engraved plaque) rather than a fantasy glow —
-   this is a skin, not a power-up, and it should read that way. */
-function trimSVG(trim, L, H){
-  if(!trim || trim === 'none') return '';
-  if(trim === 'chrome'){
-    return `<rect x="10" y="${H * 0.66}" width="${L - 20}" height="2.6" rx="1.3" fill="#e7edf5" opacity=".85"/>
-            <rect x="10" y="${H * 0.66}" width="${L - 20}" height="1" rx=".5" fill="#fff" opacity=".6"/>`;
-  }
-  // 'plaque': chrome beltline pinstripe plus a small engraved trunk plaque
-  return `<rect x="10" y="${H * 0.66}" width="${L - 20}" height="2.6" rx="1.3" fill="#e7edf5" opacity=".85"/>
-          <rect x="10" y="${H * 0.66}" width="${L - 20}" height="1" rx=".5" fill="#fff" opacity=".6"/>
-          <rect x="${L * 0.16}" y="${H * 0.40}" width="${L * 0.09}" height="${H * 0.13}" rx="2" fill="#e7edf5" opacity=".9" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
-          <line x1="${L * 0.175}" y1="${H * 0.44}" x2="${L * 0.24}" y2="${H * 0.44}" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>
-          <line x1="${L * 0.175}" y1="${H * 0.48}" x2="${L * 0.24}" y2="${H * 0.48}" stroke="rgba(0,0,0,.35)" stroke-width=".8"/>`;
-}
-
+/* opts.photoIdx — this piece's ordinal among pieces of the same class
+   (sedan / truck / trailer) in the level, so every piece in one level gets
+   a different photo. Falls back to the global piece index for callers that
+   don't pass it. opts.trailer — this piece is a hitch trailer: len-3 draws
+   from TRAILER_PHOTOS (caravan / utility trailer / boat); a len-2 trailer
+   is a broken-down car and renders desaturated + dimmed so "needs a tow"
+   reads at a glance. */
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
-  const [base, dark, glassTint] = skin ? [skin.base, skin.dark, skin.glass] : (isHero ? PALETTE[0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)]);
+  const base = skin ? skin.base : (isHero ? PALETTE[0][0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)][0]);
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
+  const photoIdx = opts.photoIdx ?? idx;
+  const isTrailer = !!opts.trailer && !isHero;
+  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[photoIdx % SEDAN_PHOTOS.length];
+  const truckPhoto = isTrailer
+    ? TRAILER_PHOTOS[photoIdx % TRAILER_PHOTOS.length]
+    : TRUCK_PHOTOS[photoIdx % TRUCK_PHOTOS.length];
+  const brokenDown = isTrailer && len < 3;
+  const hueAttr = brokenDown ? ` filter="url(#${gid}broke)"` : (sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`);
+  const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
 
   const defs = `
   <defs>
-    <linearGradient id="${gid}b" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(base, .3)}"/>
-      <stop offset=".45" stop-color="${base}"/>
-      <stop offset="1" stop-color="${dark}"/>
-    </linearGradient>
-    <linearGradient id="${gid}r" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${lighten(base, .48)}"/>
-      <stop offset="1" stop-color="${base}"/>
-    </linearGradient>
-    <linearGradient id="${gid}g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#b9d2ea"/>
-      <stop offset="1" stop-color="${glassTint}"/>
-    </linearGradient>
-    <linearGradient id="${gid}beam" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ffe9b8" stop-opacity=".4"/>
-      <stop offset=".75" stop-color="#ffe9b8" stop-opacity=".1"/>
+    <linearGradient id="${gid}beam2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff6d8" stop-opacity=".85"/>
+      <stop offset=".35" stop-color="#ffe9b8" stop-opacity=".4"/>
       <stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/>
     </linearGradient>
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
+    <filter id="${gid}hue">
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue || 0)}"/>
+      <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+    </filter>
+    <filter id="${gid}hue2">
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, truckPhoto.hue || 0)}"/>
+      <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+    </filter>
+    <filter id="${gid}broke">
+      <feColorMatrix type="saturate" values="0.18"/>
+      <feComponentTransfer>
+        <feFuncR type="linear" slope="0.72"/><feFuncG type="linear" slope="0.72"/><feFuncB type="linear" slope="0.72"/>
+      </feComponentTransfer>
+    </filter>
   </defs>`;
 
-  /* Hero: headlight beams reaching ~2 cells ahead + glowing brake lights.
-     The beam is part of the piece so it sweeps as the car slides. */
-  const heroExtra = isHero ? `
-    <path d="M ${L - 10} 24 L ${L + 205} 6 L ${L + 205} 94 L ${L - 10} 76 Z" fill="url(#${gid}beam)"/>
-    <rect x="4" y="21" width="9" height="14" rx="4" fill="#ff4a3a" opacity=".4" filter="url(#${soft})"/>
-    <rect x="4" y="65" width="9" height="14" rx="4" fill="#ff4a3a" opacity=".4" filter="url(#${soft})"/>
-    <rect x="6.5" y="23" width="5" height="11" rx="2.4" fill="#ff4a3a"/>
-    <rect x="6.5" y="66" width="5" height="11" rx="2.4" fill="#ff4a3a"/>` : '';
+  /* Hero (classic photo car): geometry measured from the normalized
+     classic.png (front bumper at x≈193/200; headlight blades are swept-back
+     strips whose lens area centers at (174,18)/(174,82), angled ~24° toward
+     the nose). The soft glow ellipse lies along each blade, the bright core
+     sits on the blade's forward half, and each beam cone's base line follows
+     the blade before fanning out past the bumper. Two separate cones (one
+     per headlight) rather than one merged trapezoid, each blurred so the
+     edge reads as light falloff instead of a flat polygon.
+     (mix-blend-mode:screen was tried for a true additive glow, but at this
+     SVG's overflow:visible boundary it produced a visible seam where the
+     beam crosses the piece's own viewBox — plain opaque-fading-to-transparent
+     reads bright enough against the dark board without that artifact.) */
+  const photoHeroExtra = (isHero && !skin) ? `
+    <path d="M ${L - 23} 14 L ${L + 185} -8 L ${L + 185} 46 L ${L - 11} 30 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
+    <path d="M ${L - 23} 86 L ${L + 185} 108 L ${L + 185} 54 L ${L - 11} 70 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
+    <ellipse cx="${L - 26}" cy="18" rx="15" ry="4.5" transform="rotate(24 ${L - 26} 18)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>
+    <ellipse cx="${L - 26}" cy="82" rx="15" ry="4.5" transform="rotate(-24 ${L - 26} 82)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>
+    <circle cx="${L - 19}" cy="22" r="3" fill="#fffbe8"/>
+    <circle cx="${L - 19}" cy="78" r="3" fill="#fffbe8"/>
+    <ellipse cx="10" cy="16" rx="5" ry="7" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
+    <ellipse cx="10" cy="84" rx="5" ry="7" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
+    <ellipse cx="7" cy="50" rx="5" ry="30" fill="#ff3b2e" opacity=".24" filter="url(#${soft})"/>` : '';
 
   const cb = opts.colorblind && !isHero;
   let body;
-  if(len >= 3){
-    const variant = (idx * 7 + len) % 2;
-    const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.36, 50) : '');
-    body = variant === 0 ? boxtruck(0, L, gid, extra, dark) : tanker(0, L, gid, extra, base);
+  if(isHero && !skin){
+    // Classic (default) hero: photoreal render in place of the procedural
+    // sedan. Skinned/unlocked cars still use the recolorable sedan below.
+    body = `<image href="${CLASSIC_CAR_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${photoHeroExtra}`;
   } else if(isHero){
-    body = sedan(0, L, gid, headlights(L, soft) + heroExtra + trimSVG(skin?.trim, L, H));
+    // Garage skin equipped: same photo body as the classic hero, recolored
+    // to the skin's paint via hueRotate, with the beam/glow tuned the same
+    // way (both photos fill the cell edge-to-edge so the positions carry
+    // over). trimSVG's beltline stripe was tuned to the old procedural
+    // sedan's silhouette (paint above/below a windshield greenhouse) — this
+    // car's canopy runs nearly the full width, so the same stripe cuts
+    // across the glass instead of following a body line. Skipping trim
+    // here until it gets a version designed for this car's proportions;
+    // paint color alone still distinguishes every unlocked skin.
+    body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${photoHeroExtra}`;
+  } else if(len >= 3){
+    body = `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr2}/>${cb ? decal(idx, L * 0.5, 50) : ''}`;
   } else {
-    const variant = (idx * 5 + len) % 3;
-    const extra = headlights(L, soft) + (cb ? decal(idx, L * 0.5, 50) : '');
-    body = variant === 0 ? sedan(0, L, gid, extra)
-         : variant === 1 ? hatchback(0, L, gid, extra)
-         : pickup(0, L, gid, extra, dark);
+    body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${cb ? decal(idx, L * 0.5, 50) : ''}`;
   }
 
   const W = dir === 'h' ? L : H, Ht = dir === 'h' ? H : L;

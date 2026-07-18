@@ -36,9 +36,17 @@ LEVELS.forEach((lv, i) => {
   pieces.slice(1).forEach(p => {
     if(p.dir === 'h' && p.r === EXIT_ROW) bad(`level ${i + 1}: non-hero horizontal piece in exit row (unwinnable)`);
   });
-  const sol = solve(pieces, { walls: lv.w });
+  const sol = solve(pieces, { walls: lv.w, gates: lv.g, hitches: lv.h });
   if(!sol.solvable) bad(`level ${i + 1}: unsolvable`);
   else if(sol.optimal !== lv.m) bad(`level ${i + 1}: par ${lv.m} but optimal ${sol.optimal}`);
+  (lv.h ?? []).forEach((h, hi) => {
+    if(!pieces[h.tow]) bad(`level ${i + 1}: hitch ${hi} tow index ${h.tow} out of range`);
+    if(!pieces[h.trailer]) bad(`level ${i + 1}: hitch ${hi} trailer index ${h.trailer} out of range`);
+    if(h.tow === 0 || h.trailer === 0) bad(`level ${i + 1}: hitch ${hi} involves the hero piece`);
+    if(pieces[h.tow] && pieces[h.trailer] && pieces[h.tow].dir !== pieces[h.trailer].dir){
+      bad(`level ${i + 1}: hitch ${hi} tow/trailer orientations differ — auto-couple never fires`);
+    }
+  });
 });
 
 // difficulty progression: only the intro ramp may fall below chapter 1's floor

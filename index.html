@@ -14,8 +14,9 @@
 <div class="wrap">
   <header>
     <div class="brand">
-      <div class="t1">MIDNIGHT<span class="hr-red"> GARAGE</span></div>
+      <div class="t1" id="brandTitle">MIDNIGHT<span class="hr-red"> GARAGE</span></div>
       <div class="t2" id="brandSub">Free the red car</div>
+      <button class="admin-chip" id="adminChip" hidden>ADMIN</button>
     </div>
     <div class="hbtns">
       <button class="icon-btn" id="dailyBtn" aria-label="Daily puzzle">
@@ -241,6 +242,51 @@
 <div class="overlay" id="startOverlay">
   <div class="start-cta">
     <button class="btn primary" id="startPlayBtn"><span id="startPlayLabel">Start</span></button>
+    <div class="admin-bar" id="adminBar" hidden>
+      <div class="admin-lab">ADMIN</div>
+      <form id="adminForm">
+        <input id="adminInput" type="text" placeholder="42 · pursuit 30 · daily · sandbox" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="btn" type="submit">Go</button>
+      </form>
+      <button class="btn" id="adminSandboxBtn" type="button">Sandbox editor</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin sandbox level designer -->
+<div class="overlay" id="sandboxOverlay">
+  <div class="sheet sandbox-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2>Sandbox</h2>
+    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row.</p>
+    <div class="sb-tools" id="sbTools">
+      <button class="btn sb-tool" data-tool="hero" type="button">Hero</button>
+      <button class="btn sb-tool cur" data-tool="car" type="button">Car</button>
+      <button class="btn sb-tool" data-tool="truck" type="button">Truck</button>
+      <button class="btn sb-tool" data-tool="wall" type="button">Wall</button>
+      <button class="btn sb-tool" data-tool="erase" type="button">Erase</button>
+      <button class="btn" id="sbDirBtn" type="button" aria-label="Placement orientation">Dir: H</button>
+    </div>
+    <div class="sb-board-wrap">
+      <div class="sb-board" id="sbBoard"><span class="sb-exit">▶</span></div>
+    </div>
+    <div class="sb-status" id="sbStatus"></div>
+    <div class="sb-actions">
+      <button class="btn primary" id="sbTestBtn" type="button">Playtest</button>
+      <button class="btn" id="sbClearBtn" type="button">Clear</button>
+    </div>
+    <div class="sb-save-row">
+      <input id="sbName" type="text" placeholder="Level name" autocomplete="off">
+      <button class="btn" id="sbSaveBtn" type="button">Save</button>
+    </div>
+    <div class="sb-saved-header">
+      <span class="sb-saved-lab">Saved levels</span>
+      <button class="btn" id="sbExportAllBtn" type="button">Export all</button>
+    </div>
+    <div class="sb-saved" id="sbSavedList"></div>
+    <p class="sb-export-note">Export copies level JSON to your clipboard.
+      Hand it to <code>tools/promote-sandbox-levels.mjs</code> (or paste it
+      into chat) to verify and add it to the shipped campaign.</p>
   </div>
 </div>
 

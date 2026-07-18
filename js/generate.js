@@ -81,6 +81,106 @@ export function tryGenerate(rng, opts = {}){
   };
 }
 
+/* ---------- Hitch puzzles ----------
+   A dedicated generator rather than a mode of tryGenerate: a hitch needs a
+   deliberately-placed tow/trailer pair (matching orientation, trailer
+   straddling the exit row like a normal blocker) instead of tryGenerate's
+   uniform random piece drop, and every candidate is rejected unless the
+   OPTIMAL solution actually exercises the hitch — otherwise the trailer's
+   placement wasn't really blocking anything and it's just a normal board
+   with cosmetic hitch art bolted on. */
+export function tryGenerateHitch(rng, opts = {}){
+  const minOptimal = opts.minOptimal ?? 10;
+  const extras = opts.pieces ?? rngInt(rng, 4, 9);
+
+  const hero = { r: EXIT_ROW, c: rngInt(rng, 0, 3), len: 2, dir: 'h' };
+  const pieces = [hero];
+  const grid = Array.from({ length: N }, () => Array(N).fill(false));
+  const mark = p => {
+    for(let k = 0; k < p.len; k++){
+      grid[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] = true;
+    }
+  };
+  const fits = p => {
+    for(let k = 0; k < p.len; k++){
+      const r = p.r + (p.dir === 'v' ? k : 0), c = p.c + (p.dir === 'h' ? k : 0);
+      if(r >= N || c >= N || grid[r][c]) return false;
+    }
+    return true;
+  };
+  mark(hero);
+
+  // Trailer: vertical, straddles the exit row somewhere ahead of the hero
+  // — a normal blocker shape, except it starts coupled/inert, so it can't
+  // just be slid clear the way an ordinary piece could.
+  const trailerLen = rng() < 0.5 ? 2 : 3;
+  let trailer = null;
+  for(let t = 0; t < 40 && !trailer; t++){
+    const c = rngInt(rng, hero.c + hero.len, N - 1);
+    const r = rngInt(rng, Math.max(0, EXIT_ROW - trailerLen + 1), Math.min(EXIT_ROW, N - trailerLen));
+    const cand = { r, c, len: trailerLen, dir: 'v' };
+    if(fits(cand)) trailer = cand;
+  }
+  if(!trailer) return null;
+  mark(trailer);
+  pieces.push(trailer);
+  const trailerIdx = pieces.length - 1;
+
+  // Tow: another vertical piece elsewhere on the board, linked to the
+  // trailer by the hitch. Dragging it (while coupled) drags the trailer
+  // along by the same row delta — matches game.js's auto-couple exactly.
+  let tow = null;
+  for(let t = 0; t < 40 && !tow; t++){
+    const len = rng() < 0.35 ? 3 : 2;
+    const c = rngInt(rng, 0, N - 1);
+    const r = rngInt(rng, 0, N - len);
+    const cand = { r, c, len, dir: 'v' };
+    if(fits(cand)) tow = cand;
+  }
+  if(!tow) return null;
+  mark(tow);
+  pieces.push(tow);
+  const towIdx = pieces.length - 1;
+
+  const hitches = [{ tow: towIdx, trailer: trailerIdx }];
+
+  // Filler, same style as tryGenerate's random piece drop.
+  let placed = 0, tries = 0;
+  while(placed < extras && tries < 200){
+    tries++;
+    const len = rng() < 0.28 ? 3 : 2;
+    const dir = rng() < 0.5 ? 'h' : 'v';
+    let p;
+    if(dir === 'h'){
+      const r = rngInt(rng, 0, N - 1);
+      if(r === EXIT_ROW) continue;
+      p = { r, c: rngInt(rng, 0, N - len), len, dir };
+    } else {
+      p = { r: rngInt(rng, 0, N - len), c: rngInt(rng, 0, N - 1), len, dir };
+    }
+    if(!fits(p)) continue;
+    mark(p);
+    pieces.push(p);
+    placed++;
+  }
+
+  const sol = solve(pieces, { maxStates: 250000, hitches });
+  if(!sol.solvable || sol.optimal < minOptimal) return null;
+
+  const usesHitch = sol.path.some(mv => mv.decouple !== undefined || mv.i2 !== undefined);
+  if(!usesHitch) return null;
+
+  const stats = rate(pieces, sol, undefined, undefined, hitches);
+  return {
+    p: pieces.map(q => [q.r, q.c, q.len, q.dir]),
+    h: hitches,
+    m: sol.optimal,
+    d: stats.score,
+    stats,
+    key: levelKey(pieces, []) + '|H' + towIdx + '-' + trailerIdx,
+  };
+}
+
 /* ---------- Hardening (hill-climb) ----------
    Uniform random boards skew easy (p90 ≈ par 7). To reach the deep end of
    the curve we mutate a board — add / remove / relocate a piece or a wall —

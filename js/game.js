@@ -3,7 +3,7 @@
    (weight/flick/dust), onboarding, session flow, accessibility, analytics,
    daily puzzle + share card, Pro Garage gating. */
 
-import { N, EXIT_ROW, firstOptimalMove } from './solver.js';
+import { N, EXIT_ROW, firstOptimalMove, solve } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
@@ -57,6 +57,8 @@ let save = {
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   introSeen: false,
+  hitchSeen: false,
+  admin: false,
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -106,15 +108,28 @@ function drawGrid(){
 }
 
 function grid(exclude = -1){
+  const ex = Array.isArray(exclude) ? new Set(exclude) : new Set([exclude]);
   const g = Array.from({ length: N }, () => Array(N).fill(-1));
   for(const [wr, wc] of walls) g[wr][wc] = -2;   // roadworks: never empty
   pieces.forEach((p, i) => {
-    if(i === exclude) return;
+    if(ex.has(i)) return;
     for(let k = 0; k < p.len; k++){
       g[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] = i;
     }
   });
   return g;
+}
+function rangeForWithGrid(i, g){
+  const p = pieces[i];
+  let lo, hi;
+  if(p.dir === 'h'){
+    lo = p.c; while(lo > 0 && g[p.r][lo - 1] === -1) lo--;
+    hi = p.c; while(hi + p.len < N && g[p.r][hi + p.len] === -1) hi++;
+  } else {
+    lo = p.r; while(lo > 0 && g[lo - 1][p.c] === -1) lo--;
+    hi = p.r; while(hi + p.len < N && g[hi + p.len][p.c] === -1) hi++;
+  }
+  return [lo, hi];
 }
 
 /* Weight (plan 0.5): trucks settle slower and heavier than cars. */
@@ -123,6 +138,25 @@ function easingFor(len, distCells){
   const dur = Math.min(0.42, base + distCells * 0.028);
   const curve = len === 3 ? 'cubic-bezier(.3,.75,.35,1.06)' : 'cubic-bezier(.22,.9,.3,1.15)';
   return `transform ${dur}s ${curve}`;
+}
+
+/* Small stable string hash (djb2) — used to seed the daily puzzle's photo
+   rotation from its date string, so "today's board" always looks the same
+   on every device rather than picking randomly on each render. */
+function hashStr(s){
+  let h = 5381;
+  for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/* Per-level seed for the traffic photo rotation (see buildPieces). Deriving
+   it from the level's own identity — rather than incrementing a counter or
+   picking randomly — keeps a given level looking the same across replays,
+   undos, and re-visits within a session. */
+function levelPhotoSeed(){
+  if(mode.type === 'daily') return hashStr(mode.date ?? '');
+  if(mode.type === 'sandbox') return hashStr(JSON.stringify(curLevel?.p ?? []));
+  return cur;
 }
 
 function buildPieces(){
@@ -167,18 +201,39 @@ function buildPieces(){
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
+  /* Per-class photo ordinals: pieces of the same class (sedan / truck /
+     hitch trailer) count up separately, so no two pieces in one level share
+     a photo — the global piece index would collide once it wraps a photo
+     array (e.g. trucks at idx 3 and 11 both landing on photo 3). Sedans
+     start at 1: photo 0 is the Garage-skin body.
+
+     Each counter is also offset by a per-level seed (see levelPhotoSeed)
+     before it starts counting. Without this every level's sedans walked
+     the SEDAN_PHOTOS array from the same starting point (1, 2, 3…), so with
+     ~4-8 sedans per level and 22 photos in the array, indices past ~8 were
+     essentially never reached — the back two-thirds of the library (all
+     the newer real-photo colors) never showed up in normal play even
+     though they were correctly in rotation code-wise. The seed makes
+     different levels start at different offsets while still walking
+     sequentially, so "no duplicate within a level" still holds. */
+  const seed = levelPhotoSeed();
+  let sedanOrd = 1 + seed, truckOrd = seed * 3, trailerOrd = seed * 5;
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
     const isTow = hitches.some(h => h.tow === i);
+    const isTrailer = hitches.some(h => h.trailer === i);
     el.className = 'piece' + (i === 0 ? ' hero' : '') + (isTow ? ' tow' : '');
     el.dataset.idx = i;
     el.setAttribute('tabindex', '0');
     el.setAttribute('role', 'button');
     el.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
     el.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
+    const photoIdx = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
     el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
       colorblind: save.settings.colorblind,
       skin: i === 0 ? skinFor(save.equippedCar) : null,
+      photoIdx,
+      trailer: isTrailer,
     });
     el.classList.add('enter');
     el.style.animationDelay = (i * 0.028) + 's';
@@ -193,8 +248,11 @@ function updatePieceAria(){
   board.querySelectorAll('.piece').forEach(el => {
     const i = +el.dataset.idx, p = pieces[i];
     if(!p) return;
+    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
     el.setAttribute('aria-label',
-      (i === 0 ? 'Red car — escape this one' : `Vehicle ${i}, ${p.len === 3 ? 'truck' : 'car'}`) +
+      (i === 0 ? 'Red car — escape this one'
+        : isInertTrailer ? `Vehicle ${i}, trailer — moves only with its tow vehicle`
+        : `Vehicle ${i}, ${p.len === 3 ? 'truck' : 'car'}`) +
       `, row ${p.r + 1}, column ${p.c + 1}, ` +
       (p.dir === 'h' ? 'moves left and right' : 'moves up and down'));
   });
@@ -216,7 +274,7 @@ function renderPositions(animate = true){
   });
   board.querySelectorAll('.hitch').forEach(el => {
     const hi = +el.dataset.hi, h = hitches[hi];
-    if(!h || decoupledHitches.has(hi)) return;  // Skip decoupled hitches
+    if(!h || decoupledHitches.has(hi)){ el.innerHTML = ''; return; }   // decoupled: no connector line
     const tow = pieces[h.tow], trailer = pieces[h.trailer];
     if(!tow || !trailer) return;
     // Center of tow piece
@@ -230,17 +288,32 @@ function renderPositions(animate = true){
 }
 
 /* ================== DRAG + FLICK ================== */
+/* For a coupled tow, dragging also drags its trailer by the identical
+   delta (see the auto-couple block in finish()/keydown below) — so the
+   draggable range has to be the INTERSECTION of what the tow's own lane
+   allows and what the trailer's own lane allows, not just the tow's.
+   Without this a tow whose own lane is clear could be dragged past a
+   point where its trailer (elsewhere on the board, moving in lockstep)
+   would collide with something — the solver's legalMoves rejects that
+   compound move, so the board has to match or a "verified" par could be
+   undercut by a drag the solver never considered legal. */
 function rangeFor(i){
-  const p = pieces[i], g = grid(i);
-  let lo, hi;
-  if(p.dir === 'h'){
-    lo = p.c; while(lo > 0 && g[p.r][lo - 1] === -1) lo--;
-    hi = p.c; while(hi + p.len < N && g[p.r][hi + p.len] === -1) hi++;
-  } else {
-    lo = p.r; while(lo > 0 && g[lo - 1][p.c] === -1) lo--;
-    hi = p.r; while(hi + p.len < N && g[hi + p.len][p.c] === -1) hi++;
+  const hIdx = hitches.findIndex((h, hi) => h.tow === i && !decoupledHitches.has(hi));
+  if(hIdx !== -1){
+    const trailerI = hitches[hIdx].trailer;
+    const tow = pieces[i], trailer = pieces[trailerI];
+    if(trailer && trailer.dir === tow.dir){
+      const g2 = grid([i, trailerI]);
+      const [towLo, towHi] = rangeForWithGrid(i, g2);
+      const [trLo, trHi] = rangeForWithGrid(trailerI, g2);
+      const towCur = tow.dir === 'h' ? tow.c : tow.r;
+      const trCur = trailer.dir === 'h' ? trailer.c : trailer.r;
+      const deltaLo = Math.max(towLo - towCur, trLo - trCur);
+      const deltaHi = Math.min(towHi - towCur, trHi - trCur);
+      return [towCur + deltaLo, towCur + deltaHi];
+    }
   }
-  return [lo, hi];
+  return rangeForWithGrid(i, grid(i));
 }
 
 function attachDrag(el, i){
@@ -257,6 +330,7 @@ function attachDrag(el, i){
       if(decoupleTow(i)){
         renderPositions(true);
         updateHud();
+        updatePieceAria();
       }
       lastTapT = 0;
       return;
@@ -600,6 +674,10 @@ function updateHud(){
     $('hudLevel').textContent = '#' + mode.number;
     $('hudTier').textContent = t('hud.daily');
     $('hudStars').innerHTML = isDone(mode.date) ? starStr(daily().done[mode.date].stars) : starStr(0);
+  } else if(mode.type === 'sandbox'){
+    $('hudLevel').textContent = '✎';
+    $('hudTier').textContent = 'Sandbox';
+    $('hudStars').innerHTML = '';
   } else {
     $('hudLevel').textContent = cur + 1;
     $('hudTier').textContent = CHAPTERS[chapterOf(cur)].name;
@@ -707,7 +785,6 @@ function startBoard(){
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
   hitches = curLevel.h ?? [];
-  if(hitches.length) console.warn('hitch levels are not ship-ready');
   history = []; moves = 0; undos = 0; hintsUsed = 0;
   decoupledHitches.clear();
   solvedAnim = false;
@@ -727,6 +804,11 @@ function startBoard(){
   updateCoach();
   scheduleHand();
   stopAttemptTrack(); // reset any track from the previous attempt; this attempt's track (if heist/pursuit) starts on first move
+  if(hitches.length && !save.hitchSeen){
+    save.hitchSeen = true;
+    persist();
+    setTimeout(() => toast(t('toast.hitch')), 700);
+  }
 }
 
 function undo(){
@@ -788,6 +870,25 @@ function showHint(){
   hintsUsed++;
   sfx('ui');
   track('hint_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+
+  if(mv.decouple !== undefined){
+    // No destination to point at — the optimal move is to unhitch this
+    // tow (double-tap it), not slide it anywhere.
+    const el = board.querySelector(`.piece[data-idx="${mv.decouple}"]`);
+    el.classList.add('hint-glow');
+    const p = pieces[mv.decouple];
+    const badge = document.createElement('div');
+    badge.className = 'hint-arrow hint-decouple';
+    badge.textContent = '⛓️‍💥';
+    badge.style.left = p.c * CELL + 'px';
+    badge.style.top = p.r * CELL + 'px';
+    badge.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
+    badge.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
+    board.appendChild(badge);
+    hintTimer = setTimeout(clearHint, 3200);
+    return;
+  }
+
   const el = board.querySelector(`.piece[data-idx="${mv.idx}"]`);
   el.classList.add('hint-glow');
   const p = pieces[mv.idx];
@@ -830,7 +931,7 @@ function scheduleHand(){
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
   const mv = firstOptimalMove(pieces, { walls, gates, hitches });
-  if(!mv) return;
+  if(!mv || mv.decouple !== undefined) return;   // hitches never appear in the intro ramp
   const p = pieces[mv.idx];
   const hand = document.createElement('div');
   hand.className = 'hand';
@@ -896,12 +997,13 @@ function winSequence(){
     save.streak3 = stars === 3 ? save.streak3 + 1 : 0;
     persist();
     track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed });
-  } else {
+  } else if(mode.type === 'daily'){
     const res = recordDailyWin(mode.date, moves, par, stars);
     if(res.usedFreeze) toast(t('toast.freeze'));
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
   }
+  // sandbox playtests record nothing — no stars, no streaks, no daily state
 
   const reveals = pendingReveals(save, daily());
   if(reveals.length){
@@ -920,11 +1022,14 @@ function showWinSheet(stars){
   $('winFlag').textContent = t('win.flag');
   $('winTitle').textContent = mode.type === 'daily'
     ? t('win.daily', { n: mode.number })
+    : mode.type === 'sandbox'
+    ? 'Sandbox level cleared'
     : t('win.title', { n: cur + 1 });
   $('winMoves').textContent = moves;
   $('winPar').textContent = par;
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
+    : mode.type === 'sandbox' ? moves
     : save.best[cur];
   $('cleanGetaway').hidden = !isCleanGetaway;
   if(isCleanGetaway) $('cleanGetaway').textContent = t('win.clean');
@@ -943,6 +1048,13 @@ function showWinSheet(stars){
   $('sharePre').hidden = true;
   $('autobar').classList.remove('run');
 
+  if(mode.type === 'sandbox'){
+    // Playtest loop: straight back to the editor, no peek/share/auto-advance.
+    $('nextLabel').textContent = 'Back to editor';
+    $('nextBtn').dataset.action = 'sandbox';
+    showOverlay('winOverlay');
+    return;
+  }
   if(isDaily){
     const text = dailyShareText({ number: mode.number, moves, par, streak: daily().streak, level: curLevel });
     const pre = $('sharePre');
@@ -1473,6 +1585,12 @@ function wire(){
       if(res === 'copied') toast(t('toast.copied'));
       return;
     }
+    if($('nextBtn').dataset.action === 'sandbox'){
+      cancelAuto(); sfx('ui');
+      hideOverlay('winOverlay');
+      openSandbox();
+      return;
+    }
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
   });
@@ -1488,7 +1606,7 @@ function wire(){
     if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
     if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
     if(e.key === 'Escape'){
-      ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay'].forEach(hideOverlay);
+      ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay', 'sandboxOverlay'].forEach(hideOverlay);
       stopSettingsMusic();
     }
   });
@@ -1512,6 +1630,398 @@ function wire(){
     hideOverlay('introOverlay');
     setTimeout(() => $('board').focus(), 100);
   });
+}
+
+/* ================== ADMIN MODE + SANDBOX DESIGNER ==================
+   Dev-only tooling, hidden behind 5 quick taps on the header title.
+   While on: an ADMIN chip in the header reopens the start screen, whose
+   admin bar accepts jump commands ("42", "pursuit 30", "daily
+   2026-07-01", "sandbox") and opens the sandbox level designer. */
+
+function applyAdminUI(){
+  $('adminBar').hidden = !save.admin;
+  $('adminChip').hidden = !save.admin;
+}
+
+function runAdminCommand(raw){
+  const s = raw.trim().toLowerCase();
+  if(!s) return;
+  if(s === 'sandbox' || s === 'sb'){ openSandbox(); return; }
+  if(s.startsWith('daily')){
+    const d = s.split(/\s+/)[1];
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : todayStr();
+    hideOverlay('startOverlay');
+    loadDailyLevel(date);
+    toast('Daily ' + date);
+    return;
+  }
+  const m = s.match(/^(relaxed|heist|pursuit)?\s*#?(\d+)$/);
+  if(m){
+    if(m[1] && m[1] !== save.settings.mode){
+      save.settings.mode = m[1];
+      setGameMode(m[1]);
+      updateModeSelectUI();
+      persist();
+    }
+    const idx = Math.min(LEVELS.length, Math.max(1, +m[2])) - 1;
+    hideOverlay('startOverlay');
+    loadLevel(idx);   // admin jump ignores unlock/Pro gating on purpose
+    toast(`Level ${idx + 1} · ${save.settings.mode}`);
+    return;
+  }
+  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · sandbox');
+}
+
+function wireAdmin(){
+  let taps = 0, tapTimer = null;
+  $('brandTitle').addEventListener('pointerdown', () => {
+    taps++;
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => { taps = 0; }, 1600);
+    if(taps >= 5){
+      taps = 0;
+      save.admin = !save.admin;
+      persist();
+      applyAdminUI();
+      toast(save.admin ? 'Admin mode ON' : 'Admin mode off');
+      if(save.admin) showOverlay('startOverlay');
+    }
+  });
+  $('adminChip').addEventListener('click', () => { sfx('ui'); showOverlay('startOverlay'); });
+  $('adminForm').addEventListener('submit', e => {
+    e.preventDefault();
+    runAdminCommand($('adminInput').value);
+    $('adminInput').value = '';
+  });
+  $('adminSandboxBtn').addEventListener('click', () => { sfx('ui'); openSandbox(); });
+}
+
+/* ---------- sandbox level designer ----------
+   sb.pieces[0] is always the hero (locked to the exit row, horizontal).
+   Levels save to local storage in the same {m,p,w} shape as LEVELS, so a
+   saved sandbox level is directly playable by startBoard(). */
+const SB_KEY = 'sandbox_levels_v1';
+const SB_CELL = 46;                     // must match --sbc in css
+let sbTool = 'car', sbDir = 'h';
+let sbState = { pieces: [], walls: [] };   // pieces: {r,c,len,dir,hero?}
+let sbSaved = [];
+
+function openSandbox(){
+  hideOverlay('startOverlay');
+  showOverlay('sandboxOverlay');
+  sbRender();
+  sbRenderSaved();
+}
+
+function sbGrid(){
+  const g = Array.from({ length: N }, () => Array(N).fill(-1));
+  sbState.walls.forEach(([r, c]) => { g[r][c] = 'w'; });
+  sbState.pieces.forEach((p, i) => {
+    for(let k = 0; k < p.len; k++){
+      const r = p.dir === 'h' ? p.r : p.r + k;
+      const c = p.dir === 'h' ? p.c + k : p.c;
+      if(r < N && c < N) g[r][c] = i;
+    }
+  });
+  return g;
+}
+
+function sbFits(p, ignoreIdx = -1){
+  const g = sbGrid();
+  for(let k = 0; k < p.len; k++){
+    const r = p.dir === 'h' ? p.r : p.r + k;
+    const c = p.dir === 'h' ? p.c + k : p.c;
+    if(r < 0 || c < 0 || r >= N || c >= N) return false;
+    if(g[r][c] !== -1 && g[r][c] !== ignoreIdx) return false;
+  }
+  return true;
+}
+
+function sbStatus(){
+  const el = $('sbStatus');
+  el.className = 'sb-status';
+  if(!sbState.pieces.length || !sbState.pieces[0].hero){
+    el.textContent = 'Place the hero car to check solvability.';
+    return null;
+  }
+  const sol = solve(sbState.pieces.map(q => ({ r: q.r, c: q.c, len: q.len, dir: q.dir })),
+                    { walls: sbState.walls });
+  if(sol.solvable){
+    el.textContent = `Solvable · par ${sol.optimal}`;
+    el.classList.add('ok');
+  } else {
+    el.textContent = 'Not solvable from this layout.';
+    el.classList.add('bad');
+  }
+  return sol;
+}
+
+function sbRender(){
+  const b = $('sbBoard');
+  b.querySelectorAll('.sb-piece, .sb-wall').forEach(e => e.remove());
+  sbState.walls.forEach(([r, c], wi) => {
+    const el = document.createElement('div');
+    el.className = 'sb-wall';
+    el.dataset.w = wi;
+    el.style.width = el.style.height = SB_CELL + 'px';
+    el.style.transform = `translate(${c * SB_CELL}px, ${r * SB_CELL}px)`;
+    el.innerHTML = wallSVG('sb' + wi);
+    b.appendChild(el);
+  });
+  let sedanOrd = 1, truckOrd = 0;
+  sbState.pieces.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = 'sb-piece' + (p.hero ? ' hero' : '');
+    el.dataset.i = i;
+    el.style.width = (p.dir === 'h' ? p.len : 1) * SB_CELL + 'px';
+    el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
+    el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
+    const photoIdx = p.hero ? 0 : (p.len >= 3 ? truckOrd++ : sedanOrd++);
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { photoIdx });
+    b.appendChild(el);
+  });
+  sbStatus();
+}
+
+function sbCellFromEvent(e){
+  const rect = $('sbBoard').getBoundingClientRect();
+  return {
+    r: Math.floor((e.clientY - rect.top) / SB_CELL),
+    c: Math.floor((e.clientX - rect.left) / SB_CELL),
+  };
+}
+
+function sbPlace(r, c){
+  if(r < 0 || c < 0 || r >= N || c >= N) return;
+  const g = sbGrid();
+  if(sbTool === 'erase'){
+    if(g[r][c] === 'w') sbState.walls = sbState.walls.filter(w => !(w[0] === r && w[1] === c));
+    else if(g[r][c] !== -1) sbState.pieces.splice(g[r][c], 1);
+    sbRender();
+    return;
+  }
+  if(sbTool === 'wall'){
+    if(g[r][c] === 'w') sbState.walls = sbState.walls.filter(w => !(w[0] === r && w[1] === c));
+    else if(g[r][c] === -1 && !(r === EXIT_ROW)) sbState.walls.push([r, c]);
+    else if(g[r][c] === -1) toast('No walls on the exit row');
+    sbRender();
+    return;
+  }
+  if(sbTool === 'hero'){
+    const p = { r: EXIT_ROW, c: Math.min(Math.max(0, c), N - 2), len: 2, dir: 'h', hero: true };
+    const oldIdx = sbState.pieces.findIndex(q => q.hero);
+    const ignore = oldIdx !== -1 ? oldIdx : -1;
+    if(!sbFits(p, ignore)){ sfx('deny'); return; }
+    if(oldIdx !== -1) sbState.pieces.splice(oldIdx, 1);
+    sbState.pieces.unshift(p);
+    sbRender();
+    return;
+  }
+  const len = sbTool === 'truck' ? 3 : 2;
+  const p = {
+    r: sbDir === 'v' ? Math.min(r, N - len) : r,
+    c: sbDir === 'h' ? Math.min(c, N - len) : c,
+    len, dir: sbDir,
+  };
+  if(!sbFits(p)){ sfx('deny'); return; }
+  sbState.pieces.push(p);
+  sbRender();
+}
+
+function sbAttachBoard(){
+  const b = $('sbBoard');
+  let dragIdx = -1, dragEl = null, moved = false, startCell = null, grabOff = null;
+
+  b.addEventListener('pointerdown', e => {
+    const pieceEl = e.target.closest('.sb-piece');
+    const wallEl = e.target.closest('.sb-wall');
+    const cell = sbCellFromEvent(e);
+    if(pieceEl){
+      const i = +pieceEl.dataset.i;
+      if(sbTool === 'erase'){ sbState.pieces.splice(i, 1); sbRender(); return; }
+      dragIdx = i; dragEl = pieceEl; moved = false; startCell = cell;
+      const p = sbState.pieces[i];
+      grabOff = { r: cell.r - p.r, c: cell.c - p.c };
+      pieceEl.classList.add('drag');
+      b.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+    if(wallEl && (sbTool === 'erase' || sbTool === 'wall')){
+      sbPlace(cell.r, cell.c);
+      return;
+    }
+    sbPlace(cell.r, cell.c);
+  });
+
+  b.addEventListener('pointermove', e => {
+    if(dragIdx === -1) return;
+    const cell = sbCellFromEvent(e);
+    if(cell.r !== startCell.r || cell.c !== startCell.c) moved = true;
+    const p = sbState.pieces[dragIdx];
+    const isHero = !!p.hero;
+    const target = {
+      ...p,
+      r: isHero ? EXIT_ROW : Math.min(Math.max(0, cell.r - grabOff.r), N - (p.dir === 'v' ? p.len : 1)),
+      c: Math.min(Math.max(0, cell.c - grabOff.c), N - (p.dir === 'h' ? p.len : 1)),
+    };
+    dragEl.style.transform = `translate(${target.c * SB_CELL}px, ${target.r * SB_CELL}px)`;
+    dragEl.classList.toggle('bad', !sbFits(target, dragIdx));
+    dragEl.dataset.tr = target.r; dragEl.dataset.tc = target.c;
+  });
+
+  const drop = () => {
+    if(dragIdx === -1) return;
+    const p = sbState.pieces[dragIdx];
+    if(moved){
+      const target = { ...p, r: +dragEl.dataset.tr, c: +dragEl.dataset.tc };
+      if(sbFits(target, dragIdx)){ p.r = target.r; p.c = target.c; }
+    } else if(!p.hero){
+      // A tap (no drag) rotates the piece in place when the turn fits.
+      const rot = { ...p, dir: p.dir === 'h' ? 'v' : 'h' };
+      rot.r = Math.min(rot.r, N - (rot.dir === 'v' ? rot.len : 1));
+      rot.c = Math.min(rot.c, N - (rot.dir === 'h' ? rot.len : 1));
+      if(sbFits(rot, dragIdx)){ p.r = rot.r; p.c = rot.c; p.dir = rot.dir; }
+      else sfx('deny');
+    }
+    dragIdx = -1; dragEl = null;
+    sbRender();
+  };
+  b.addEventListener('pointerup', drop);
+  b.addEventListener('pointercancel', drop);
+}
+
+function sbLevelObj(){
+  const sol = sbStatus();
+  return {
+    m: sol && sol.solvable ? sol.optimal : 99,
+    p: sbState.pieces.map(q => [q.r, q.c, q.len, q.dir]),
+    w: sbState.walls.map(w => [w[0], w[1]]),
+  };
+}
+
+function sbPlaytest(levelObj){
+  const lv = levelObj ?? (() => {
+    if(!sbState.pieces.length || !sbState.pieces[0].hero){ toast('Place the hero car first'); return null; }
+    return sbLevelObj();
+  })();
+  if(!lv) return;
+  abandonIfMidLevel();
+  stopMenuMusic(); stopSettingsMusic();
+  mode = { type: 'sandbox' };
+  curLevel = lv;
+  hideOverlay('sandboxOverlay');
+  hideOverlay('startOverlay');
+  startBoard();
+  track('sandbox_test', { pieces: lv.p.length, walls: (lv.w || []).length, par: lv.m });
+}
+
+async function sbLoadSaved(){
+  sbSaved = (await load(SB_KEY)) || [];
+}
+
+async function sbPersistSaved(){
+  await store(SB_KEY, sbSaved);
+}
+
+/* Exported shape matches exactly what tools/promote-sandbox-levels.mjs and
+   the LEVELS array both expect: {name, m, p, w?}. m===99 means "not yet
+   verified solvable" (sbLevelObj()'s placeholder) — the promote script
+   recomputes par itself regardless, so an unsolved-looking export is still
+   safe to hand off, just not guaranteed to go anywhere. */
+function sbLevelExportObj(lv){
+  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}) };
+}
+
+/* Plain clipboard copy, deliberately skipping shareText()'s navigator.share
+   path — this is a dev/technical handoff (paste into a script or chat), not
+   social sharing, so popping the OS share sheet would be the wrong UI. */
+async function copyToClipboard(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(_){}
+    ta.remove();
+    return ok;
+  }
+}
+
+async function sbExportOne(lv){
+  const ok = await copyToClipboard(JSON.stringify(sbLevelExportObj(lv), null, 2));
+  toast(ok ? t('toast.copied') : t('toast.copyfail'));
+}
+
+function sbRenderSaved(){
+  const list = $('sbSavedList');
+  list.innerHTML = '';
+  sbSaved.forEach((lv, i) => {
+    const row = document.createElement('div');
+    row.className = 'sb-saved-row';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = lv.name;
+    const par = document.createElement('span'); par.className = 'par'; par.textContent = lv.m === 99 ? 'par ?' : 'par ' + lv.m;
+    const play = document.createElement('button'); play.className = 'btn'; play.textContent = 'Play';
+    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w }); });
+    const edit = document.createElement('button'); edit.className = 'btn'; edit.textContent = 'Edit';
+    edit.addEventListener('click', () => {
+      sfx('ui');
+      sbState = {
+        pieces: lv.p.map((a, j) => ({ r: a[0], c: a[1], len: a[2], dir: a[3], hero: j === 0 })),
+        walls: (lv.w || []).map(w => [w[0], w[1]]),
+      };
+      $('sbName').value = lv.name;
+      sbRender();
+    });
+    const exp = document.createElement('button'); exp.className = 'btn'; exp.textContent = 'Export';
+    exp.addEventListener('click', async () => { sfx('ui'); await sbExportOne(lv); });
+    const del = document.createElement('button'); del.className = 'btn'; del.textContent = '✕';
+    del.addEventListener('click', async () => {
+      sfx('ui');
+      sbSaved.splice(i, 1);
+      await sbPersistSaved();
+      sbRenderSaved();
+    });
+    row.append(nm, par, play, edit, exp, del);
+    list.appendChild(row);
+  });
+}
+
+function wireSandbox(){
+  document.querySelectorAll('.sb-tool').forEach(btn => btn.addEventListener('click', () => {
+    sbTool = btn.dataset.tool;
+    document.querySelectorAll('.sb-tool').forEach(x => x.classList.toggle('cur', x === btn));
+  }));
+  $('sbDirBtn').addEventListener('click', () => {
+    sbDir = sbDir === 'h' ? 'v' : 'h';
+    $('sbDirBtn').textContent = 'Dir: ' + sbDir.toUpperCase();
+  });
+  $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });
+  $('sbClearBtn').addEventListener('click', () => {
+    sfx('ui');
+    sbState = { pieces: [], walls: [] };
+    sbRender();
+  });
+  $('sbSaveBtn').addEventListener('click', async () => {
+    if(!sbState.pieces.length || !sbState.pieces[0].hero){ toast('Place the hero car first'); return; }
+    const name = ($('sbName').value || '').trim() || 'Level ' + (sbSaved.length + 1);
+    const lv = { name, ...sbLevelObj(), t: Date.now() };
+    const existing = sbSaved.findIndex(x => x.name === name);
+    if(existing !== -1) sbSaved[existing] = lv; else sbSaved.push(lv);
+    await sbPersistSaved();
+    sbRenderSaved();
+    sfx('ui');
+    toast(`Saved “${name}”` + (lv.m === 99 ? ' (not solvable yet)' : ` · par ${lv.m}`));
+  });
+  $('sbExportAllBtn').addEventListener('click', async () => {
+    sfx('ui');
+    if(!sbSaved.length){ toast('No saved levels to export'); return; }
+    const ok = await copyToClipboard(JSON.stringify(sbSaved.map(sbLevelExportObj), null, 2));
+    toast(ok ? `Copied ${sbSaved.length} level(s)` : t('toast.copyfail'));
+  });
+  sbAttachBoard();
 }
 
 /* Browsers block audio.play() until a user gesture; retry menu music
@@ -1549,6 +2059,10 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   wire();
   wireSettings();
   wirePro();
+  wireAdmin();
+  wireSandbox();
+  await sbLoadSaved();
+  applyAdminUI();
   layout();
   const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
   loadLevel(startAt);

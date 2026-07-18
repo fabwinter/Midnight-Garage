@@ -13,8 +13,7 @@ Current state in one paragraph: 200 verified campaign levels across 4 chapters,
 daily puzzle, collection/garage, Pro gating, i18n (10 langs), analytics.
 Phase H2 "The Alarm" is now a hard fail state (busted overlay, per-attempt
 music, countdown chip, Par hidden during alarm). Phase H3 "The Rig" (hitches)
-is HALF-BUILT: UI moves trailers with tows, but the solver does not — see P0-2.
-Test levels 203–210 were appended past the 200-level chapter structure — see P0-1.
+is now RESOLVED and shipped — see P0-2.
 
 ---
 
@@ -37,29 +36,51 @@ win sheet shows "Level Select" (no next level); `node tools/verify-levels.mjs`
 passes.
 
 ### P0-2. Hitch (H3) mechanics are incoherent — strip from ship path
+**RESOLVED (2026-07).** All three holes closed in `js/solver.js` /
+`js/game.js`; 8 verified hitch puzzles now ship in Neon District (levels
+51–100). Kept the original problem writeup below for context on what the fix
+had to address.
+
 Three independent holes, all in shipping code:
 - **Solver disagrees with gameplay.** `legalMoves` in `js/solver.js` treats a
   trailer as a permanently immovable piece; the game (`js/game.js` drag +
   keyboard handlers) moves the trailer along with its tow. Par, hints
   (`firstOptimalMove`), and the stuck-detector all reason about a different
   game than the player is playing on any level with `h`.
+  → Fixed: `legalMoves` now takes a `coupled` flag array (one per hitch) as
+  part of the BFS state and emits a compound `{i,o,i2,o2}` move for a coupled
+  tow — both legs validated together — plus a `{decouple}` move that flips a
+  one-way coupled→decoupled bit, costing one move exactly like
+  `decoupleTow()` does in the UI. `solve`/`analyzeShape`/`rate` all carry the
+  extended state through; `firstOptimalMove` returns either a drag target or
+  `{decouple: towIdx}` for the hint system.
 - **No collision check on trailer movement.** The drag/keyboard handlers do
   `trailer.c += offset` without checking occupancy — the trailer can be pushed
   through/on top of other pieces or off-board.
+  → Fixed: `rangeFor()` in `js/game.js` now computes a coupled tow's
+  draggable range as the intersection of the tow's own clearance and the
+  trailer's own clearance (against a grid excluding both), so a drag can never
+  exceed what `legalMoves` considers legal.
 - **Decoupling (double-tap, costs 1 move) exists only in the UI**, not in the
   solver state, and double-tap also fires on what players will experience as a
   quick re-grab.
+  → Decoupling is now real solver state (see above). The double-tap-vs-quick-
+  regrab timing risk is unchanged (still a 300ms window) — not revisited in
+  this pass since it's a UX-gesture concern independent of the correctness
+  holes this item was about; worth a look if playtesting flags accidental
+  decouples.
 
-**Fix for ship:** since P0-1 removes every level that defines `h`, the hitch
-code becomes dead but harmless. Do NOT try to finish H3 before ship. Leave the
-code paths in place (they're additive and inert without `h` data), but delete
-the `.tow` glow class assignment ONLY if it shows on any shipping level (it
-won't — no shipping level has hitches). Add a one-line guard in
-`startBoard()`: `if(hitches.length) console.warn('hitch levels are not
-ship-ready')`. Update `docs/PLAN-STATUS.md` to mark H3 as parked with a link
-to this section as the finish-line spec.
-**Acceptance:** no shipping level loads with `hitches.length > 0`; H3 status
-in PLAN-STATUS says parked/dev-only.
+Two smaller bugs found while building the hitch level generator and fixed
+alongside: `updatePieceAria()` didn't check decoupled state (screen readers
+kept announcing a freed trailer as "moves only with its tow vehicle"), and
+the hitch connector line froze in place instead of disappearing on decouple
+(`renderPositions()` skipped decoupled hitches' DOM element entirely instead
+of clearing it).
+
+**Acceptance:** `node tools/verify-levels.mjs` passes (now also checks hitch
+tow/trailer indices are in range, don't involve the hero, and share
+orientation); a hand-replayed solver path through real browser drags/double-
+taps reaches the win screen with moves === par on a hitch level.
 
 ### P0-3. Undo refunds the alarm budget
 `undo()` in `js/game.js` does `moves = Math.max(0, moves - 1)`. With alarm on,
