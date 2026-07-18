@@ -67,15 +67,20 @@ Pursuit mode at a placeholder `assets/audio/pursuit.mp3` that was never
 added, so Pursuit has no music; all SFX are synthesized WebAudio (zero
 download weight — a strength to keep, not replace).
 
-### N3a — Asset hygiene *(no design input needed, do first)*
+### N3a — Asset hygiene ✅ shipped
 
-- **Compress the WAVs** to AAC/M4A (~2–3MB total for both, inaudible
-  difference for ambient loops). Biggest single win for app size; a
-  store-submission prerequisite in practice.
-- **Pursuit track:** source/drop in the missing `pursuit.mp3` (or point
-  the constant at an existing track until one exists).
-- **SFX gap-fill** in the existing synth system: hitch couple/decouple,
-  gate activation, garage car-reveal fanfare, hint reveal.
+- ✅ **Menu tracks re-encoded**: user-supplied MP3s replaced the WAVs
+  (47MB → 5.8MB; assets total 61MB → 12MB).
+- ✅ **Pursuit track**: `PURSUIT_TRACK` pointed at the heist track instead
+  of a nonexistent file (Pursuit was silent). Swap to its own file when
+  one lands — N3b's stems are the real fix.
+- ✅ **SFX gap-fill**: four new synth kinds — `hint` (was reusing `ui`),
+  `decouple` (was reusing `snap`, the every-move sound, so unhitching was
+  audibly invisible), `fanfare` (car reveal was replaying `win` seconds
+  after the win sheet), `gate` (interlock state flip). Gates also now dim
+  while passable (`.gate-open`), wired through commit/undo/load — no
+  campaign levels carry gates yet, so this is forward wiring for sandbox
+  and future gate content.
 
 ### N3b — Adaptive Alarm music *(v1.5 item, pulled forward)*
 

@@ -16,13 +16,16 @@ let attemptTrackSrc = null;
 let attemptActive = false; // true only while a level attempt is in progress
 let duckAttempt = false;   // true while menu/tab music has priority over the attempt track
 const HEIST_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
-const PURSUIT_TRACK = 'assets/audio/pursuit.mp3'; // placeholder path — drop the uploaded track here
+// No dedicated Pursuit track yet — reuse the heist track rather than point
+// at a file that doesn't exist (which left Pursuit silent). Swap this to
+// its own file when one lands (NEXT-PLAN N3b wants intensity stems here).
+const PURSUIT_TRACK = HEIST_TRACK;
 
 // Menu/theme music
 let menuAudio = null;
 let settingsAudio = null;
-const VELVET_GLOVE = 'assets/audio/velvet-glove.wav';
-const CLEAN_GETAWAY = 'assets/audio/clean-getaway.wav';
+const VELVET_GLOVE = 'assets/audio/velvet-glove.mp3';
+const CLEAN_GETAWAY = 'assets/audio/clean-getaway.mp3';
 
 function trackFor(mode){
   return mode === 'heist' ? HEIST_TRACK : mode === 'pursuit' ? PURSUIT_TRACK : null;
@@ -272,6 +275,46 @@ export function sfx(kind){
     const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 1180;
     const g = c.createGain(); env(g, t, 0.004, 0.22, 0.1);
     o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.25);
+  } else if(kind === 'hint'){
+    // gentle two-note ping, quieter than 'star' — advice, not reward
+    [[880, 0], [1175, 0.09]].forEach(([hz, dt]) => {
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = hz;
+      const g = c.createGain(); env(g, t + dt, 0.005, 0.14, 0.07);
+      o.connect(g).connect(c.destination); o.start(t + dt); o.stop(t + dt + 0.18);
+    });
+  } else if(kind === 'gate'){
+    // quick electronic chirp — an interlock gate just changed state
+    const o = c.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(1400, t); o.frequency.exponentialRampToValueAtTime(900, t + 0.07);
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2400;
+    const g = c.createGain(); env(g, t, 0.004, 0.08, 0.08);
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + 0.1);
+  } else if(kind === 'decouple'){
+    // metallic clunk distinct from the every-move 'snap': noise burst + low drop
+    const buf = c.createBuffer(1, c.sampleRate * 0.06, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 320; f.Q.value = 2;
+    const ng = c.createGain(); env(ng, t, 0.003, 0.06, 0.25);
+    src.connect(f).connect(ng).connect(c.destination); src.start(t);
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.1);
+    const g = c.createGain(); env(g, t, 0.004, 0.13, 0.28);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.16);
+  } else if(kind === 'fanfare'){
+    // car-reveal moment — brighter and longer than 'win', which the win
+    // sheet has usually just played seconds earlier
+    [0, 4, 7, 12, 16, 19, 24].forEach((st, i) => {
+      const tt = t + i * 0.11;
+      const o = c.createOscillator(); o.type = 'triangle';
+      o.frequency.value = 523.25 * Math.pow(2, st / 12);
+      const g = c.createGain(); env(g, tt, 0.01, i === 6 ? 0.7 : 0.3, 0.13);
+      o.connect(g).connect(c.destination); o.start(tt); o.stop(tt + (i === 6 ? 0.8 : 0.36));
+    });
+    const shimmer = c.createOscillator(); shimmer.type = 'sine'; shimmer.frequency.value = 2093;
+    const sg = c.createGain(); env(sg, t + 0.66, 0.02, 0.9, 0.05);
+    shimmer.connect(sg).connect(c.destination); shimmer.start(t + 0.66); shimmer.stop(t + 1.6);
   } else if(kind === 'alarmTrigger'){
     // short rising two-note blip — "the alarm just went off"
     [0, 0.12].forEach((dt, i) => {

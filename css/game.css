@@ -163,6 +163,10 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   animation:gatepulse 2.6s ease-in-out infinite;
 }
 @keyframes gatepulse{0%,100%{opacity:.8}50%{opacity:1}}
+/* Interlock gate tiles (data-gi, distinct from the exit-gate strip above):
+   dim while passable so board state reads at a glance. */
+.gate[data-gi]{transition:opacity .3s ease}
+.gate[data-gi].gate-open{opacity:.3}
 .gate .arrow{
   position:absolute;left:8px;top:50%;transform:translateY(-50%);
   color:var(--accent);font-family:var(--disp);font-weight:700;font-size:13px;

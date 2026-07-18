@@ -172,11 +172,11 @@ function buildPieces(){
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
-  gates.forEach(gate => {
+  gates.forEach((gate, gi) => {
     const [r, c] = gate.gate;
     const el = document.createElement('div');
     el.className = 'gate';
-    el.dataset.r = r; el.dataset.c = c;
+    el.dataset.r = r; el.dataset.c = c; el.dataset.gi = gi;
     el.style.width = CELL + 'px';
     el.style.height = CELL + 'px';
     el.style.display = 'flex';
@@ -243,6 +243,8 @@ function buildPieces(){
   });
   updatePieceAria();
   renderPositions(false);
+  lastGateOpen = [];
+  updateGates(true);
 }
 function updatePieceAria(){
   board.querySelectorAll('.piece').forEach(el => {
@@ -285,6 +287,26 @@ function renderPositions(animate = true){
     const trailerCy = (trailer.r + (trailer.dir === 'v' ? trailer.len / 2 : 0.5)) * CELL;
     el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, CELL * 0.08);
   });
+}
+
+/* Interlock-gate state feedback: a gate cell is passable iff sensor
+   occupancy differs from its polarity (same rule as js/solver.js's
+   gateBlocks). Open gates dim so the player can read the board state at a
+   glance; a state flip caused by a committed move gets a chirp. Undo,
+   reset and level load refresh silently (silent=true). */
+let lastGateOpen = [];
+function updateGates(silent = false){
+  if(!gates.length){ lastGateOpen = []; return; }
+  const covered = (r, c) => pieces.some(p =>
+    p.dir === 'h' ? (p.r === r && c >= p.c && c < p.c + p.len)
+                  : (p.c === c && r >= p.r && r < p.r + p.len));
+  const now = gates.map(gt => gt.sensors.some(([sr, sc]) => covered(sr, sc)) !== gt.polarity);
+  const changed = lastGateOpen.length === now.length && now.some((v, i) => v !== lastGateOpen[i]);
+  board.querySelectorAll('.gate[data-gi]').forEach(el => {
+    el.classList.toggle('gate-open', now[+el.dataset.gi]);
+  });
+  if(!silent && changed) sfx('gate');
+  lastGateOpen = now;
 }
 
 /* ================== DRAG + FLICK ================== */
@@ -490,6 +512,7 @@ function commitMove(i, mergedKeyStep = false){
   if(!mergedKeyStep) moves++;
   sfx('snap');
   renderPositions(true);
+  updateGates();
   updateHud();
   updatePieceAria();
   const p = pieces[i];
@@ -822,6 +845,7 @@ function undo(){
   sfx('ui'); haptic('ui');
   track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
   renderPositions(true);
+  updateGates(true);
   updateHud();
   updatePieceAria();
 }
@@ -834,7 +858,7 @@ function decoupleTow(towIdx){
   pushHistory();
   decoupledHitches.add(hi);
   moves++;
-  sfx('snap');
+  sfx('decouple');
   haptic('ui');
   track('decouple', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
   updateHud();
@@ -868,7 +892,7 @@ function showHint(){
     updateHintBadge();
   }
   hintsUsed++;
-  sfx('ui');
+  sfx('hint');
   track('hint_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
 
   if(mv.decouple !== undefined){
@@ -1111,7 +1135,7 @@ function showNextCarReveal(){
   $('carRevealTier').className = 'car-tier tier-' + car.tier;
   const holder = $('carRevealArt');
   holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin });
-  sfx('win');
+  sfx('fanfare');
   haptic('success');
   showOverlay('carRevealOverlay');
 }
