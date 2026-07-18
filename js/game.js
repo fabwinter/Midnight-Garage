@@ -126,6 +126,25 @@ function easingFor(len, distCells){
   return `transform ${dur}s ${curve}`;
 }
 
+/* Small stable string hash (djb2) — used to seed the daily puzzle's photo
+   rotation from its date string, so "today's board" always looks the same
+   on every device rather than picking randomly on each render. */
+function hashStr(s){
+  let h = 5381;
+  for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/* Per-level seed for the traffic photo rotation (see buildPieces). Deriving
+   it from the level's own identity — rather than incrementing a counter or
+   picking randomly — keeps a given level looking the same across replays,
+   undos, and re-visits within a session. */
+function levelPhotoSeed(){
+  if(mode.type === 'daily') return hashStr(mode.date ?? '');
+  if(mode.type === 'sandbox') return hashStr(JSON.stringify(curLevel?.p ?? []));
+  return cur;
+}
+
 function buildPieces(){
   board.querySelectorAll('.piece, .wall, .gate, .hitch').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
@@ -172,8 +191,19 @@ function buildPieces(){
      hitch trailer) count up separately, so no two pieces in one level share
      a photo — the global piece index would collide once it wraps a photo
      array (e.g. trucks at idx 3 and 11 both landing on photo 3). Sedans
-     start at 1: photo 0 is the Garage-skin body. */
-  let sedanOrd = 1, truckOrd = 0, trailerOrd = 0;
+     start at 1: photo 0 is the Garage-skin body.
+
+     Each counter is also offset by a per-level seed (see levelPhotoSeed)
+     before it starts counting. Without this every level's sedans walked
+     the SEDAN_PHOTOS array from the same starting point (1, 2, 3…), so with
+     ~4-8 sedans per level and 22 photos in the array, indices past ~8 were
+     essentially never reached — the back two-thirds of the library (all
+     the newer real-photo colors) never showed up in normal play even
+     though they were correctly in rotation code-wise. The seed makes
+     different levels start at different offsets while still walking
+     sequentially, so "no duplicate within a level" still holds. */
+  const seed = levelPhotoSeed();
+  let sedanOrd = 1 + seed, truckOrd = seed * 3, trailerOrd = seed * 5;
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
     const isTow = hitches.some(h => h.tow === i);
