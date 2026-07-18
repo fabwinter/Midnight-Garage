@@ -68,13 +68,22 @@ const SEDAN_PHOTOS = [
   // board — same "doesn't belong in rotation" call as the shadowed Countach.
   { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
-  // generic hatchback body, all real-photo colors (see note above):
+  // generic hatchback body, all real-photo colors (see note above). Every
+  // entry here shares the exact same fitted footprint (776x343 within the
+  // 800x400 canvas) rather than each being scaled from its own measured
+  // bbox — sedan-13's source photo turns out to be from a different shoot
+  // than the other twelve (they share identical raw dimensions; it doesn't)
+  // and independently measured ~12% "fatter", which is what actually caused
+  // the "colored cars are narrower than the white one" bug: it wasn't the
+  // colored ones that were wrong, sedan-13 was oversized. A second same-body
+  // photo (traffic-sedan-26, meant to be a silver variant) turned out on
+  // inspection to be white too — dropped as a duplicate color rather than
+  // kept alongside sedan-13.
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // white
   { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple + yellow stripes
   { img: 'assets/cars/traffic-sedan-22.png', fixed: true },  // Biarritz blue
   { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
   { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
-  { img: 'assets/cars/traffic-sedan-26.png', fixed: true },  // silver
   { img: 'assets/cars/traffic-sedan-27.png', fixed: true },  // dark green
   { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
   { img: 'assets/cars/traffic-sedan-29.png', fixed: true },  // gunmetal gray
