@@ -34,12 +34,19 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
 /* One entry per real-world car model — no duplicate models. When the same
    car existed in several source colors, one recolorable cutout was kept and
    the rest deleted; the near-dupes (Countach, yellow-striped Ferrari, navy
-   GT, striped silver GT, GT3 RS) were pruned in the July '26 pass. Index 0
-   is the Garage-skin body — keep it a clean recolorable cutout. */
+   GT, striped silver GT, GT3 RS) were pruned in the July '26 pass, and the
+   Countach itself went next — its only cutout had a baked grey shadow strip
+   that survived recoloring. Index 0 is the Garage-skin body — keep it a
+   clean recolorable cutout.
+
+   Every canvas here is normalized the same way: content cropped to the car,
+   front at the RIGHT end, scaled to 97% of the canvas length with the car's
+   true aspect ratio preserved (boxy vehicles cap at 97% height instead), and
+   centered. No cutout is stretched to fill the box, so cars keep consistent
+   relative proportions on the board. */
 const SEDAN_PHOTOS = [
-  { img: 'assets/cars/traffic-sedan-16.png', hue: 13 },      // orange Countach (skin body)
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar (skin body)
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
-  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar
   { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
   { img: 'assets/cars/traffic-sedan-22.png', hue: 203 },     // Biarritz blue sedan
   // white paint + gray stripe and matte olive-drab are both near-desaturated
@@ -48,7 +55,11 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-4.png', fixed: true },   // silver + yellow stripe GT
   { img: 'assets/cars/traffic-sedan-5.png', fixed: true },   // yellow Ferrari, tricolor stripe
   { img: 'assets/cars/traffic-sedan-7.png', fixed: true },   // white classic 911, black stripe
-  { img: 'assets/cars/traffic-sedan-9.png', fixed: true },   // olive G-wagon
+  // the olive G-wagon (sedan-9) was dropped: its source photo is stubby
+  // enough (~1.7:1) that fitting it to the shared 97%-of-length norm every
+  // other car uses would overflow the cell's height, and shrinking it to
+  // fit instead left it visibly shorter than every other piece on the
+  // board — same "doesn't belong in rotation" call as the shadowed Countach.
   { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // plain white sedan
@@ -61,7 +72,11 @@ const SEDAN_PHOTOS = [
    are chosen by gameplay role (hitch trailer), never by index accident. */
 const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-1.png', fixed: true },   // garbage truck
-  { img: 'assets/cars/traffic-truck-2.png', hue: 41 },       // school bus
+  // school bus was hue-rotatable but its roof is one large, almost
+  // unshaded panel — hueRotate turns that into a flat, featureless block
+  // of whatever the target color is (worst on a piece landing on a purple
+  // palette slot), and a non-yellow school bus reads wrong anyway.
+  { img: 'assets/cars/traffic-truck-2.png', fixed: true },   // school bus
   { img: 'assets/cars/traffic-truck-3.png', fixed: true },   // tanker
   { img: 'assets/cars/traffic-truck-4.png', hue: 358 },      // tow truck
   { img: 'assets/cars/traffic-truck-5.png', fixed: true },   // chrome tanker
@@ -191,26 +206,28 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     </filter>
   </defs>`;
 
-  /* Hero (classic photo car): tuned to classic.png's actual bumper edges
-     (front ~98% across, rear ~1.5%) and headlight height (~16%/84% of the
-     cell) — measured from the source art. Two separate cones (one per
-     headlight) rather than one merged trapezoid, each blurred so the edge
-     reads as light falloff instead of a flat polygon. A tight bright core
-     sits right at each lens as the visible "source" the cones grow from.
+  /* Hero (classic photo car): geometry measured from the normalized
+     classic.png (front bumper at x≈193/200; headlight blades are swept-back
+     strips whose lens area centers at (174,18)/(174,82), angled ~24° toward
+     the nose). The soft glow ellipse lies along each blade, the bright core
+     sits on the blade's forward half, and each beam cone's base line follows
+     the blade before fanning out past the bumper. Two separate cones (one
+     per headlight) rather than one merged trapezoid, each blurred so the
+     edge reads as light falloff instead of a flat polygon.
      (mix-blend-mode:screen was tried for a true additive glow, but at this
      SVG's overflow:visible boundary it produced a visible seam where the
      beam crosses the piece's own viewBox — plain opaque-fading-to-transparent
      reads bright enough against the dark board without that artifact.) */
   const photoHeroExtra = (isHero && !skin) ? `
-    <path d="M ${L - 8} 12 L ${L + 185} -8 L ${L + 185} 46 L ${L - 8} 20 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
-    <path d="M ${L - 8} 88 L ${L + 185} 108 L ${L + 185} 54 L ${L - 8} 80 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
-    <ellipse cx="${L - 2}" cy="16" rx="13" ry="10" fill="#fff3c2" opacity=".6" filter="url(#${gid}bblur)"/>
-    <ellipse cx="${L - 2}" cy="84" rx="13" ry="10" fill="#fff3c2" opacity=".6" filter="url(#${gid}bblur)"/>
-    <circle cx="${L - 3}" cy="16" r="3.2" fill="#fffbe8"/>
-    <circle cx="${L - 3}" cy="84" r="3.2" fill="#fffbe8"/>
-    <ellipse cx="5" cy="16" rx="6" ry="9" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
-    <ellipse cx="5" cy="84" rx="6" ry="9" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
-    <ellipse cx="3" cy="50" rx="6" ry="32" fill="#ff3b2e" opacity=".26" filter="url(#${soft})"/>` : '';
+    <path d="M ${L - 23} 14 L ${L + 185} -8 L ${L + 185} 46 L ${L - 11} 30 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
+    <path d="M ${L - 23} 86 L ${L + 185} 108 L ${L + 185} 54 L ${L - 11} 70 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
+    <ellipse cx="${L - 26}" cy="18" rx="15" ry="4.5" transform="rotate(24 ${L - 26} 18)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>
+    <ellipse cx="${L - 26}" cy="82" rx="15" ry="4.5" transform="rotate(-24 ${L - 26} 82)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>
+    <circle cx="${L - 19}" cy="22" r="3" fill="#fffbe8"/>
+    <circle cx="${L - 19}" cy="78" r="3" fill="#fffbe8"/>
+    <ellipse cx="10" cy="16" rx="5" ry="7" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
+    <ellipse cx="10" cy="84" rx="5" ry="7" fill="#ff4a3a" opacity=".55" filter="url(#${soft})"/>
+    <ellipse cx="7" cy="50" rx="5" ry="30" fill="#ff3b2e" opacity=".24" filter="url(#${soft})"/>` : '';
 
   const cb = opts.colorblind && !isHero;
   let body;
