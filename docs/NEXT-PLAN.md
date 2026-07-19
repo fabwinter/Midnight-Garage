@@ -157,13 +157,27 @@ an accent swap, so real environments are a big visible upgrade. Rules:
   palettes per hero skin — a rare car unlocking its matching environment
   is a natural *fixed-contents* cosmetic pack (no PEGI trigger).
 
-### N3e — Reward-loop animations
+### N3e — Reward-loop animations *(solution replay ✅ shipped)*
 
 Spend animation effort on the reward loop, not ambience: garage reveal
 moment, hero drive-out on win, headlight sweep at level start, and
-**solution replay** (v1.1 item — the solver already returns the optimal
-path; play it back on the win sheet / after skip). All respecting the
-existing reduced-motion handling.
+solution replay. All respecting the existing reduced-motion handling.
+
+✅ **Solution replay** shipped: a dashed "Watch the optimal solution"
+button on the win sheet resets the board and plays the solver's own
+optimal path move-by-move (snap/decouple SFX, live move counter, gate
+dim updates, hero drive-out at the end), then hands the win sheet back.
+Win-sheet-only on purpose — the level is already cleared, so it teaches
+par-matching for the 3-star retry without leaking solutions to unsolved
+levels or undercutting the hint-token economy. Any tap skips; nav is
+locked during playback; loading any level cancels it. Hidden in sandbox.
+`solution_replay` analytics event; localized ×10.
+
+Onboarding rework (user-requested, adjacent to this pass) also shipped:
+the launch flash is gone (start overlay is statically `show`n before JS
+boots) and How to Play now carries the first-time mode picker — three
+icon cards (Relaxed/Heist/Pursuit) that set the same persisted mode as
+Settings; later launches skip straight to the last-played mode.
 
 ## N4 — Small polish with no dependencies
 

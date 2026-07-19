@@ -866,6 +866,7 @@ function trackLevelId(){
 }
 
 function startBoard(){
+  stopSolutionReplay(false);   // a new attempt invalidates any in-flight replay
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
@@ -1050,6 +1051,76 @@ function skipLevel(){
   advance();
 }
 
+/* ================== SOLUTION REPLAY (NEXT-PLAN N3e / v1.1) ==================
+   Offered on the win sheet only — the level is already cleared, so this
+   teaches par-matching for the 3-star retry without leaking solutions to
+   unsolved levels or undercutting the hint-token economy. Input stays
+   locked the whole time (solvedAnim is still true post-win); any tap
+   skips back to the win sheet. */
+let replayToken = 0;
+
+function stopSolutionReplay(reshow){
+  replayToken++;
+  document.removeEventListener('pointerdown', onReplaySkip);
+  setNavLocked(false);
+  if(reshow) showOverlay('winOverlay');
+}
+function onReplaySkip(){ sfx('ui'); stopSolutionReplay(true); }
+
+function playSolutionReplay(){
+  cancelAuto();
+  hideOverlay('winOverlay');
+  const token = ++replayToken;
+
+  // Reset to the level's starting position. Full rebuild (not just
+  // renderPositions) because the win animation left the hero element
+  // translated off-board with an inline transition.
+  pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  decoupledHitches = new Set();
+  buildPieces();
+
+  const sol = solve(pieces, { walls, gates, hitches });
+  if(!sol.solvable){ showOverlay('winOverlay'); return; }   // can't happen for a shipped level; bail politely
+
+  setNavLocked(true);
+  $('hudMoves').textContent = 0;
+  track('solution_replay', { mode: mode.type, level: trackLevelId(), par: sol.optimal });
+  // arm tap-to-skip on the next tick so the click that opened the replay
+  // doesn't immediately cancel it
+  setTimeout(() => { if(token === replayToken) document.addEventListener('pointerdown', onReplaySkip); }, 80);
+
+  let step = 0;
+  const tick = () => {
+    if(token !== replayToken) return;   // skipped, or a new level loaded
+    if(step >= sol.path.length){
+      const heroEl = board.querySelector('.piece[data-idx="0"]');
+      heroEl.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
+      heroEl.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
+      sfx('win');
+      setTimeout(() => { if(token === replayToken) stopSolutionReplay(true); }, 950);
+      return;
+    }
+    const mv = sol.path[step++];
+    if(mv.decouple !== undefined){
+      decoupledHitches.add(mv.decouple);
+      sfx('decouple');
+    } else {
+      const p = pieces[mv.i];
+      if(p.dir === 'h') p.c = mv.o; else p.r = mv.o;
+      if(mv.i2 !== undefined){
+        const q = pieces[mv.i2];
+        if(q.dir === 'h') q.c = mv.o2; else q.r = mv.o2;
+      }
+      sfx('snap');
+    }
+    renderPositions(true);
+    updateGates();
+    $('hudMoves').textContent = step;
+    setTimeout(tick, 480);
+  };
+  setTimeout(tick, 500);
+}
+
 /* ================== WIN ================== */
 let autoTimer = null;
 function winSequence(){
@@ -1143,6 +1214,7 @@ function showWinSheet(stars){
     : save.best[cur];
   $('cleanGetaway').hidden = !isCleanGetaway;
   if(isCleanGetaway) $('cleanGetaway').textContent = t('win.clean');
+  $('watchSolBtn').hidden = mode.type === 'sandbox';
   $('bountyResult').hidden = mode.type !== 'bounty';
   if(mode.type === 'bounty'){
     $('bountyResult').textContent = t(isBountyMet ? 'bounty.result.met' : 'bounty.result.notmet');
@@ -1718,6 +1790,7 @@ function applyStrings(){
   $('labWinPar').textContent = t('win.par');
   $('labWinBest').textContent = t('win.best');
   $('replayBtn').textContent = t('btn.replay');
+  $('watchSolBtn').textContent = t('win.watch');
   $('dailyTitle').textContent = t('daily.title');
   $('dailySub').textContent = t('daily.sub');
   $('labStreak').textContent = t('daily.streak');
@@ -1823,6 +1896,7 @@ function wire(){
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); startBoard(); });
   });
+  $('watchSolBtn').addEventListener('click', () => { sfx('ui'); playSolutionReplay(); });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);
