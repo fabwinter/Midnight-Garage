@@ -5,7 +5,8 @@
 
 import { LEVELS, CHAPTERS, CHAPTER_SIZE, INTRO } from '../js/levels.data.js';
 import { BOUNTY_ROTATION } from '../js/bounty-rotation.data.js';
-import { solve, N, EXIT_ROW } from '../js/solver.js';
+import { IMPOUND_LOT } from '../js/impound-lot.data.js';
+import { solve, N, EXIT_ROW, levelKey } from '../js/solver.js';
 import { dailyLevel } from '../js/generate.js';
 import { bountyFor, BOUNTY_EPOCH } from '../js/bounty.js';
 import { todayStr } from '../js/storage.js';
@@ -110,5 +111,23 @@ for(let d = 0; d < 14; d++){
   if(JSON.stringify(lv.p) !== JSON.stringify(again.p) || lv.condition !== again.condition) bad(`bounty ${ds}: non-deterministic`);
 }
 
+// every Impound Lot board (N2) must independently re-solve, and its
+// stored `key` — what save.impound.stars/best are keyed by — must match
+// what the solver actually computes for it, or a player's saved progress
+// on that board could silently stop resolving to the right entry
+const impoundKeys = new Set();
+IMPOUND_LOT.forEach((lv, i) => {
+  const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  const hero = pieces[0];
+  if(hero.dir !== 'h' || hero.r !== EXIT_ROW) bad(`impound slot ${i}: hero must be horizontal on row ${EXIT_ROW}`);
+  const sol = solve(pieces, { walls: lv.w });
+  if(!sol.solvable) bad(`impound slot ${i}: unsolvable`);
+  else if(sol.optimal !== lv.m) bad(`impound slot ${i}: par ${lv.m} but optimal ${sol.optimal}`);
+  const actualKey = levelKey(pieces, lv.w);
+  if(lv.key !== actualKey) bad(`impound slot ${i}: stored key doesn't match the board (stored "${lv.key}", computed "${actualKey}")`);
+  if(impoundKeys.has(lv.key)) bad(`impound slot ${i}: duplicate key "${lv.key}"`);
+  impoundKeys.add(lv.key);
+});
+
 if(fail){ console.error(`${fail} check(s) failed`); process.exit(1); }
-console.log(`✓ ${LEVELS.length} levels verified (par == optimal, invariants hold), 14 dailies deterministic, ${BOUNTY_ROTATION.length} bounty boards verified`);
+console.log(`✓ ${LEVELS.length} levels verified (par == optimal, invariants hold), 14 dailies deterministic, ${BOUNTY_ROTATION.length} bounty boards verified, ${IMPOUND_LOT.length} impound boards verified`);

@@ -350,6 +350,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .tab.cur{border-color:var(--tabaccent,var(--amber));color:var(--ink);box-shadow:0 0 12px -4px var(--tabaccent,var(--amber))}
 .tab.locked{opacity:.55}
 .tab .lock{font-size:10px}
+.tab.impound-tab{border-style:dashed}
 .lvl-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .lvl{
   aspect-ratio:1;border-radius:12px;border:1px solid var(--line);cursor:pointer;

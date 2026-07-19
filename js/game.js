@@ -13,6 +13,7 @@ import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { bountyFor, bountyConditionMet } from './bounty.js';
+import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
@@ -29,6 +30,7 @@ const PURSUIT_PAUSES_MAX = 3;                // pause tokens per Pursuit attempt
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
+let curImpound = 0;                           // Impound Lot index (js/impound-lot.data.js)
 let curLevel = null;                          // {m, p, w?, g?, h?} for whatever is on the board
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
@@ -64,6 +66,7 @@ let save = {
   hitchSeen: false,
   admin: false,
   bounties: { done: {} },   // 'YYYY-MM-DD' -> {moves, par, met, tier, condition}
+  impound: { stars: {}, best: {} },   // keyed by board `key` (levelKey), not array index
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -692,9 +695,12 @@ function campaignUpperBound(){
   return Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS, LEVELS.length) - 1;
 }
 
+const IMPOUND_ACCENT = '#d4af37';
+
 function applyChapterAccent(){
   const accent = mode.type === 'daily' ? '#ffb454'
     : mode.type === 'bounty' ? BOUNTY_TIER_ACCENT[mode.tier]
+    : mode.type === 'impound' ? IMPOUND_ACCENT
     : CHAPTERS[chapterOf(cur)].accent;
   document.documentElement.style.setProperty('--accent', accent);
 }
@@ -709,6 +715,10 @@ function updateHud(){
     $('hudTier').textContent = t('hud.bounty');
     const done = save.bounties.done[mode.date];
     $('hudStars').innerHTML = done ? (done.met ? '⚡' : '') : '';
+  } else if(mode.type === 'impound'){
+    $('hudLevel').textContent = '#' + (curImpound + 1);
+    $('hudTier').textContent = t('hud.impound');
+    $('hudStars').innerHTML = starStr(save.impound.stars[curLevel.key] || 0);
   } else if(mode.type === 'sandbox'){
     $('hudLevel').textContent = '✎';
     $('hudTier').textContent = 'Sandbox';
@@ -827,10 +837,32 @@ function loadBountyLevel(dateStr){
   track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition });
 }
 
+/* Impound Lot (N2, docs/NEXT-PLAN.md): endgame board list, unlocked once
+   Pro + every campaign level is cleared. Not date-gated like the daily/
+   bounty — the whole curated list is available at once, worked through at
+   the player's own pace like the campaign, hence its own advance()-style
+   flow (see advanceImpound, nextImpoundIndex) rather than bounty's
+   one-shot dead end. */
+function impoundUnlocked(){
+  return save.pro && save.unlocked >= LEVELS.length;
+}
+
+function loadImpoundLevel(idx){
+  abandonIfMidLevel();
+  stopMenuMusic();
+  mode = { type: 'impound' };
+  curImpound = idx;
+  curLevel = IMPOUND_LOT[idx];
+  startBoard();
+  track('impound_start', { index: idx, par: curLevel.m });
+}
+
 /* Identifier used in analytics/undo/hint tracking: the date for date-keyed
-   modes, the campaign index otherwise. */
+   modes, the board key for Impound, the campaign index otherwise. */
 function trackLevelId(){
-  return (mode.type === 'daily' || mode.type === 'bounty') ? mode.date : cur + 1;
+  if(mode.type === 'daily' || mode.type === 'bounty') return mode.date;
+  if(mode.type === 'impound') return curLevel.key;
+  return cur + 1;
 }
 
 function startBoard(){
@@ -1041,7 +1073,7 @@ function winSequence(){
   isCleanGetaway = false;
   if(save.settings.mode === 'heist'){
     isCleanGetaway = moves <= par;
-    if(isCleanGetaway) track('alarm_clean_getaway', { level: mode.type === 'campaign' ? cur + 1 : mode.number, moves, par, date: mode.date });
+    if(isCleanGetaway) track('alarm_clean_getaway', { level: trackLevelId(), moves, par, date: mode.date });
   }
 
   if(mode.type === 'campaign'){
@@ -1066,6 +1098,12 @@ function winSequence(){
     };
     persist();
     track('bounty_complete', { date: mode.date, number: mode.number, moves, par, tier: mode.tier, condition: mode.condition, met: isBountyMet });
+  } else if(mode.type === 'impound'){
+    const key = curLevel.key;
+    save.impound.stars[key] = Math.max(save.impound.stars[key] || 0, stars);
+    save.impound.best[key] = Math.min(save.impound.best[key] || Infinity, moves);
+    persist();
+    track('impound_win', { index: curImpound, moves, par, stars, time_s: timeS });
   }
   // sandbox playtests record nothing — no stars, no streaks, no daily state
 
@@ -1088,6 +1126,8 @@ function showWinSheet(stars){
     ? t('win.daily', { n: mode.number })
     : mode.type === 'bounty'
     ? t('win.bounty', { n: mode.number })
+    : mode.type === 'impound'
+    ? t('win.impound', { n: curImpound + 1 })
     : mode.type === 'sandbox'
     ? 'Sandbox level cleared'
     : t('win.title', { n: cur + 1 });
@@ -1097,6 +1137,8 @@ function showWinSheet(stars){
     ? (daily().done[mode.date]?.moves ?? moves)
     : mode.type === 'bounty'
     ? (save.bounties.done[mode.date]?.moves ?? moves)
+    : mode.type === 'impound'
+    ? (save.impound.best[curLevel.key] ?? moves)
     : mode.type === 'sandbox' ? moves
     : save.best[cur];
   $('cleanGetaway').hidden = !isCleanGetaway;
@@ -1133,6 +1175,27 @@ function showWinSheet(stars){
     // no peek/share/auto-advance.
     $('nextLabel').textContent = t('btn.done');
     $('nextBtn').dataset.action = 'bounty';
+    showOverlay('winOverlay');
+    return;
+  }
+  if(mode.type === 'impound'){
+    // Unlike bounty, the Impound Lot IS an ordered list — mirrors the
+    // campaign's own peek/next/auto-advance flow, just off IMPOUND_LOT.
+    const next = nextImpoundIndex();
+    if(next !== -1){
+      renderPeek(IMPOUND_LOT[next]);
+      $('peek').hidden = false;
+      $('peekLab').textContent = t('win.next');
+      $('nextLabel').textContent = t('btn.next');
+    } else {
+      $('nextLabel').textContent = t('btn.levels');
+    }
+    $('nextBtn').dataset.action = 'impound';
+    if(save.settings.autoAdvance && next !== -1 && !carRevealQueue.length && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      $('autobar').style.setProperty('--automs', '2600ms');
+      requestAnimationFrame(() => $('autobar').classList.add('run'));
+      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); advanceImpound(); }, 2600);
+    }
     showOverlay('winOverlay');
     return;
   }
@@ -1264,6 +1327,19 @@ function advance(){
   buildLevelList(); showOverlay('levelsOverlay');
 }
 
+function nextImpoundIndex(){
+  const next = curImpound + 1;
+  return next < IMPOUND_LOT.length ? next : -1;
+}
+
+function advanceImpound(){
+  cancelAuto();
+  const next = nextImpoundIndex();
+  if(next !== -1){ loadImpoundLevel(next); return; }
+  tabChapter = IMPOUND_TAB;
+  buildLevelList(); showOverlay('levelsOverlay');
+}
+
 function renderPeek(lv, holder = $('peekBoard')){
   holder.innerHTML = '';
   const u = 96 / 6;
@@ -1364,6 +1440,7 @@ function toast(msg){
 /* ================== LEVEL SELECT ================== */
 let tabChapter = 0;
 const ROMAN = ['I', 'II', 'III', 'IV'];
+const IMPOUND_TAB = 'impound';   // sentinel tabChapter value — not a real chapter index
 
 function buildChapterTabs(){
   const holder = $('chapterTabs');
@@ -1378,12 +1455,57 @@ function buildChapterTabs(){
     b.addEventListener('click', () => { sfx('ui'); tabChapter = i; buildLevelList(); });
     holder.appendChild(b);
   });
+  const ib = document.createElement('button');
+  const iLocked = !impoundUnlocked();
+  ib.className = 'tab impound-tab' + (tabChapter === IMPOUND_TAB ? ' cur' : '') + (iLocked ? ' locked' : '');
+  ib.style.setProperty('--tabaccent', IMPOUND_ACCENT);
+  ib.innerHTML = `<span class="roman">★</span><span>${t('impound.title')}</span>` +
+    (iLocked ? `<span class="lock">🔒</span>` : '');
+  ib.addEventListener('click', () => {
+    sfx('ui');
+    if(iLocked){
+      if(!save.pro){
+        toast(t('toast.locked'));
+        showOverlay('proOverlay');
+        track('iap_view', { source: 'impound_tab' });
+      } else {
+        toast(t('impound.locked.incomplete'));
+      }
+      return;
+    }
+    tabChapter = IMPOUND_TAB;
+    buildLevelList();
+  });
+  holder.appendChild(ib);
 }
 
 function buildLevelList(){
   buildChapterTabs();
   const holder = $('levelList');
   holder.innerHTML = '';
+
+  if(tabChapter === IMPOUND_TAB){
+    $('levelsTitle').textContent = t('impound.title');
+    $('levelsSub').textContent = t('impound.sub');
+    const g = document.createElement('div');
+    g.className = 'lvl-grid';
+    IMPOUND_LOT.forEach((lv, i) => {
+      const b = document.createElement('button');
+      const st = save.impound.stars[lv.key] || 0;
+      b.className = 'lvl' + (i === curImpound && mode.type === 'impound' ? ' cur' : '') + (st > 0 ? ' done' : '');
+      b.innerHTML = `<span class="n">${i + 1}</span><span class="s">${starStr(st)}</span>`;
+      b.addEventListener('click', () => {
+        sfx('ui'); stopSettingsMusic(); hideOverlay('levelsOverlay'); loadImpoundLevel(i);
+      });
+      b.setAttribute('aria-label', `Impound job ${i + 1}`);
+      g.appendChild(b);
+    });
+    holder.appendChild(g);
+    return;
+  }
+
+  $('levelsTitle').textContent = t('levels.title');
+  $('levelsSub').textContent = t('levels.sub');
   const chLocked = tabChapter >= 2 && !save.pro;
   const g = document.createElement('div');
   g.className = 'lvl-grid';
@@ -1650,7 +1772,11 @@ function fadeOutMenuMusicOnFirstMove(){
 
 /* ================== GLOBAL WIRING ================== */
 function wire(){
-  $('levelsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
+  $('levelsBtn').addEventListener('click', () => {
+    sfx('ui'); playSettingsMusic();
+    tabChapter = mode.type === 'impound' ? IMPOUND_TAB : chapterOf(cur);
+    buildLevelList(); showOverlay('levelsOverlay');
+  });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
   $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
   $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
@@ -1706,6 +1832,11 @@ function wire(){
     if($('nextBtn').dataset.action === 'bounty'){
       cancelAuto(); sfx('ui');
       proceedOrReveal(() => hideOverlay('winOverlay'));
+      return;
+    }
+    if($('nextBtn').dataset.action === 'impound'){
+      cancelAuto(); sfx('ui');
+      proceedOrReveal(() => { hideOverlay('winOverlay'); advanceImpound(); });
       return;
     }
     cancelAuto(); sfx('ui');
@@ -1783,6 +1914,14 @@ function runAdminCommand(raw){
     toast('Bounty ' + date);
     return;
   }
+  if(s.startsWith('impound')){
+    const n = s.split(/\s+/)[1];
+    const idx = Math.min(IMPOUND_LOT.length - 1, Math.max(0, (Number(n) || 1) - 1));
+    hideOverlay('startOverlay');
+    loadImpoundLevel(idx);   // admin jump ignores the Pro+finished gate on purpose
+    toast(`Impound ${idx + 1}`);
+    return;
+  }
   const m = s.match(/^(relaxed|heist|pursuit)?\s*#?(\d+)$/);
   if(m){
     if(m[1] && m[1] !== save.settings.mode){
@@ -1797,7 +1936,7 @@ function runAdminCommand(raw){
     toast(`Level ${idx + 1} · ${save.settings.mode}`);
     return;
   }
-  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · bounty · sandbox');
+  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · bounty · impound 5 · sandbox');
 }
 
 function wireAdmin(){
@@ -2175,6 +2314,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     delete save.settings.alarm;
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
     save.bounties = Object.assign({ done: {} }, loaded.bounties);
+    save.impound = Object.assign({ stars: {}, best: {} }, loaded.impound);
     // Older saves have no per-mode level tracking — seed all three modes
     // from wherever the player's single shared progress pointer was.
     if(!loaded.modeLevel){

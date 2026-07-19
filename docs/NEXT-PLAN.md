@@ -59,15 +59,47 @@ New collectible car art (N3c below) still applies to *future* bounty
 tiers/rarity flavor — the 4 shipped here are palette-only, same as the
 existing collection, not the "6–10 new hero art" push N3c describes.
 
-## N2 — The Impound Lot (Featured Boards, pulled forward from v2.0)
+## N2 — The Impound Lot (Featured Boards, pulled forward from v2.0) ✅ shipped
 
-A post-campaign, Pro-gated board list for players who finish level 200 —
-the natural home for the rest of the Fogleman surplus after bounties take
-their cut. Roughly: a fifth "chapter" surface (NOT a fifth chapter — the
-4×50 shape and unlock semantics stay untouched) listing curated hard
-boards with their par, best, and stars. Cheap because it reuses the level
-list UI and the pool is pre-verified. Also the natural landing place for
-levels promoted from the sandbox via `tools/promote-sandbox-levels.mjs`.
+A post-campaign, Pro-gated board list for players who finish level 200.
+
+- **Boards:** `tools/gen-impound-pool.mjs` curates 100 boards (par 41–50 —
+  the remaining pool's rare/legendary tier was already spent on Gridlock
+  and Bounties) from whatever's left of the Fogleman surplus, sorted into
+  an ascending difficulty curve and checked into `js/impound-lot.data.js`.
+  236 boards still sit unused in `.genwork/fogleman-pool.json` for a
+  future batch or for sandbox promotions.
+- **Not a fifth chapter:** `CHAPTERS`/`CHAPTER_SIZE`/the 4×50 shape are
+  untouched. The Impound Lot is a 5th *tab* (`IMPOUND_TAB` sentinel) added
+  to the existing chapter-tabs UI in `buildChapterTabs`/`buildLevelList` —
+  genuinely reuses the level-list UI rather than duplicating it, styled
+  with a dashed border and its own gold accent (`IMPOUND_ACCENT`).
+- **Gating:** `impoundUnlocked() = save.pro && save.unlocked >= 200`. Two
+  distinct locked states with different feedback: no Pro → the existing
+  paywall; Pro but campaign unfinished → a toast telling you to finish it.
+- **Progression:** unlike the bounty (one-shot, date-gated), the whole
+  list is available at once and plays like a second campaign — its own
+  `save.impound.{stars,best}` (keyed by board `key`, not array index, so
+  future re-curation can't scramble saved progress), peek-preview,
+  auto-advance, and `win.impound` title, all mirroring the campaign flow
+  via `loadImpoundLevel`/`advanceImpound`/`nextImpoundIndex`.
+- **Verify:** `tools/verify-levels.mjs` re-solves all 100 boards and
+  additionally checks each entry's stored `key` still matches what the
+  solver computes for it (a save-keying correctness guard, not just
+  par==optimal) and that no two entries share a key.
+
+Verified end-to-end via headless Playwright across all three gate states
+(no Pro / Pro-but-unfinished / Pro-and-finished), then browsed the
+unlocked list, solved job #1 by driving the solver's own optimal path
+through real keyboard input, advanced through a stack of milestone car
+reveals into job #2, and confirmed job #1 persisted as starred on
+reopening the list. Zero console errors. Full verify passes.
+
+Also the natural landing place for levels promoted from the sandbox via
+`tools/promote-sandbox-levels.mjs` — that tool doesn't target the Impound
+Lot yet (still campaign-chapter-only); wiring an `--impound` destination
+for boards whose par doesn't fit any chapter band is a small follow-up,
+not done here.
 
 ## N3 — Presentation pass (art, audio, animation)
 
@@ -153,8 +185,8 @@ Can't be done from this cloud environment; unchanged from
 
 ---
 
-**N3a and N1 are both shipped.** Recommended order for what's left:
-**N2 → N3b/c/d/e → N4**, with N5 whenever you're ready on the
-native/business side. N2 next since it's the natural home for the
-remaining ~340 unused Fogleman boards (61 went to bounties, 20 to
-Gridlock, out of 425 total) and for sandbox-promoted levels.
+**N3a, N1, and N2 are all shipped.** Recommended order for what's left:
+**N3b/c/d/e → N4**, with N5 whenever you're ready on the native/business
+side. Nothing left is content-blocked — the Fogleman surplus is spent
+down to 236 boards in reserve, and everything remaining is presentation
+(N3) or polish (N4) rather than new systems.
