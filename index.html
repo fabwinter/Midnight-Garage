@@ -262,8 +262,12 @@
   </div>
 </div>
 
-<!-- Start/Intro Screen (poster art, shown every launch) -->
-<div class="overlay" id="startOverlay">
+<!-- Start/Intro Screen (poster art, shown every launch). Starts with the
+     `show` class already present — this is the very first thing painted,
+     so there's no gap where the bare board/HUD flashes before JS can call
+     showOverlay('startOverlay') (boot() is async: save load, daily state,
+     analytics init all happen before that call used to land). -->
+<div class="overlay show" id="startOverlay">
   <div class="start-cta">
     <button class="btn primary" id="startPlayBtn"><span id="startPlayLabel">Start</span></button>
     <div class="admin-bar" id="adminBar" hidden>
@@ -314,16 +318,37 @@
   </div>
 </div>
 
-<!-- How-to-play popup, shown once after Start on the very first launch -->
+<!-- How-to-play + first-time mode picker, shown once after Start on the
+     very first launch only (save.introSeen gates it — see startPlayBtn).
+     Picking a mode here just sets save.settings.mode, same as the picker
+     in Settings; every later launch skips straight past this and uses
+     whatever mode was last played. -->
 <div class="overlay" id="introOverlay">
-  <div class="sheet">
+  <div class="sheet intro-sheet">
     <h2 id="introTitle">How to Play</h2>
     <div class="start-narration">
       <p id="introP1"></p>
       <p id="introP2"></p>
-      <p id="introP3"></p>
     </div>
-    <button class="btn primary" id="introPlayBtn" style="width:100%;margin-top:6px"><span id="introPlayLabel">Let's Go</span></button>
+    <h3 class="intro-modes-title" id="introModesTitle">Choose your mode</h3>
+    <div class="mode-cards" id="introModeCards">
+      <button class="mode-card" data-mode="relaxed" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3.5M12 16.5V20M4 12h3.5M16.5 12H20"/></svg>
+        <span class="mode-card-name" id="introModeRelaxedName">Relaxed</span>
+        <span class="mode-card-desc" id="introModeRelaxedDesc"></span>
+      </button>
+      <button class="mode-card" data-mode="heist" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 3a5 5 0 0 0-5 5v3.5c0 .8-.3 1.6-.9 2.2L4 16h16l-2.1-2.3c-.6-.6-.9-1.4-.9-2.2V8a5 5 0 0 0-5-5Z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/></svg>
+        <span class="mode-card-name" id="introModeHeistName">Heist</span>
+        <span class="mode-card-desc" id="introModeHeistDesc"></span>
+      </button>
+      <button class="mode-card" data-mode="pursuit" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/></svg>
+        <span class="mode-card-name" id="introModePursuitName">Pursuit</span>
+        <span class="mode-card-desc" id="introModePursuitDesc"></span>
+      </button>
+    </div>
+    <button class="btn primary" id="introPlayBtn" style="width:100%;margin-top:10px"><span id="introPlayLabel">Let's Go</span></button>
   </div>
 </div>
 

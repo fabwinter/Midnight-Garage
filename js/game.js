@@ -1650,6 +1650,7 @@ function applySettings(){
 function updateModeSelectUI(){
   const m = save.settings.mode;
   document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
+  document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
   $('modeDesc').textContent = t('mode.desc.' + m);
 }
 
@@ -1757,7 +1758,13 @@ function applyStrings(){
   $('introTitle').textContent = t('intro.title');
   $('introP1').textContent = t('start.p1');
   $('introP2').textContent = t('start.p2');
-  $('introP3').textContent = t('start.p3');
+  $('introModesTitle').textContent = t('intro.modes');
+  $('introModeRelaxedName').textContent = t('mode.relaxed');
+  $('introModeRelaxedDesc').textContent = t('mode.desc.relaxed');
+  $('introModeHeistName').textContent = t('mode.heist');
+  $('introModeHeistDesc').textContent = t('mode.desc.heist');
+  $('introModePursuitName').textContent = t('mode.pursuit');
+  $('introModePursuitDesc').textContent = t('mode.desc.pursuit');
   $('introPlayLabel').textContent = t('intro.play');
 }
 
@@ -1874,11 +1881,27 @@ function wire(){
       setTimeout(() => $('board').focus(), 100);
     }
   });
+  // First-launch mode cards: picking one is the same act as picking in
+  // Settings — it sets the persisted mode, and every later launch defaults
+  // to whatever was played last (boot() reads save.settings.mode).
+  document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.addEventListener('click', () => {
+    const m = b.dataset.mode;
+    sfx('ui');
+    if(save.settings.mode === m){ updateModeSelectUI(); return; }
+    save.settings.mode = m;
+    setGameMode(m);
+    updateModeSelectUI();
+    persist();
+  }));
   $('introPlayBtn').addEventListener('click', () => {
     sfx('ui');
     save.introSeen = true;
     persist();
     hideOverlay('introOverlay');
+    // Re-init the board under the picked mode — boot loaded it before the
+    // choice existed, and startBoard() is what seeds the mode's alarm
+    // budget / pursuit clock. Zero moves have been made, so this is free.
+    startBoard();
     setTimeout(() => $('board').focus(), 100);
   });
 }
@@ -2336,8 +2359,9 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
   loadLevel(startAt);
   startMenuMusic();
-  // Poster start screen shows on every launch; the how-to-play popup
-  // that follows it is gated to the first launch only (see startPlayBtn).
-  showOverlay('startOverlay');
+  // Poster start screen already has the `show` class in the static HTML
+  // (no flash-of-bare-board while this async boot sequence runs) and
+  // shows on every launch; the how-to-play/mode-picker popup that follows
+  // it is gated to the first launch only (see startPlayBtn).
   setTimeout(() => $('startPlayBtn').focus(), 100);
 })();

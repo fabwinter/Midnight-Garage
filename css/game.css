@@ -537,6 +537,29 @@ input[type=range]::-moz-range-thumb{
 .mode-btn.cur{border-color:var(--amber);color:var(--ink);box-shadow:0 0 12px -4px var(--amber)}
 .mode-desc{color:var(--muted);font-size:12px;margin:0 0 4px;padding:0 2px}
 
+/* ---------- First-launch mode picker (intro sheet) ---------- */
+.intro-sheet{max-width:520px}
+.intro-modes-title{
+  font-family:var(--disp);font-weight:700;letter-spacing:.08em;font-size:12px;
+  text-transform:uppercase;color:var(--muted);margin:14px 0 8px;
+}
+.mode-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mode-card{
+  display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
+  border:1px solid var(--line);border-radius:14px;padding:12px 6px 10px;cursor:pointer;
+  background:linear-gradient(180deg,#1c2331,#141a25);color:var(--ink);
+  transition:border-color .12s ease,box-shadow .12s ease,transform .1s ease;
+}
+.mode-card:active{transform:scale(.97)}
+.mode-card svg{width:26px;height:26px;fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mode-card.cur{border-color:var(--amber);box-shadow:0 0 14px -4px var(--amber)}
+.mode-card.cur svg{stroke:var(--amber)}
+.mode-card-name{font-family:var(--disp);font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase}
+.mode-card-desc{font-size:10.5px;color:var(--muted);line-height:1.35}
+@media (max-width:380px){
+  .mode-cards{grid-template-columns:1fr}
+}
+
 /* ---------- Pro sheet ---------- */
 .pro-sheet{text-align:center}
 .pro-car{width:120px;height:120px;margin:4px auto 6px;display:block}
