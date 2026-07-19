@@ -8,28 +8,45 @@ let AC = null;
 let sfxVol = 1;
 let musicVol = 0;
 
-// Heist/Pursuit attempt track — whichever of the two licensed tracks
-// matches the current game mode (Relaxed has no attempt track).
+// Heist/Pursuit attempt track — a per-mode pool so repeat attempts don't
+// always hear the same loop (Relaxed has no attempt track). Add more
+// files to a pool any time; nothing else needs to change.
 let gameMode = 'heist';    // 'relaxed' | 'heist' | 'pursuit'
 let attemptAudio = null;
 let attemptTrackSrc = null;
 let attemptActive = false; // true only while a level attempt is in progress
 let duckAttempt = false;   // true while menu/tab music has priority over the attempt track
-const HEIST_TRACK = 'assets/audio/midnight-in-the-vault.mp3';
-// No dedicated Pursuit track yet — reuse the heist track rather than point
-// at a file that doesn't exist (which left Pursuit silent). Swap this to
-// its own file when one lands (NEXT-PLAN N3b wants intensity stems here).
-const PURSUIT_TRACK = HEIST_TRACK;
+const TRACK_POOLS = {
+  heist: ['assets/audio/midnight-in-the-vault.mp3'],
+  pursuit: [
+    'assets/audio/pursuit-1.mp3',
+    'assets/audio/pursuit-2.mp3',
+    'assets/audio/pursuit-3.mp3',
+    'assets/audio/pursuit-4.mp3',
+  ],
+};
+const lastPick = { heist: null, pursuit: null };   // avoids back-to-back repeats
+let curAttemptTrack = null;   // the src chosen for the attempt in progress — stable across duck/resume
+
+/* Picks a new track for a fresh attempt (called from startAttemptTrack
+   only — resumeAttemptTrack reuses curAttemptTrack so ducking out to a
+   menu and back doesn't swap the song mid-attempt). Never repeats the
+   immediately-previous pick when the pool has more than one track. */
+function pickTrack(mode){
+  const pool = TRACK_POOLS[mode];
+  if(!pool || !pool.length) return null;
+  if(pool.length === 1) return pool[0];
+  let pick;
+  do{ pick = pool[Math.floor(Math.random() * pool.length)]; }while(pick === lastPick[mode]);
+  lastPick[mode] = pick;
+  return pick;
+}
 
 // Menu/theme music
 let menuAudio = null;
 let settingsAudio = null;
 const VELVET_GLOVE = 'assets/audio/velvet-glove.mp3';
 const CLEAN_GETAWAY = 'assets/audio/clean-getaway.mp3';
-
-function trackFor(mode){
-  return mode === 'heist' ? HEIST_TRACK : mode === 'pursuit' ? PURSUIT_TRACK : null;
-}
 
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
@@ -60,13 +77,14 @@ function ensureAttemptAudio(src){
   return attemptAudio;
 }
 
-/* Called once per level attempt (level load / reset) — restarts the track
-   from the top so every attempt gets a fresh run of the loop. Stays
-   silent while a tab/menu track has priority (duckAttempt); resumeAttemptTrack
-   picks it up once that track closes. */
+/* Called once per level attempt (level load / reset) — picks a fresh track
+   from the mode's pool (never the same one twice in a row) and restarts it
+   from the top. Stays silent while a tab/menu track has priority
+   (duckAttempt); resumeAttemptTrack picks it up once that track closes. */
 export function startAttemptTrack(mode){
   attemptActive = true;
-  const src = trackFor(mode);
+  curAttemptTrack = pickTrack(mode);
+  const src = curAttemptTrack;
   if(!src) return;
   ensureAttemptAudio(src);
   if(duckAttempt) return;
@@ -102,7 +120,7 @@ export function duckAttemptTrack(){
 export function resumeAttemptTrack(){
   duckAttempt = false;
   if(gameMode === 'relaxed' || !attemptActive) return;
-  ensureAttemptAudio(trackFor(gameMode));
+  ensureAttemptAudio(curAttemptTrack);   // same track this attempt already picked — no re-roll on resume
   if(attemptAudio.paused && musicVol > 0){
     attemptAudio.play().catch(() => {});
     fadeIn(attemptAudio, Math.max(0, Math.min(1, musicVol)), 300);

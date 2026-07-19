@@ -125,13 +125,22 @@ download weight — a strength to keep, not replace).
   campaign levels carry gates yet, so this is forward wiring for sandbox
   and future gate content.
 
-### N3b — Adaptive Alarm music *(v1.5 item, pulled forward)*
+### N3b — Pursuit music pool ✅ shipped (adaptive stems still open)
 
-Two or three intensity stems for Alarm/Pursuit that layer in as the move
-budget shrinks — the per-attempt audio lifecycle (start on first move,
-stop on win/busted) already exists, so this is stem playback + a
-crossfade, not new infrastructure. Bigger felt upgrade than adding more
-static tracks.
+✅ **Pursuit track pool**: 4 user-supplied tracks (`pursuit-1..4.mp3`,
+~14.7MB) replace the old Heist-track reuse. `js/audio.js`'s
+`TRACK_POOLS` is keyed by mode with a `pickTrack()` that never repeats
+the immediately-previous pick — picked fresh every attempt
+(`startAttemptTrack`), stable across menu-tab ducking within one attempt
+(`resumeAttemptTrack` reuses `curAttemptTrack`). Heist's pool still has
+just its one existing track; dropping more Heist/Relaxed tracks in
+later is a one-line addition to `TRACK_POOLS`, nothing else changes.
+More tracks incoming from the user for other modes.
+
+Still open — **adaptive intensity stems**: two or three stems per mode
+that layer in as the move budget shrinks, crossfading on top of the
+per-attempt lifecycle that already exists. Bigger felt upgrade than more
+static tracks; the pool above is the simpler win that shipped first.
 
 ### N3c — Collection car art *(feeds N1)*
 
