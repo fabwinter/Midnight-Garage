@@ -12,10 +12,13 @@ import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
+import { bountyFor, bountyConditionMet } from './bounty.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
+
+const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
 const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
@@ -39,6 +42,7 @@ let solvedAnim = false;
 let levelStart = Date.now();
 let skipShown = false;
 let isCleanGetaway = false;
+let isBountyMet = false;
 
 // Pursuit mode: real-time countdown, ticks while running, freezes while paused.
 let pursuitTimeLeft = 0;
@@ -59,6 +63,7 @@ let save = {
   introSeen: false,
   hitchSeen: false,
   admin: false,
+  bounties: { done: {} },   // 'YYYY-MM-DD' -> {moves, par, met, tier, condition}
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -651,7 +656,7 @@ function hideBoardPause(){
 }
 
 function setNavLocked(locked){
-  ['levelsBtn', 'dailyBtn', 'garageBtn', 'settingsBtn'].forEach(id => { $(id).disabled = locked; });
+  ['levelsBtn', 'dailyBtn', 'bountyBtn', 'garageBtn', 'settingsBtn'].forEach(id => { $(id).disabled = locked; });
 }
 
 /* ================== HUD ================== */
@@ -688,7 +693,9 @@ function campaignUpperBound(){
 }
 
 function applyChapterAccent(){
-  const accent = mode.type === 'daily' ? '#ffb454' : CHAPTERS[chapterOf(cur)].accent;
+  const accent = mode.type === 'daily' ? '#ffb454'
+    : mode.type === 'bounty' ? BOUNTY_TIER_ACCENT[mode.tier]
+    : CHAPTERS[chapterOf(cur)].accent;
   document.documentElement.style.setProperty('--accent', accent);
 }
 
@@ -697,6 +704,11 @@ function updateHud(){
     $('hudLevel').textContent = '#' + mode.number;
     $('hudTier').textContent = t('hud.daily');
     $('hudStars').innerHTML = isDone(mode.date) ? starStr(daily().done[mode.date].stars) : starStr(0);
+  } else if(mode.type === 'bounty'){
+    $('hudLevel').textContent = '#' + mode.number;
+    $('hudTier').textContent = t('hud.bounty');
+    const done = save.bounties.done[mode.date];
+    $('hudStars').innerHTML = done ? (done.met ? '⚡' : '') : '';
   } else if(mode.type === 'sandbox'){
     $('hudLevel').textContent = '✎';
     $('hudTier').textContent = 'Sandbox';
@@ -716,6 +728,7 @@ function updateHud(){
   updateControlsVisibility();
   updateHintBadge();
   $('dailyDot').classList.toggle('on', !isDone(todayStr()));
+  $('bountyDot').classList.toggle('on', !save.bounties.done[todayStr()]?.met);
 }
 
 function updateModeHud(){
@@ -773,7 +786,7 @@ function refreshHintTokens(){
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
-      mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1,
+      mode: mode.type, level: trackLevelId(),
       moves, time_s: Math.round((Date.now() - levelStart) / 1000),
     });
   }
@@ -801,6 +814,23 @@ function loadDailyLevel(dateStr){
   curLevel = lv;
   startBoard();
   track('daily_start', { date: dateStr, number: mode.number, par: lv.m });
+}
+
+function loadBountyLevel(dateStr){
+  abandonIfMidLevel();
+  stopMenuMusic();
+  const lv = bountyFor(dateStr);
+  if(!lv) return;
+  mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition };
+  curLevel = lv;
+  startBoard();
+  track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition });
+}
+
+/* Identifier used in analytics/undo/hint tracking: the date for date-keyed
+   modes, the campaign index otherwise. */
+function trackLevelId(){
+  return (mode.type === 'daily' || mode.type === 'bounty') ? mode.date : cur + 1;
 }
 
 function startBoard(){
@@ -843,7 +873,7 @@ function undo(){
   if(save.settings.mode !== 'heist') moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
-  track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  track('undo_used', { mode: mode.type, level: trackLevelId() });
   renderPositions(true);
   updateGates(true);
   updateHud();
@@ -860,7 +890,7 @@ function decoupleTow(towIdx){
   moves++;
   sfx('decouple');
   haptic('ui');
-  track('decouple', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  track('decouple', { mode: mode.type, level: trackLevelId() });
   updateHud();
   return true;
 }
@@ -893,7 +923,7 @@ function showHint(){
   }
   hintsUsed++;
   sfx('hint');
-  track('hint_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  track('hint_used', { mode: mode.type, level: trackLevelId() });
 
   if(mv.decouple !== undefined){
     // No destination to point at — the optimal move is to unhitch this
@@ -1026,6 +1056,16 @@ function winSequence(){
     if(res.usedFreeze) toast(t('toast.freeze'));
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
+  } else if(mode.type === 'bounty'){
+    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed, gameMode: save.settings.mode });
+    const prev = save.bounties.done[mode.date];
+    save.bounties.done[mode.date] = {
+      moves: prev ? Math.min(prev.moves, moves) : moves,
+      par, tier: mode.tier, condition: mode.condition,
+      met: (prev?.met || false) || isBountyMet,   // once earned, always earned — retries can't un-clear it
+    };
+    persist();
+    track('bounty_complete', { date: mode.date, number: mode.number, moves, par, tier: mode.tier, condition: mode.condition, met: isBountyMet });
   }
   // sandbox playtests record nothing — no stars, no streaks, no daily state
 
@@ -1046,6 +1086,8 @@ function showWinSheet(stars){
   $('winFlag').textContent = t('win.flag');
   $('winTitle').textContent = mode.type === 'daily'
     ? t('win.daily', { n: mode.number })
+    : mode.type === 'bounty'
+    ? t('win.bounty', { n: mode.number })
     : mode.type === 'sandbox'
     ? 'Sandbox level cleared'
     : t('win.title', { n: cur + 1 });
@@ -1053,10 +1095,17 @@ function showWinSheet(stars){
   $('winPar').textContent = par;
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
+    : mode.type === 'bounty'
+    ? (save.bounties.done[mode.date]?.moves ?? moves)
     : mode.type === 'sandbox' ? moves
     : save.best[cur];
   $('cleanGetaway').hidden = !isCleanGetaway;
   if(isCleanGetaway) $('cleanGetaway').textContent = t('win.clean');
+  $('bountyResult').hidden = mode.type !== 'bounty';
+  if(mode.type === 'bounty'){
+    $('bountyResult').textContent = t(isBountyMet ? 'bounty.result.met' : 'bounty.result.notmet');
+    $('bountyResult').className = 'bounty-result ' + (isBountyMet ? 'met' : 'notmet');
+  }
   const ws = $('winStars');
   ws.innerHTML = '';
   for(let i = 0; i < 3; i++){
@@ -1076,6 +1125,14 @@ function showWinSheet(stars){
     // Playtest loop: straight back to the editor, no peek/share/auto-advance.
     $('nextLabel').textContent = 'Back to editor';
     $('nextBtn').dataset.action = 'sandbox';
+    showOverlay('winOverlay');
+    return;
+  }
+  if(mode.type === 'bounty'){
+    // No natural "next" until tomorrow's mark — a dead end like sandbox,
+    // no peek/share/auto-advance.
+    $('nextLabel').textContent = t('btn.done');
+    $('nextBtn').dataset.action = 'bounty';
     showOverlay('winOverlay');
     return;
   }
@@ -1207,8 +1264,7 @@ function advance(){
   buildLevelList(); showOverlay('levelsOverlay');
 }
 
-function renderPeek(lv){
-  const holder = $('peekBoard');
+function renderPeek(lv, holder = $('peekBoard')){
   holder.innerHTML = '';
   const u = 96 / 6;
   (lv.w ?? []).forEach(([r, c]) => {
@@ -1425,6 +1481,34 @@ function renderCalendar(){
   }
 }
 
+/* ================== BOUNTY (H4 "Tonight's Mark") ================== */
+function openBounty(){
+  renderBountySheet();
+  showOverlay('bountyOverlay');
+}
+
+function renderBountySheet(){
+  const today = todayStr();
+  const lv = bountyFor(today);
+  if(!lv){ return; }   // before BOUNTY_EPOCH — shouldn't happen once shipped
+  const done = save.bounties.done[today];
+
+  $('bountyTierChip').textContent = t('tier.' + lv.tier);
+  $('bountyTierChip').className = 'car-tier tier-' + lv.tier;
+  $('bountyPar').textContent = lv.m;
+  $('bountyCond').textContent = t('bounty.cond.' + lv.condition);
+  renderPeek(lv, $('bountyBoard'));
+
+  if(done){
+    $('bountyStatus').hidden = false;
+    $('bountyStatus').textContent = t('bounty.done', { n: done.moves })
+      + (done.met ? ' — ' + t('bounty.metyes') : ' — ' + t('bounty.metno'));
+  } else {
+    $('bountyStatus').hidden = true;
+  }
+  $('bountyPlayLabel').textContent = done ? t('bounty.replay') : t('bounty.play');
+}
+
 /* ================== SETTINGS ================== */
 function applySettings(){
   const s = save.settings;
@@ -1516,6 +1600,9 @@ function applyStrings(){
   $('labStreak').textContent = t('daily.streak');
   $('labFreezes').textContent = t('daily.freezes');
   $('dailyNote').textContent = t('daily.backfill');
+  $('bountyTitle').textContent = t('bounty.title');
+  $('bountySub').textContent = t('bounty.sub');
+  $('labBountyPar').textContent = t('hud.par');
   $('settingsTitle').textContent = t('settings.title');
   $('labSfx').textContent = t('settings.sfx');
   $('labMusic').textContent = t('settings.music');
@@ -1565,16 +1652,17 @@ function fadeOutMenuMusicOnFirstMove(){
 function wire(){
   $('levelsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
+  $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
   $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
-    if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
+    if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
       o.classList.remove('show');
-      if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+      if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
@@ -1615,6 +1703,11 @@ function wire(){
       openSandbox();
       return;
     }
+    if($('nextBtn').dataset.action === 'bounty'){
+      cancelAuto(); sfx('ui');
+      proceedOrReveal(() => hideOverlay('winOverlay'));
+      return;
+    }
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
   });
@@ -1623,6 +1716,9 @@ function wire(){
   $('dailyPlayBtn').addEventListener('click', () => {
     sfx('ui'); stopSettingsMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
+  $('bountyPlayBtn').addEventListener('click', () => {
+    sfx('ui'); stopSettingsMusic(); hideOverlay('bountyOverlay'); loadBountyLevel(todayStr());
+  });
   $('calPrev').addEventListener('click', () => { calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; } renderCalendar(); });
   $('calNext').addEventListener('click', () => { calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; } renderCalendar(); });
 
@@ -1630,7 +1726,7 @@ function wire(){
     if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
     if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
     if(e.key === 'Escape'){
-      ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay', 'sandboxOverlay'].forEach(hideOverlay);
+      ['levelsOverlay', 'dailyOverlay', 'bountyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay', 'sandboxOverlay'].forEach(hideOverlay);
       stopSettingsMusic();
     }
   });
@@ -1679,6 +1775,14 @@ function runAdminCommand(raw){
     toast('Daily ' + date);
     return;
   }
+  if(s.startsWith('bounty')){
+    const d = s.split(/\s+/)[1];
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : todayStr();
+    hideOverlay('startOverlay');
+    loadBountyLevel(date);
+    toast('Bounty ' + date);
+    return;
+  }
   const m = s.match(/^(relaxed|heist|pursuit)?\s*#?(\d+)$/);
   if(m){
     if(m[1] && m[1] !== save.settings.mode){
@@ -1693,7 +1797,7 @@ function runAdminCommand(raw){
     toast(`Level ${idx + 1} · ${save.settings.mode}`);
     return;
   }
-  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · sandbox');
+  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · bounty · sandbox');
 }
 
 function wireAdmin(){
@@ -2070,6 +2174,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     }
     delete save.settings.alarm;
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
+    save.bounties = Object.assign({ done: {} }, loaded.bounties);
     // Older saves have no per-mode level tracking — seed all three modes
     // from wherever the player's single shared progress pointer was.
     if(!loaded.modeLevel){

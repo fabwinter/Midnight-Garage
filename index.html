@@ -23,6 +23,10 @@
         <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
         <span class="dot" id="dailyDot"></span>
       </button>
+      <button class="icon-btn" id="bountyBtn" aria-label="Tonight's Mark">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.7" fill="currentColor"/></svg>
+        <span class="dot" id="bountyDot"></span>
+      </button>
       <button class="icon-btn" id="levelsBtn" aria-label="Level select">
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       </button>
@@ -119,6 +123,7 @@
       <div><span id="labWinBest">Best</span><b id="winBest">–</b></div>
     </div>
     <div class="clean-getaway" id="cleanGetaway" hidden>Clean getaway! ⚡</div>
+    <div class="bounty-result" id="bountyResult" hidden></div>
     <div class="peek" id="peek" hidden>
       <span class="lab" id="peekLab">Next up</span>
       <div class="peek-board" id="peekBoard"></div>
@@ -163,6 +168,25 @@
     </div>
     <div class="cal-grid" id="calGrid"></div>
     <div class="daily-note" id="dailyNote">Back-fills don’t extend your streak.</div>
+  </div>
+</div>
+
+<!-- Bounty ("Tonight's Mark", HEIST-PLAN H4) -->
+<div class="overlay" id="bountyOverlay">
+  <div class="sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="bountyTitle">Tonight's Mark</h2>
+    <p class="sub" id="bountySub">A new mark every night. Clear it under the nightly condition to earn the car.</p>
+    <div class="bounty-card">
+      <div class="peek-board" id="bountyBoard"></div>
+      <div class="bounty-card-info">
+        <span class="car-tier" id="bountyTierChip">Common</span>
+        <div class="bounty-par"><span id="labBountyPar">Par</span> <b id="bountyPar">–</b></div>
+        <div class="bounty-cond" id="bountyCond"></div>
+      </div>
+    </div>
+    <div class="bounty-status" id="bountyStatus" hidden></div>
+    <button class="btn primary" id="bountyPlayBtn" style="width:100%"><span id="bountyPlayLabel">Take the job</span></button>
   </div>
 </div>
 
@@ -245,7 +269,7 @@
     <div class="admin-bar" id="adminBar" hidden>
       <div class="admin-lab">ADMIN</div>
       <form id="adminForm">
-        <input id="adminInput" type="text" placeholder="42 · pursuit 30 · daily · sandbox" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <input id="adminInput" type="text" placeholder="42 · pursuit 30 · daily · bounty · sandbox" autocomplete="off" autocapitalize="off" spellcheck="false">
         <button class="btn" type="submit">Go</button>
       </form>
       <button class="btn" id="adminSandboxBtn" type="button">Sandbox editor</button>

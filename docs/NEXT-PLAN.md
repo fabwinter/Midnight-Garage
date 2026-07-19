@@ -20,33 +20,44 @@ hitch coherent); campaign is 200 levels, par 6–60, all `par == optimal`.
 
 ---
 
-## N1 — H4 Bounties: "Tonight's Mark" *(recommended next)*
+## N1 — H4 Bounties: "Tonight's Mark" ✅ shipped
 
-The last unshipped heist phase, and the retention beat the collection meta
-has been waiting on: the garage's empty bays currently have nothing
-recurring to advertise.
+The last heist phase — the retention beat the collection meta was waiting
+on. Per [HEIST-PLAN.md §6](HEIST-PLAN.md):
 
-Per [HEIST-PLAN.md §6](HEIST-PLAN.md), now cheaper than when it was
-planned:
+- **Boards:** `tools/gen-bounty-pool.mjs` curates 61 boards from the
+  Fogleman surplus (30 common par 41–45, 20 uncommon 46–50, 10 rare
+  51–55, 1 legendary — the only par-58+ board left unused), deterministic-
+  shuffled and checked into `js/bounty-rotation.data.js`. `js/bounty.js`
+  cycles it by date (`BOUNTY_EPOCH` 2026-07-19) — same pattern as
+  `dailyLevel`, no backend, no generator work.
+- **Win conditions:** rotate `par` / `nohints` / `alarm` every 3rd night —
+  all reuse per-attempt state the game already tracks (`moves`,
+  `hintsUsed`, `save.settings.mode`). A bounty never fails to complete
+  (covenant intact); the condition only gates the reward car.
+- **Rewards:** 4 new cars in `js/collection.js` (Small Fish / The Fence's
+  Favorite / High-Value Mark / The Big Score), one per par-bucket tier,
+  unlocking off `save.bounties.done[date].met && .tier`. Skill-gated,
+  cosmetic-only — a single lucky legendary-tier clear is enough, no grind
+  counter.
+- **Surfaces:** header icon + dot (`#bountyBtn`), a "Tonight's Mark"
+  overlay (board preview, tier chip, par, condition, status), a
+  `bountyResult` banner on the win sheet, `bounty_complete` analytics
+  event, full i18n ×10 (18 new keys/locale). Admin command `bounty
+  [date]` for testing.
+- **Verify:** `tools/verify-levels.mjs` now re-solves all 61 rotation
+  boards and checks the next 14 nights' picks are deterministic.
 
-- **Boards:** curate straight from the Fogleman surplus instead of seeding
-  the generator. A checked-in rotation list (`js/bounty.js` or a data
-  file) of ~60–90 boards drawn from the 405, cycled deterministically by
-  date — same date-seeded pattern as `dailyLevel`, no backend.
-- **Win conditions:** "≤ par", "no hints", "alarm intact" — all already
-  tracked per-attempt.
-- **Rewards:** extend `js/collection.js` with bounty-gated cars (rarity
-  tiers matched to board par). Covenant intact: skill-gated, cosmetic-only.
-  This is where NEW CAR ART goes (see N3): 6–10 new collectible hero cars,
-  not more traffic variety — 22 sedans/8 trucks already keeps ~12-piece
-  boards repeat-free, so another generic sedan buys nothing, but rare marks
-  are what the garage's empty bays advertise.
-- **Surfaces:** "Tonight's Mark" slot on the start screen; bounty state in
-  `save.bounties`; `bounty_complete` analytics event; i18n ×10.
-- **Verify:** extend `tools/verify-levels.mjs` to solve the whole bounty
-  rotation deterministically, like the 14-day daily check.
+Verified end-to-end via headless Playwright: opened the overlay, read
+tier/par/condition, played today's (rare, par 51) mark by driving the
+solver's own optimal path through real keyboard moves, hit the win sheet
+with "Contract fulfilled ⚡", and watched the High-Value Mark car reveal
+fire and persist. Zero console errors. Full 200-level + 61-bounty verify
+passes.
 
-One marketable beat: *"A new mark every night."*
+New collectible car art (N3c below) still applies to *future* bounty
+tiers/rarity flavor — the 4 shipped here are palette-only, same as the
+existing collection, not the "6–10 new hero art" push N3c describes.
 
 ## N2 — The Impound Lot (Featured Boards, pulled forward from v2.0)
 
@@ -142,9 +153,8 @@ Can't be done from this cloud environment; unchanged from
 
 ---
 
-**Recommended order: N3a (quick, unblocks store size) → N1 (with N3c art)
-→ N2 → N3b/d/e → N4**, with N5 whenever you're ready on the
-native/business side. N1 stays the headline: it's the last heist phase,
-the strongest retention lever, and the Fogleman surplus just removed its
-only expensive part — N3a just slips in front because it's an hour of
-work that fixes a 49MB problem.
+**N3a and N1 are both shipped.** Recommended order for what's left:
+**N2 → N3b/c/d/e → N4**, with N5 whenever you're ready on the
+native/business side. N2 next since it's the natural home for the
+remaining ~340 unused Fogleman boards (61 went to bounties, 20 to
+Gridlock, out of 425 total) and for sandbox-promoted levels.
