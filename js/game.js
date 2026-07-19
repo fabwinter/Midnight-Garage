@@ -544,9 +544,18 @@ function commitMove(i, mergedKeyStep = false){
   }
 
   if(moves === 1 && !mergedKeyStep){
-    fadeOutMenuMusicOnFirstMove();
-    if(gm !== 'relaxed') startAttemptTrack(gm);
-    if(gm === 'pursuit') startPursuitTimer();
+    if(gm === 'relaxed'){
+      // No attempt track to hand off to — this is the only thing that
+      // ever stops the opening theme for Relaxed, so it still needs an
+      // explicit call here.
+      fadeOutMenuMusicOnFirstMove();
+    } else if(gm === 'pursuit'){
+      // Heist's track already started at level load (see startBoard) and
+      // handles its own crossfade away from the opening theme; Pursuit's
+      // starts here, together with its clock.
+      startAttemptTrack(gm);
+      startPursuitTimer();
+    }
   }
 
   if(gm !== 'relaxed' && moves === 1 && !mergedKeyStep && !won){
@@ -804,7 +813,10 @@ function abandonIfMidLevel(){
 
 function loadLevel(idx){
   abandonIfMidLevel();
-  stopMenuMusic();
+  // No stopMenuMusic() here on purpose: the opening theme should keep
+  // playing right through this navigation, with no silent gap, until
+  // startBoard()'s attempt track (or, for Relaxed, the first move) is
+  // actually ready to hand off — see audio.js's crossfadeOutOtherTracks.
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
@@ -818,7 +830,6 @@ function loadLevel(idx){
 
 function loadDailyLevel(dateStr){
   abandonIfMidLevel();
-  stopMenuMusic();
   const lv = dailyLevel(dateStr);
   mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
   curLevel = lv;
@@ -828,7 +839,6 @@ function loadDailyLevel(dateStr){
 
 function loadBountyLevel(dateStr){
   abandonIfMidLevel();
-  stopMenuMusic();
   const lv = bountyFor(dateStr);
   if(!lv) return;
   mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition };
@@ -849,7 +859,6 @@ function impoundUnlocked(){
 
 function loadImpoundLevel(idx){
   abandonIfMidLevel();
-  stopMenuMusic();
   mode = { type: 'impound' };
   curImpound = idx;
   curLevel = IMPOUND_LOT[idx];
@@ -889,7 +898,11 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  stopAttemptTrack(); // reset any track from the previous attempt; this attempt's track (if heist/pursuit) starts on first move
+  stopAttemptTrack(); // reset any track from the previous attempt
+  // Heist's music sets the mood immediately (per-move budget, no reason to
+  // wait); Pursuit's stays tied to the first move, same moment its clock
+  // starts (see commitMove) — "the clock starts when you start moving."
+  if(save.settings.mode === 'heist') startAttemptTrack('heist');
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();

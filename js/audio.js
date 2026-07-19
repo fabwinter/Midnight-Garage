@@ -27,6 +27,7 @@ const TRACK_POOLS = {
 };
 const lastPick = { heist: null, pursuit: null };   // avoids back-to-back repeats
 let curAttemptTrack = null;   // the src chosen for the attempt in progress — stable across duck/resume
+const warmed = new Set();     // srcs already nudged to preload, so a pool only warms once per session
 
 /* Picks a new track for a fresh attempt (called from startAttemptTrack
    only — resumeAttemptTrack reuses curAttemptTrack so ducking out to a
@@ -40,6 +41,51 @@ function pickTrack(mode){
   do{ pick = pool[Math.floor(Math.random() * pool.length)]; }while(pick === lastPick[mode]);
   lastPick[mode] = pick;
   return pick;
+}
+
+/* Nudges the browser to start fetching/buffering every track in a mode's
+   pool ahead of an actual attempt. Pursuit shuffles across 4 different
+   files (unlike Heist's single, quickly-warm-cached track), so on a slow
+   connection the very first attempt after switching to Pursuit can pick a
+   track that's still mid-download when the (often short, timer-driven)
+   attempt already ends — this makes that "silent because it never
+   finished loading" case rare instead of routine. Fire-and-forget: these
+   elements are never played, just left to buffer in the background. */
+function warmPool(mode){
+  const pool = TRACK_POOLS[mode];
+  if(!pool) return;
+  for(const src of pool){
+    if(warmed.has(src)) continue;
+    warmed.add(src);
+    const a = new Audio(src);
+    a.preload = 'auto';
+    a.volume = 0;
+    a.load();
+  }
+}
+
+/* Plays `audio`, retrying on the next pointerdown/keydown if the browser's
+   autoplay policy rejects the call (a real, common failure mode — the very
+   first playback attempt on a page often has no qualifying user gesture in
+   its call stack yet, e.g. a level that loads underneath an overlay before
+   the player has tapped anything). Without a retry, a rejected play() was
+   simply silent forever for that attempt. `isStale()` guards against a
+   delayed retry (or a delayed resolve of `audio.play()` itself) reviving
+   an element that's no longer the current attempt/menu track — e.g. the
+   player backed out or switched levels while a retry was still pending. */
+function playWithRetry(audio, targetVol, fadeMs, isStale, onPlaying){
+  const attempt = () => {
+    if(isStale && isStale()) return;
+    audio.play().then(() => {
+      if(isStale && isStale()){ audio.pause(); return; }
+      fadeIn(audio, targetVol, fadeMs);
+      if(onPlaying) onPlaying();
+    }).catch(() => {
+      document.addEventListener('pointerdown', attempt, { once: true });
+      document.addEventListener('keydown', attempt, { once: true });
+    });
+  };
+  attempt();
 }
 
 // Menu/theme music
@@ -56,13 +102,17 @@ export function setMusicVolume(v){
   if(gameMode !== 'relaxed' && attemptAudio && !duckAttempt){
     attemptAudio.volume = Math.max(0, Math.min(1, v));
     if(v === 0) attemptAudio.pause();
-    else if(attemptActive && attemptAudio.paused) attemptAudio.play().catch(() => {});
+    else if(attemptActive && attemptAudio.paused){
+      const a = attemptAudio;
+      playWithRetry(a, Math.max(0, Math.min(1, v)), 200, () => a !== attemptAudio || duckAttempt);
+    }
   }
 }
 
 export function setGameMode(mode){
   gameMode = mode;
   if(mode === 'relaxed') stopAttemptTrack();
+  else warmPool(mode);
 }
 
 function ensureAttemptAudio(src){
@@ -77,10 +127,13 @@ function ensureAttemptAudio(src){
   return attemptAudio;
 }
 
-/* Called once per level attempt (level load / reset) — picks a fresh track
-   from the mode's pool (never the same one twice in a row) and restarts it
-   from the top. Stays silent while a tab/menu track has priority
-   (duckAttempt); resumeAttemptTrack picks it up once that track closes. */
+/* Called once per level attempt — picks a fresh track from the mode's pool
+   (never the same one twice in a row) and restarts it from the top. Stays
+   silent while a tab/menu track has priority (duckAttempt);
+   resumeAttemptTrack picks it up once that track closes. Whatever's
+   currently audible (the opening/menu theme, most often) keeps playing
+   until THIS track actually starts, then hands off — see
+   crossfadeOutOtherTracks — so there's never a silent gap between them. */
 export function startAttemptTrack(mode){
   attemptActive = true;
   curAttemptTrack = pickTrack(mode);
@@ -88,10 +141,22 @@ export function startAttemptTrack(mode){
   if(!src) return;
   ensureAttemptAudio(src);
   if(duckAttempt) return;
-  attemptAudio.currentTime = 0;
+  const a = attemptAudio;
+  a.currentTime = 0;
   if(musicVol > 0){
-    attemptAudio.play().catch(() => {});
-    fadeIn(attemptAudio, Math.max(0, Math.min(1, musicVol)), 300);
+    playWithRetry(a, Math.max(0, Math.min(1, musicVol)), 300,
+      () => a !== attemptAudio || duckAttempt || !attemptActive,
+      crossfadeOutOtherTracks);
+  }
+}
+
+/* Hands the foreground to whichever attempt/menu track just started
+   playing by fading out whatever else is still audible — called only once
+   the new track is confirmed actually playing, not merely requested, so
+   the old one never drops to silence before the new one is heard. */
+function crossfadeOutOtherTracks(){
+  if(menuAudio && !menuAudio.paused){
+    fadeOut(menuAudio, 500).then(() => { menuAudio.pause(); menuAudio.currentTime = 0; });
   }
 }
 
@@ -122,8 +187,8 @@ export function resumeAttemptTrack(){
   if(gameMode === 'relaxed' || !attemptActive) return;
   ensureAttemptAudio(curAttemptTrack);   // same track this attempt already picked — no re-roll on resume
   if(attemptAudio.paused && musicVol > 0){
-    attemptAudio.play().catch(() => {});
-    fadeIn(attemptAudio, Math.max(0, Math.min(1, musicVol)), 300);
+    const a = attemptAudio;
+    playWithRetry(a, Math.max(0, Math.min(1, musicVol)), 300, () => a !== attemptAudio || duckAttempt || !attemptActive);
   }
 }
 

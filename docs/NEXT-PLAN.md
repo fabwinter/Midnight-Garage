@@ -137,6 +137,35 @@ just its one existing track; dropping more Heist/Relaxed tracks in
 later is a one-line addition to `TRACK_POOLS`, nothing else changes.
 More tracks incoming from the user for other modes.
 
+✅ **Playback reliability pass** (user-reported: Pursuit silent, Heist
+inconsistent): both traced to real autoplay-policy edge cases, not one-off
+bugs. `playWithRetry()` now retries a rejected `play()` on the next
+pointerdown/keydown instead of failing silently forever (a `.catch(() =>
+{})` swallowed every such failure before); `warmPool()` preloads a mode's
+whole pool on switch so Pursuit's 4-file shuffle doesn't lose short,
+timer-driven attempts to still-buffering audio the way Heist's single
+long-cached track never did. Both fixes are general — they help any
+future track added to either pool, not just this batch.
+
+✅ **Heist starts at level load, not first move** (per-move budget, no
+reason to wait): `startBoard()` now calls `startAttemptTrack('heist')`
+directly; Pursuit is unchanged (still tied to first move, same moment as
+its clock — "the clock starts when you start moving").
+
+✅ **Gapless opening-theme handoff**: the `loadX()` functions no longer
+call `stopMenuMusic()` on navigation — the opening theme keeps playing
+until whatever comes next is *confirmed* audible (`playWithRetry`'s
+`onPlaying` callback), then `crossfadeOutOtherTracks()` fades it out.
+Previously the theme was cut immediately on load, before the replacement
+had necessarily started, which could leave a silent stretch.
+
+Verified headless across 4 scenarios: Heist audible before any move is
+made; Pursuit audible after the first move; switching Relaxed→Heist
+mid-session (via Settings, itself a duck/resume path) hands off
+correctly on close; and a 720ms volume trace during the Start-tap
+handoff never shows both the opening theme and Heist silent at the same
+instant.
+
 Still open — **adaptive intensity stems**: two or three stems per mode
 that layer in as the move budget shrinks, crossfading on top of the
 per-attempt lifecycle that already exists. Bigger felt upgrade than more
