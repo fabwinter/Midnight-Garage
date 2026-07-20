@@ -1376,7 +1376,7 @@ function showNextCarReveal(){
   $('carRevealTier').textContent = t('tier.' + car.tier);
   $('carRevealTier').className = 'car-tier tier-' + car.tier;
   const holder = $('carRevealArt');
-  holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin });
+  holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin, headlights: false });
   sfx('fanfare');
   haptic('success');
   showOverlay('carRevealOverlay');
@@ -1420,7 +1420,7 @@ function buildGarageList(){
     b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '');
     const art = document.createElement('div');
     art.className = 'car-tile-art';
-    if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin });
+    if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin, headlights: false });
     else art.innerHTML = '<span class="car-lock">🔒</span>';
     b.appendChild(art);
     const label = document.createElement('div');

@@ -258,8 +258,12 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
      that the traffic photo wasn't shot to classic.png's layout; that shipped
      as "the hero has no headlights" on every campaign level, because with
      jobs deciding the car, the fallback IS the common case until bespoke
-     art lands. The mark must always read as the car with its lights on. */
-  const photoHeroExtra = isHero ? `
+     art lands. The mark must always read as the car with its lights on —
+     on the board. opts.headlights=false opts back out for the two static-
+     display contexts (garage tiles, the car-reveal sheet): those are
+     collection-card shots of the paint job, not a night-driving moment, and
+     the beam/glow read as clutter rather than mood at a small, still size. */
+  const photoHeroExtra = (isHero && opts.headlights !== false) ? `
     <path d="M ${L - 23} 14 L ${L + 185} -8 L ${L + 185} 46 L ${L - 11} 30 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
     <path d="M ${L - 23} 86 L ${L + 185} 108 L ${L + 185} 54 L ${L - 11} 70 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
     <ellipse cx="${L - 26}" cy="18" rx="15" ry="4.5" transform="rotate(24 ${L - 26} 18)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>

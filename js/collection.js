@@ -34,11 +34,21 @@ export const POOL_SIZE = 5;
    hero render falls back to the recolored-sedan-photo treatment every
    other car already used (see js/art.js) — nothing breaks while art
    lands car by car. */
-function jobUnlockCheck(chapter, slot){
-  const from = chapter * CHAPTER_SIZE;
+/* Derives its scan directly from carIdForLevel() rather than
+   re-deriving chapter/slot arithmetic independently — the two used to be
+   two separate sources of truth for "which car is level i," and they
+   drifted the moment carIdForLevel() grew its level-1-is-always-red
+   override: this scan kept counting level 1 toward First Job's unlock
+   even though level 1 never actually shows First Job as the hero,
+   letting you earn a car in the garage you never once drove. Routing
+   through carIdForLevel() means any future override (here or elsewhere)
+   can't cause that class of bug again — the unlock condition is always
+   "you cleared a level that actually showed you this car." */
+function jobUnlockCheck(car){
+  const from = car.chapter * CHAPTER_SIZE;
   return save => {
-    for(let i = slot; i < CHAPTER_SIZE; i += POOL_SIZE){
-      if((save.stars[from + i] || 0) > 0) return true;
+    for(let i = from; i < from + CHAPTER_SIZE; i++){
+      if(carIdForLevel(i) === car.id && (save.stars[i] || 0) > 0) return true;
     }
     return false;
   };
@@ -136,7 +146,7 @@ const JOB_CARS = [
 JOB_CARS.forEach((car, i) => {
   car.chapter = Math.floor(i / POOL_SIZE);
   car.slot = i % POOL_SIZE;
-  car.unlock = jobUnlockCheck(car.chapter, car.slot);
+  car.unlock = jobUnlockCheck(car);
 });
 
 /* Bounty marks (HEIST-PLAN.md §6, phase H4): earned by clearing a
@@ -176,8 +186,9 @@ export function carIdForLevel(idx){
   // Pursuit/Relaxed just change pacing, not which level this is) — it
   // stays the classic red car rather than handing a brand-new player an
   // unfamiliar job car before they've even seen the "free the red car"
-  // premise. Clearing it still unlocks First Job (chapter 0 slot 0) same
-  // as any other level in its rotation; the car just isn't on screen for it.
+  // premise. jobUnlockCheck() reads this same function, so First Job
+  // (chapter 0 slot 0) correctly does NOT unlock off level 1 — you only
+  // get a car in the garage once you've actually driven and freed it.
   if(idx === 0) return DEFAULT_CAR;
   const chapter = Math.min(3, Math.floor(idx / CHAPTER_SIZE));
   const slot = idx % CHAPTER_SIZE % POOL_SIZE;
