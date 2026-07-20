@@ -249,6 +249,17 @@ the identical `startBoard()` call with no other audio-relevant
 differences from `resetBtn`, so the same fix covers all three retry
 paths.
 
+✅ **Relaxed now has its own 5-track pool** (user-supplied), same
+architecture as Heist/Pursuit — started at level load, loops through
+moves/undo/retry, ducks for menu/settings and resumes, shuffled without
+back-to-back repeats. Previously Relaxed had no attempt track at all;
+the opening theme doubled as its only level music and stopped for good
+on the first move, which was really a placeholder standing in for the
+missing pool rather than an intended design. Every `gameMode !==
+'relaxed'` special case in `audio.js` is gone — the three modes are
+audio-uniform now. Verified headless: track starts at 0 moves, survives
+first-move and Retry with no gap, opening-theme handoff stays gapless.
+
 Still open — **adaptive intensity stems**: two or three stems per mode
 that layer in as the move budget shrinks, crossfading on top of the
 per-attempt lifecycle that already exists. Bigger felt upgrade than more
