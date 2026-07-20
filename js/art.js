@@ -88,6 +88,34 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
   { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
   { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
+  // Hero cars added to traffic pool (July '26) — all bespoke renders, fixed livery
+  { img: 'assets/cars/hero-red-exotic.png', fixed: true },
+  { img: 'assets/cars/hero-ferrari-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-muscle.png', fixed: true },
+  { img: 'assets/cars/hero-porsche-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-cobra-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-mclaren-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-jeep-rubicon-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-fluro-yellow.png', fixed: true },
+  { img: 'assets/cars/hero-fluro-orange.png', fixed: true },
+  { img: 'assets/cars/hero-fluro-cyan.png', fixed: true },
+  { img: 'assets/cars/hero-fluro-green.png', fixed: true },
+  { img: 'assets/cars/hero-fluro-pink.png', fixed: true },
+  { img: 'assets/cars/hero-muscle-grey-stripe.png', fixed: true },
+  { img: 'assets/cars/hero-muscle-sage.png', fixed: true },
+  { img: 'assets/cars/hero-countach-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-pagani-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-miura-nobadge.png', fixed: true },
+  { img: 'assets/cars/hero-ferrari-red-stripe.png', fixed: true },
+  { img: 'assets/cars/hero-classic-white-green.png', fixed: true },
+  { img: 'assets/cars/hero-convertible-brown.png', fixed: true },
+  { img: 'assets/cars/hero-classic-blue-stripe.png', fixed: true },
+  { img: 'assets/cars/hero-vintage-white.png', fixed: true },
+  { img: 'assets/cars/hero-porsche-911-silver.png', fixed: true },
+  { img: 'assets/cars/hero-classic-cream.png', fixed: true },
+  { img: 'assets/cars/hero-sports-cyan.png', fixed: true },
+  { img: 'assets/cars/hero-sedan-green.png', fixed: true },
+  { img: 'assets/cars/hero-sedan-bronze.png', fixed: true },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
