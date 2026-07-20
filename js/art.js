@@ -85,18 +85,9 @@ const SEDAN_PHOTOS = [
   // inspection to be white too — dropped as a duplicate color rather than
   // kept alongside sedan-13.
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // white
-  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple + yellow stripes
-  { img: 'assets/cars/traffic-sedan-22.png', fixed: true },  // Biarritz blue
   { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
   { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
-  { img: 'assets/cars/traffic-sedan-27.png', fixed: true },  // dark green
   { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
-  { img: 'assets/cars/traffic-sedan-29.png', fixed: true },  // gunmetal gray
-  { img: 'assets/cars/traffic-sedan-30.png', fixed: true },  // teal
-  { img: 'assets/cars/traffic-sedan-31.png', fixed: true },  // pink
-  { img: 'assets/cars/traffic-sedan-32.png', fixed: true },  // gold
-  { img: 'assets/cars/traffic-sedan-33.png', fixed: true },  // orange
-  { img: 'assets/cars/traffic-sedan-34.png', fixed: true },  // brown
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
