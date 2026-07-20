@@ -609,6 +609,12 @@ input[type=range]::-moz-range-thumb{
 
 /* ---------- Garage (collection, H0) ---------- */
 .car-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.car-group-h{
+  grid-column:1/-1;font-family:var(--disp);font-weight:700;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);padding-top:10px;margin-top:4px;
+  border-top:1px solid var(--line);
+}
+.car-group-h:first-of-type{border-top:none;margin-top:0;padding-top:2px}
 .car-tile{
   border-radius:16px;border:1px solid var(--line);cursor:pointer;padding:10px 8px 12px;
   background:linear-gradient(180deg,#1a2130,#131824);

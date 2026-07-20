@@ -17,7 +17,7 @@ import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
-import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
+import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier } from './collection.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -167,6 +167,19 @@ function levelPhotoSeed(){
   return cur;
 }
 
+/* Which car is the hero on the board right now (js/collection.js's job-car
+   system). Campaign and bounty are "jobs" — the mark decides the car, not
+   the player, same as a real crew doesn't pick what's in the truck; see
+   HEIST-PLAN.md §2. Daily/Impound/Sandbox aren't jobs (no mark to match),
+   so they stay on whatever the player last equipped in the Garage. This is
+   independent of the Heist/Pursuit/Relaxed toggle (save.settings.mode) —
+   that only changes pacing pressure, not whose car you're driving. */
+function heroCarIdForAttempt(){
+  if(mode.type === 'campaign') return carIdForLevel(cur);
+  if(mode.type === 'bounty') return carIdForBountyTier(mode.tier);
+  return save.equippedCar;
+}
+
 function buildPieces(){
   board.querySelectorAll('.piece, .wall, .gate, .hitch').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
@@ -239,7 +252,7 @@ function buildPieces(){
     const photoIdx = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
     el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
       colorblind: save.settings.colorblind,
-      skin: i === 0 ? skinFor(save.equippedCar) : null,
+      skin: i === 0 ? skinFor(heroCarIdForAttempt()) : null,
       photoIdx,
       trailer: isTrailer,
     });
@@ -1379,10 +1392,28 @@ function dismissCarReveal(){
 }
 
 /* ================== GARAGE (collection screen) ================== */
+/* Job cars (campaign) and bounty marks aren't equip choices during their
+   own job — the mark decides its own car (see heroCarIdForAttempt). Tapping
+   a tile still sets save.equippedCar (it's what Relaxed/Daily/Impound/
+   Sandbox will use next), but while a job is actually on screen the tap
+   can't change what's currently rendered — the toast below says so instead
+   of the tile silently appearing to do nothing. */
+function lockedHintFor(car){
+  if(car.bountyTier) return t('car.locked.' + car.id);
+  return t('car.locked.job', { chapter: car.chapter + 1, name: CHAPTERS[car.chapter].name });
+}
+
 function buildGarageList(){
   const owned = ownedCarIds(save, daily());
   const holder = $('garageList');
   holder.innerHTML = '';
+
+  const groupHeader = text => {
+    const h = document.createElement('div');
+    h.className = 'car-group-h';
+    h.textContent = text;
+    return h;
+  };
 
   const tile = (id, name, tier, skin, isOwned, hint) => {
     const b = document.createElement('button');
@@ -1403,7 +1434,11 @@ function buildGarageList(){
         sfx('ui');
         save.equippedCar = id;
         persist();
-        buildPieces();
+        if(mode.type === 'campaign' || mode.type === 'bounty'){
+          toast(t('garage.equip.job'));
+        } else {
+          buildPieces();
+        }
         buildGarageList();
       });
     }
@@ -1411,8 +1446,15 @@ function buildGarageList(){
   };
 
   holder.appendChild(tile(DEFAULT_CAR, t('car.classic'), 'common', null, true, ''));
-  CARS.forEach(car => {
-    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), t('car.locked.' + car.id)));
+  CHAPTERS.forEach((ch, i) => {
+    holder.appendChild(groupHeader(ch.name));
+    CARS.filter(c => c.chapter === i).forEach(car => {
+      holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car)));
+    });
+  });
+  holder.appendChild(groupHeader(t('garage.marks')));
+  CARS.filter(c => c.bountyTier).forEach(car => {
+    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car)));
   });
 }
 

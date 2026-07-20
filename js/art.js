@@ -243,8 +243,17 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
      (mix-blend-mode:screen was tried for a true additive glow, but at this
      SVG's overflow:visible boundary it produced a visible seam where the
      beam crosses the piece's own viewBox — plain opaque-fading-to-transparent
-     reads bright enough against the dark board without that artifact.) */
-  const photoHeroExtra = (isHero && !skin) ? `
+     reads bright enough against the dark board without that artifact.)
+
+     Only ever drawn over art that actually follows classic.png's layout
+     (front-right, headlights at this exact spot): the default red hero, or
+     a job car with its own bespoke `skin.photo` (see collection.js) built
+     to the same spec. A job car without art yet falls back to a recolored
+     traffic-sedan photo below, which was never shot to this layout — its
+     front end and lack of real headlights are why overlaying a beam here
+     used to look wrong for every skinned car, so it's withheld until that
+     car's own art lands. */
+  const photoHeroExtra = (isHero && (!skin || skin.photo)) ? `
     <path d="M ${L - 23} 14 L ${L + 185} -8 L ${L + 185} 46 L ${L - 11} 30 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
     <path d="M ${L - 23} 86 L ${L + 185} 108 L ${L + 185} 54 L ${L - 11} 70 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
     <ellipse cx="${L - 26}" cy="18" rx="15" ry="4.5" transform="rotate(24 ${L - 26} 18)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>
@@ -259,17 +268,26 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   let body;
   if(isHero && !skin){
     // Classic (default) hero: photoreal render in place of the procedural
-    // sedan. Skinned/unlocked cars still use the recolorable sedan below.
+    // sedan. Skinned/unlocked cars still use the recolorable sedan below,
+    // unless they've got their own bespoke art — see the branch above.
     body = `<image href="${CLASSIC_CAR_IMG}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${photoHeroExtra}`;
+  } else if(isHero && skin.photo){
+    // Job car with its own render, built to classic.png's exact layout
+    // (front-right, headlights baked in) — no hueRotate needed, the art
+    // already carries its final paint, and photoHeroExtra's beam overlay
+    // lines up the same way it does on the classic hero.
+    body = `<image href="${skin.photo}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${photoHeroExtra}`;
   } else if(isHero){
-    // Garage skin equipped: same photo body as the classic hero, recolored
-    // to the skin's paint via hueRotate, with the beam/glow tuned the same
-    // way (both photos fill the cell edge-to-edge so the positions carry
-    // over). trimSVG's beltline stripe was tuned to the old procedural
-    // sedan's silhouette (paint above/below a windshield greenhouse) — this
-    // car's canopy runs nearly the full width, so the same stripe cuts
-    // across the glass instead of following a body line. Skipping trim
-    // here until it gets a version designed for this car's proportions;
+    // Job car with no bespoke render yet: same photo body as the classic
+    // hero, recolored to the skin's paint via hueRotate (both photos fill
+    // the cell edge-to-edge so the positions carry over). No beam/glow
+    // overlay here — this traffic-sedan photo was never shot to
+    // classic.png's front-right layout, so the beam would sit on the
+    // wrong edge of the car; photoHeroExtra already withholds it above.
+    // trimSVG's beltline stripe was tuned to the old procedural sedan's
+    // silhouette (paint above/below a windshield greenhouse) — this car's
+    // canopy runs nearly the full width, so the same stripe cuts across
+    // the glass instead of following a body line. Skipping trim here too;
     // paint color alone still distinguishes every unlocked skin.
     body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${photoHeroExtra}`;
   } else if(len >= 3){
