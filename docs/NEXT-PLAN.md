@@ -196,6 +196,15 @@ picker (opening theme audible >0.1 volume, Heist confirmed *not* yet
 started), confirm Heist, then it starts and hands off cleanly — and the
 picker still appears after a full page reload.
 
+✅ **Pursuit's music moved to level load too**, by request, same as
+Heist — only its countdown itself still waits for the first move
+(`startPursuitTimer()` stays in `commitMove`, decoupled from the music
+trigger which now lives entirely in `startBoard()` alongside Heist's,
+both gated on `pastIntro`). Verified headless: confirming Pursuit on the
+mode picker starts its music immediately (0 moves made) while the clock
+display stays untouched until the first move, then ticks down normally;
+mid-session switch to Pursuit via Settings starts it immediately too.
+
 Still open — **adaptive intensity stems**: two or three stems per mode
 that layer in as the move budget shrinks, crossfading on top of the
 per-attempt lifecycle that already exists. Bigger felt upgrade than more

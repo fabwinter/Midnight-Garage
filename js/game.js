@@ -550,10 +550,8 @@ function commitMove(i, mergedKeyStep = false){
       // explicit call here.
       fadeOutMenuMusicOnFirstMove();
     } else if(gm === 'pursuit'){
-      // Heist's track already started at level load (see startBoard) and
-      // handles its own crossfade away from the opening theme; Pursuit's
-      // starts here, together with its clock.
-      startAttemptTrack(gm);
+      // Music already started at level load (see startBoard), same as
+      // Heist — only the countdown itself waits for the first move.
       startPursuitTimer();
     }
   }
@@ -899,17 +897,20 @@ function startBoard(){
   updateCoach();
   scheduleHand();
   stopAttemptTrack(); // reset any track from the previous attempt
-  // Heist's music sets the mood immediately (per-move budget, no reason to
-  // wait); Pursuit's stays tied to the first move, same moment its clock
-  // starts (see commitMove) — "the clock starts when you start moving."
+  // Heist and Pursuit music both set the mood immediately at level load —
+  // only Pursuit's countdown itself still waits for the first move (see
+  // commitMove), same "the clock starts when you start moving" reasoning,
+  // now decoupled from when its music starts.
   // Gated on pastIntro: startBoard() also runs once during boot(), before
-  // Start/the mode picker have been dismissed — starting Heist there would
-  // register its autoplay retry on literally the first tap of the session
-  // (tapping "Start" itself), cutting the opening theme short before the
-  // player ever reaches the picker. introPlayBtn sets pastIntro and calls
-  // startBoard() again right as the player confirms, which is the actual
-  // "level start" moment that matters here.
-  if(pastIntro && save.settings.mode === 'heist') startAttemptTrack('heist');
+  // Start/the mode picker have been dismissed — starting an attempt track
+  // there would register its autoplay retry on literally the first tap of
+  // the session (tapping "Start" itself), cutting the opening theme short
+  // before the player ever reaches the picker. introPlayBtn sets pastIntro
+  // and calls startBoard() again right as the player confirms, which is
+  // the actual "level start" moment that matters here.
+  if(pastIntro && (save.settings.mode === 'heist' || save.settings.mode === 'pursuit')){
+    startAttemptTrack(save.settings.mode);
+  }
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();
