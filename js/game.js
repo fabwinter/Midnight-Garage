@@ -17,7 +17,7 @@ import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
-import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
+import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier } from './collection.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -167,6 +167,19 @@ function levelPhotoSeed(){
   return cur;
 }
 
+/* Which car is the hero on the board right now (js/collection.js's job-car
+   system). Campaign and bounty are "jobs" — the mark decides the car, not
+   the player, same as a real crew doesn't pick what's in the truck; see
+   HEIST-PLAN.md §2. Daily/Impound/Sandbox aren't jobs (no mark to match),
+   so they stay on whatever the player last equipped in the Garage. This is
+   independent of the Heist/Pursuit/Relaxed toggle (save.settings.mode) —
+   that only changes pacing pressure, not whose car you're driving. */
+function heroCarIdForAttempt(){
+  if(mode.type === 'campaign') return carIdForLevel(cur);
+  if(mode.type === 'bounty') return carIdForBountyTier(mode.tier);
+  return save.equippedCar;
+}
+
 function buildPieces(){
   board.querySelectorAll('.piece, .wall, .gate, .hitch').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
@@ -239,7 +252,7 @@ function buildPieces(){
     const photoIdx = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
     el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
       colorblind: save.settings.colorblind,
-      skin: i === 0 ? skinFor(save.equippedCar) : null,
+      skin: i === 0 ? skinFor(heroCarIdForAttempt()) : null,
       photoIdx,
       trailer: isTrailer,
     });
@@ -543,17 +556,10 @@ function commitMove(i, mergedKeyStep = false){
     $('srLive').textContent = moveAnnounce;
   }
 
-  if(moves === 1 && !mergedKeyStep){
-    if(gm === 'relaxed'){
-      // No attempt track to hand off to — this is the only thing that
-      // ever stops the opening theme for Relaxed, so it still needs an
-      // explicit call here.
-      fadeOutMenuMusicOnFirstMove();
-    } else if(gm === 'pursuit'){
-      // Music already started at level load (see startBoard), same as
-      // Heist — only the countdown itself waits for the first move.
-      startPursuitTimer();
-    }
+  if(moves === 1 && !mergedKeyStep && gm === 'pursuit'){
+    // Music already started at level load (see startBoard), same as
+    // Heist/Relaxed — only the countdown itself waits for the first move.
+    startPursuitTimer();
   }
 
   if(gm !== 'relaxed' && moves === 1 && !mergedKeyStep && !won){
@@ -813,8 +819,8 @@ function loadLevel(idx){
   abandonIfMidLevel();
   // No stopMenuMusic() here on purpose: the opening theme should keep
   // playing right through this navigation, with no silent gap, until
-  // startBoard()'s attempt track (or, for Relaxed, the first move) is
-  // actually ready to hand off — see audio.js's crossfadeOutOtherTracks.
+  // startBoard()'s attempt track is actually ready to hand off — see
+  // audio.js's crossfadeOutOtherTracks.
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
@@ -896,8 +902,8 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  // Heist and Pursuit music both set the mood immediately at level load —
-  // only Pursuit's countdown itself still waits for the first move (see
+  // Every mode's music sets the mood immediately at level load — only
+  // Pursuit's countdown itself still waits for the first move (see
   // commitMove), same "the clock starts when you start moving" reasoning,
   // now decoupled from when its music starts. This also covers Retry/
   // Reset/Replay (they all call startBoard() directly): the attempt
@@ -906,8 +912,8 @@ function startBoard(){
   // whatever was already playing itself, so no separate stopAttemptTrack()
   // call here (that used to run first regardless, fighting the very
   // fadeIn that follows it a tick later — a measurable volume dip on
-  // every retry, worse than a plain cut for Pursuit's 4-track pool
-  // where the old and new tracks are different elements entirely).
+  // every retry, worse than a plain cut for Pursuit/Relaxed's multi-track
+  // pools where the old and new tracks are different elements entirely).
   //
   // Gated on pastIntro: startBoard() also runs once during boot(), before
   // Start/the mode picker have been dismissed — starting an attempt track
@@ -916,17 +922,8 @@ function startBoard(){
   // before the player ever reaches the picker. introPlayBtn sets pastIntro
   // and calls startBoard() again right as the player confirms, which is
   // the actual "level start" moment that matters here.
-  if(pastIntro && (save.settings.mode === 'heist' || save.settings.mode === 'pursuit')){
-    startAttemptTrack(save.settings.mode);
-  } else {
-    stopAttemptTrack(); // relaxed (no attempt track) or still pre-intro
-    // Relaxed has no attempt track — the opening theme is its only level
-    // music, and it stops for good on first move (fadeOutMenuMusicOnFirstMove).
-    // Restart it here too, so Retry/Reset/Replay/a fresh level all restore
-    // that same pre-move baseline instead of Relaxed going silent forever
-    // after your first-ever move in it.
-    if(pastIntro && save.settings.mode === 'relaxed') startMenuMusic();
-  }
+  if(pastIntro) startAttemptTrack(save.settings.mode);
+  else stopAttemptTrack(); // still pre-intro
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();
@@ -1363,7 +1360,7 @@ function showNextCarReveal(){
   $('carRevealTier').textContent = t('tier.' + car.tier);
   $('carRevealTier').className = 'car-tier tier-' + car.tier;
   const holder = $('carRevealArt');
-  holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin });
+  holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin, headlights: false });
   sfx('fanfare');
   haptic('success');
   showOverlay('carRevealOverlay');
@@ -1379,17 +1376,35 @@ function dismissCarReveal(){
 }
 
 /* ================== GARAGE (collection screen) ================== */
+/* Job cars (campaign) and bounty marks aren't equip choices during their
+   own job — the mark decides its own car (see heroCarIdForAttempt). Tapping
+   a tile still sets save.equippedCar (it's what Relaxed/Daily/Impound/
+   Sandbox will use next), but while a job is actually on screen the tap
+   can't change what's currently rendered — the toast below says so instead
+   of the tile silently appearing to do nothing. */
+function lockedHintFor(car){
+  if(car.bountyTier) return t('car.locked.' + car.id);
+  return t('car.locked.job', { chapter: car.chapter + 1, name: CHAPTERS[car.chapter].name });
+}
+
 function buildGarageList(){
   const owned = ownedCarIds(save, daily());
   const holder = $('garageList');
   holder.innerHTML = '';
+
+  const groupHeader = text => {
+    const h = document.createElement('div');
+    h.className = 'car-group-h';
+    h.textContent = text;
+    return h;
+  };
 
   const tile = (id, name, tier, skin, isOwned, hint) => {
     const b = document.createElement('button');
     b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '');
     const art = document.createElement('div');
     art.className = 'car-tile-art';
-    if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin });
+    if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin, headlights: false });
     else art.innerHTML = '<span class="car-lock">🔒</span>';
     b.appendChild(art);
     const label = document.createElement('div');
@@ -1403,7 +1418,11 @@ function buildGarageList(){
         sfx('ui');
         save.equippedCar = id;
         persist();
-        buildPieces();
+        if(mode.type === 'campaign' || mode.type === 'bounty'){
+          toast(t('garage.equip.job'));
+        } else {
+          buildPieces();
+        }
         buildGarageList();
       });
     }
@@ -1411,8 +1430,15 @@ function buildGarageList(){
   };
 
   holder.appendChild(tile(DEFAULT_CAR, t('car.classic'), 'common', null, true, ''));
-  CARS.forEach(car => {
-    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), t('car.locked.' + car.id)));
+  CHAPTERS.forEach((ch, i) => {
+    holder.appendChild(groupHeader(ch.name));
+    CARS.filter(c => c.chapter === i).forEach(car => {
+      holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car)));
+    });
+  });
+  holder.appendChild(groupHeader(t('garage.marks')));
+  CARS.filter(c => c.bountyTier).forEach(car => {
+    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car)));
   });
 }
 
@@ -1881,10 +1907,6 @@ function applyStrings(){
 function updateThemeButtonText(){
   const isPlaying = menuAudio && !menuAudio.paused;
   $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
-}
-
-function fadeOutMenuMusicOnFirstMove(){
-  stopMenuMusic();
 }
 
 /* ================== GLOBAL WIRING ================== */

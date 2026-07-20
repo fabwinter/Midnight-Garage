@@ -8,9 +8,9 @@ let AC = null;
 let sfxVol = 1;
 let musicVol = 0;
 
-// Heist/Pursuit attempt track — a per-mode pool so repeat attempts don't
-// always hear the same loop (Relaxed has no attempt track). Add more
-// files to a pool any time; nothing else needs to change.
+// Per-mode attempt track — a pool per mode so repeat attempts don't always
+// hear the same loop. Add more files to a pool any time; nothing else needs
+// to change.
 let gameMode = 'heist';    // 'relaxed' | 'heist' | 'pursuit'
 let attemptAudio = null;
 let attemptTrackSrc = null;
@@ -24,8 +24,18 @@ const TRACK_POOLS = {
     'assets/audio/pursuit-3.mp3',
     'assets/audio/pursuit-4.mp3',
   ],
+  // Instrumental, lower-intensity cousins of the Heist/Pursuit pool — no
+  // countdown/budget pressure in this mode, so the music shouldn't imply
+  // any either. Same shuffle-without-repeat treatment as Pursuit's pool.
+  relaxed: [
+    'assets/audio/relaxed-velvet-drift.mp3',
+    'assets/audio/relaxed-velvet-midnight-loop.mp3',
+    'assets/audio/relaxed-glassroom-stroll.mp3',
+    'assets/audio/relaxed-velvet-after-midnight.mp3',
+    'assets/audio/relaxed-velvet-after-hours.mp3',
+  ],
 };
-const lastPick = { heist: null, pursuit: null };   // avoids back-to-back repeats
+const lastPick = { heist: null, pursuit: null, relaxed: null };   // avoids back-to-back repeats
 let curAttemptTrack = null;   // the src chosen for the attempt in progress — stable across duck/resume
 const warmed = new Set();     // srcs already nudged to preload, so a pool only warms once per session
 
@@ -99,7 +109,7 @@ export function setMusicVolume(v){
   musicVol = v;
   if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
-  if(gameMode !== 'relaxed' && attemptAudio && !duckAttempt){
+  if(attemptAudio && !duckAttempt){
     attemptAudio.volume = Math.max(0, Math.min(1, v));
     if(v === 0) attemptAudio.pause();
     else if(attemptActive && attemptAudio.paused){
@@ -111,8 +121,7 @@ export function setMusicVolume(v){
 
 export function setGameMode(mode){
   gameMode = mode;
-  if(mode === 'relaxed') stopAttemptTrack();
-  else warmPool(mode);
+  warmPool(mode);
 }
 
 function ensureAttemptAudio(src){
@@ -190,7 +199,7 @@ export function duckAttemptTrack(){
 
 export function resumeAttemptTrack(){
   duckAttempt = false;
-  if(gameMode === 'relaxed' || !attemptActive) return;
+  if(!attemptActive) return;
   ensureAttemptAudio(curAttemptTrack);   // same track this attempt already picked — no re-roll on resume
   if(attemptAudio.paused && musicVol > 0){
     const a = attemptAudio;
@@ -199,7 +208,7 @@ export function resumeAttemptTrack(){
 }
 
 /* Menu music playback with fade-in/fade-out. Never competes with a live
-   Heist/Pursuit attempt — that track already owns the foreground. */
+   attempt track (any mode) — that track already owns the foreground. */
 export function startMenuMusic(){
   // Checked against actual playback, not the `attemptActive` flag: Heist
   // now marks an attempt active immediately at level load (before the
@@ -209,7 +218,7 @@ export function startMenuMusic(){
   // refusing to ever start whenever Heist was the current mode. Once the
   // attempt track genuinely IS playing, crossfadeOutOtherTracks already
   // fades this one out, so the "don't play both" property still holds.
-  if(gameMode !== 'relaxed' && attemptAudio && !attemptAudio.paused) return;
+  if(attemptAudio && !attemptAudio.paused) return;
   if(!menuAudio){
     menuAudio = new Audio(VELVET_GLOVE);
     menuAudio.preload = 'auto';
@@ -219,9 +228,9 @@ export function startMenuMusic(){
   if(menuAudio.paused || menuAudio._fadeInterval){
     stopSettingsMusic();
     // Only jump back to the start on a genuine stop. A call arriving mid
-    // fade-out (e.g. Relaxed's Retry racing fadeOutMenuMusicOnFirstMove's
-    // still-running fade) should just reverse into a fade-in from wherever
-    // the volume currently is, not restart playback position too.
+    // fade-out (e.g. reversing before it's fully silent) should just
+    // reverse into a fade-in from wherever the volume currently is, not
+    // restart playback position too.
     if(menuAudio.paused){
       menuAudio.currentTime = 0;
       menuAudio.play().catch(() => {});

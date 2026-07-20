@@ -1,107 +1,205 @@
-/* Collection system (HEIST-PLAN.md §3, phase H0). Cars are cosmetic hero
-   skins, unlocked by skill milestones we already track — no RNG, no
-   purchase gates a specific car. Tier is a flavor label describing how
-   many players will realistically earn a car; it is NEVER tied to a
-   purchase or weighting (that distinction is load-bearing for staying out
-   of gacha-adjacent territory — see HEIST-PLAN.md §1). */
+/* Collection system (HEIST-PLAN.md §3). Cars are cosmetic hero skins —
+   zero gameplay effect, no RNG, no purchase gates a specific car (the
+   distinction that keeps this out of gacha-adjacent territory, see
+   HEIST-PLAN.md §1). Tier is a flavor label describing how many players
+   will realistically earn a car, never a purchase weighting.
+
+   Direction (per HEIST-PLAN.md §2's original "the mark, not always red"
+   fiction, now implemented): campaign and bounty levels don't let you pick
+   your car — "the job" decides it, same as a real heist crew doesn't get
+   to choose what's in the truck. Clear a level and the mark you drove
+   becomes yours to keep. Only Relaxed and Daily (no "job" framing, just
+   your own driving) let you equip any car you've already earned — see
+   `heroCarIdFor()` in js/game.js for where that split is enforced.
+
+   Two pools:
+   - Job cars (20): five per campaign chapter, round-robin assigned across
+     that chapter's 50 levels by `carIdForLevel()`, so each car is the hero
+     in ~10 missions. Unlocked the first time you clear one of its
+     missions — see `jobUnlockCheck()`. Chapter-gating (Pro paywall on
+     chapters 3-4, `save.unlocked` progress within a chapter) already does
+     the rarity work for higher tiers; no extra meta-condition needed.
+   - Bounty marks (4): one per rarity tier, shown as the hero on every
+     "Tonight's Mark" of that tier (`carIdForBountyTier()`). Unlocked by
+     clearing a bounty under its nightly reward condition — unchanged from
+     H4's original design. */
+
+import { CHAPTER_SIZE } from './levels.data.js';
 
 export const DEFAULT_CAR = 'classic';
+export const POOL_SIZE = 5;
 
-/* unlock(save, dailyState) → boolean. H0's conditions read fields that
-   already existed in save_v1 / daily_v1 (plus `equippedCar`/`carsSeen`,
-   see game.js); the H4 bounty cars below read `save.bounties.done`
-   (see js/bounty.js), the one new field that phase added. */
-export const CARS = [
+/* skin.photo: seam for bespoke per-car art (top-down, front-right, own
+   headlights — see classic.png's conventions). Until a car has one, its
+   hero render falls back to the recolored-sedan-photo treatment every
+   other car already used (see js/art.js) — nothing breaks while art
+   lands car by car. */
+/* Derives its scan directly from carIdForLevel() rather than
+   re-deriving chapter/slot arithmetic independently — the two used to be
+   two separate sources of truth for "which car is level i," and they
+   drifted the moment carIdForLevel() grew its level-1-is-always-red
+   override: this scan kept counting level 1 toward First Job's unlock
+   even though level 1 never actually shows First Job as the hero,
+   letting you earn a car in the garage you never once drove. Routing
+   through carIdForLevel() means any future override (here or elsewhere)
+   can't cause that class of bug again — the unlock condition is always
+   "you cleared a level that actually showed you this car." */
+function jobUnlockCheck(car){
+  const from = car.chapter * CHAPTER_SIZE;
+  return save => {
+    for(let i = from; i < from + CHAPTER_SIZE; i++){
+      if(carIdForLevel(i) === car.id && (save.stars[i] || 0) > 0) return true;
+    }
+    return false;
+  };
+}
+
+/* Job cars, five per chapter, in chapter order — chapter/slot are derived
+   from array position below (see the assignment loop), not hand-typed, so
+   reordering a chapter's five entries can't drift out of sync with it. */
+const JOB_CARS = [
+  // --- Night Shift (ch. 1) — everyday metal, all common/uncommon -------
   {
-    id: 'first-job', name: 'First Job', tier: 'common',
+    id: 'first-job', name: 'First Job', tier: 'common', photo: null,
     skin: { base: '#ffb454', dark: '#c47a10', glass: '#3c2a0c', trim: 'none' },
-    unlock: save => save.unlocked >= 2,
   },
   {
-    id: 'understudy', name: 'The Understudy', tier: 'common',
+    id: 'understudy', name: 'The Understudy', tier: 'common', photo: null,
     skin: { base: '#37c8ab', dark: '#177a67', glass: '#0e2f2b', trim: 'none' },
-    unlock: save => save.unlocked > 50,
   },
   {
-    id: 'neon-ghost', name: 'Neon Ghost', tier: 'uncommon',
-    skin: { base: '#4fd2f0', dark: '#1f8fb0', glass: '#0f2c37', trim: 'none' },
-    unlock: save => save.unlocked > 100,
-  },
-  {
-    id: 'harbor-queen', name: 'Harbor Queen', tier: 'rare',
-    skin: { base: '#1f9c82', dark: '#0d4a3e', glass: '#062420', trim: 'chrome' },
-    unlock: save => save.unlocked > 150 && save.pro === true,
-  },
-  {
-    id: 'midnight-phantom', name: 'Midnight Phantom', tier: 'legendary',
-    skin: { base: '#2a2f3a', dark: '#101319', glass: '#0e2f2b', trim: 'plaque' },
-    unlock: save => save.unlocked >= 200,
-  },
-  {
-    id: 'steady-hand', name: 'The Steady Hand', tier: 'uncommon',
-    skin: { base: '#b07cff', dark: '#6f3ad0', glass: '#291743', trim: 'none' },
-    unlock: save => (save.streak3 || 0) >= 5,
-  },
-  {
-    id: 'clean-sweep', name: 'Clean Sweep', tier: 'rare',
-    skin: { base: '#f26fb1', dark: '#bb3679', glass: '#3a1229', trim: 'chrome' },
-    unlock: save => (save.streak3 || 0) >= 15,
-  },
-  {
-    id: 'night-regular', name: 'Night Regular', tier: 'common',
+    id: 'night-regular', name: 'Night Regular', tier: 'common', photo: null,
     skin: { base: '#ff8a5c', dark: '#c9502a', glass: '#3d1c10', trim: 'none' },
-    unlock: (save, daily) => (daily?.streak || 0) >= 7,
   },
   {
-    id: 'insomniac', name: 'The Insomniac', tier: 'rare',
-    skin: { base: '#6f3ad0', dark: '#3d1c80', glass: '#1f0f40', trim: 'chrome' },
-    unlock: (save, daily) => (daily?.streak || 0) >= 30,
-  },
-  {
-    id: 'under-radar', name: 'Under the Radar', tier: 'uncommon',
-    skin: { base: '#8fa2bd', dark: '#57687f', glass: '#1e2530', trim: 'none' },
-    unlock: (save, daily) => Object.values(daily?.done || {}).some(d => d.moves <= d.par),
-  },
-  {
-    id: 'paid-in-full', name: 'Paid in Full', tier: 'common',
+    id: 'paid-in-full', name: 'Paid in Full', tier: 'common', photo: null,
     skin: { base: '#ffd84d', dark: '#d1a213', glass: '#3b3106', trim: 'chrome' },
-    unlock: save => save.pro === true,
   },
   {
-    id: 'completionist', name: 'The Completionist', tier: 'legendary',
+    id: 'under-radar', name: 'Under the Radar', tier: 'uncommon', photo: null,
+    skin: { base: '#8fa2bd', dark: '#57687f', glass: '#1e2530', trim: 'none' },
+  },
+  // --- Neon District (ch. 2) — tuner scene, uncommon leaning rare ------
+  {
+    id: 'neon-ghost', name: 'Neon Ghost', tier: 'uncommon', photo: null,
+    skin: { base: '#4fd2f0', dark: '#1f8fb0', glass: '#0f2c37', trim: 'none' },
+  },
+  {
+    id: 'steady-hand', name: 'The Steady Hand', tier: 'uncommon', photo: null,
+    skin: { base: '#b07cff', dark: '#6f3ad0', glass: '#291743', trim: 'none' },
+  },
+  {
+    id: 'street-tuner', name: 'Street Tuner', tier: 'uncommon', photo: null,
+    skin: { base: '#9be03f', dark: '#5f8f1e', glass: '#1c2b0c', trim: 'none' },
+  },
+  {
+    id: 'lowrider', name: 'The Low Rider', tier: 'uncommon', photo: null,
+    skin: { base: '#c23a5e', dark: '#701f36', glass: '#2b0f18', trim: 'chrome' },
+  },
+  {
+    id: 'clean-sweep', name: 'Clean Sweep', tier: 'rare', photo: null,
+    skin: { base: '#f26fb1', dark: '#bb3679', glass: '#3a1229', trim: 'chrome' },
+  },
+  // --- Harbor Freight (ch. 3) — classics and muscle, mostly rare -------
+  {
+    id: 'harbor-queen', name: 'Harbor Queen', tier: 'rare', photo: null,
+    skin: { base: '#1f9c82', dark: '#0d4a3e', glass: '#062420', trim: 'chrome' },
+  },
+  {
+    id: 'insomniac', name: 'The Insomniac', tier: 'rare', photo: null,
+    skin: { base: '#6f3ad0', dark: '#3d1c80', glass: '#1f0f40', trim: 'chrome' },
+  },
+  {
+    id: 'dockside-classic', name: 'Dockside Classic', tier: 'rare', photo: null,
+    skin: { base: '#3a5a8f', dark: '#1e3357', glass: '#0e1a2b', trim: 'chrome' },
+  },
+  {
+    id: 'crate-fresh', name: 'Crate Fresh', tier: 'uncommon', photo: null,
+    skin: { base: '#e7ebf0', dark: '#a6adba', glass: '#232a33', trim: 'chrome' },
+  },
+  {
+    id: 'american-steel', name: 'American Steel', tier: 'rare', photo: null,
+    skin: { base: '#d1502a', dark: '#873217', glass: '#2b140a', trim: 'none' },
+  },
+  // --- Gridlock (ch. 4) — endgame exotics, rare leaning legendary ------
+  {
+    id: 'midnight-phantom', name: 'Midnight Phantom', tier: 'legendary', photo: null,
+    skin: { base: '#2a2f3a', dark: '#101319', glass: '#0e2f2b', trim: 'plaque' },
+  },
+  {
+    id: 'vintage-icon', name: 'The Vintage Icon', tier: 'rare', photo: null,
     skin: { base: '#3b2270', dark: '#1f1140', glass: '#150b2b', trim: 'plaque' },
-    unlock: save => {
-      for(let i = 0; i < 200; i++) if((save.stars[i] || 0) !== 3) return false;
-      return true;
-    },
   },
-  // Bounty rewards (HEIST-PLAN.md §6, phase H4): earned by clearing a
-  // "Tonight's Mark" bounty under its reward condition (par/no-hints/
-  // alarm-intact — see js/bounty.js). Rarity matches the cleared board's
-  // own par bucket, not a completion count, so a single lucky legendary
-  // night is enough — same "skill-gated, not grindy" spirit as the rest
-  // of the collection.
   {
-    id: 'small-fish', name: 'Small Fish', tier: 'common',
+    id: 'grand-tourer', name: 'Grand Tourer', tier: 'legendary', photo: null,
+    skin: { base: '#1f5c3f', dark: '#0e3322', glass: '#0a1f16', trim: 'plaque' },
+  },
+  {
+    id: 'apex-predator', name: 'Apex Predator', tier: 'legendary', photo: null,
+    skin: { base: '#1a1d24', dark: '#0a0c10', glass: '#3a2f08', trim: 'plaque' },
+  },
+  {
+    id: 'midnight-runner', name: 'Midnight Runner', tier: 'rare', photo: null,
+    skin: { base: '#465b7a', dark: '#26374f', glass: '#101825', trim: 'plaque' },
+  },
+];
+JOB_CARS.forEach((car, i) => {
+  car.chapter = Math.floor(i / POOL_SIZE);
+  car.slot = i % POOL_SIZE;
+  car.unlock = jobUnlockCheck(car);
+});
+
+/* Bounty marks (HEIST-PLAN.md §6, phase H4): earned by clearing a
+   "Tonight's Mark" under its reward condition (par/no-hints/alarm-intact —
+   see js/bounty.js). One per rarity tier; that tier's car is also the hero
+   shown while playing any bounty of that tier (see carIdForBountyTier). */
+const BOUNTY_CARS = [
+  {
+    id: 'small-fish', name: 'Small Fish', tier: 'common', bountyTier: 'common', photo: null,
     skin: { base: '#8fbf6b', dark: '#4d7a34', glass: '#1c2b14', trim: 'none' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'common'),
   },
   {
-    id: 'fence-favorite', name: "The Fence's Favorite", tier: 'uncommon',
+    id: 'fence-favorite', name: "The Fence's Favorite", tier: 'uncommon', bountyTier: 'uncommon', photo: null,
     skin: { base: '#e0a840', dark: '#946a1c', glass: '#2c1e08', trim: 'none' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'uncommon'),
   },
   {
-    id: 'high-value-mark', name: 'High-Value Mark', tier: 'rare',
+    id: 'high-value-mark', name: 'High-Value Mark', tier: 'rare', bountyTier: 'rare', photo: null,
     skin: { base: '#d43f6a', dark: '#7a1f3a', glass: '#2b0e18', trim: 'chrome' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'rare'),
   },
   {
-    id: 'the-big-score', name: 'The Big Score', tier: 'legendary',
+    id: 'the-big-score', name: 'The Big Score', tier: 'legendary', bountyTier: 'legendary', photo: null,
     skin: { base: '#f5d442', dark: '#a68c1f', glass: '#332b08', trim: 'plaque' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'legendary'),
   },
 ];
+
+export const CARS = [...JOB_CARS, ...BOUNTY_CARS];
+
+/* Which car is the hero for a given campaign level (0-based LEVELS index).
+   Round-robins the level's chapter pool, five cars deep — same car is the
+   mark for 10 missions before the pool repeats. */
+export function carIdForLevel(idx){
+  // Level 1 is everyone's first look at the game, in every mode (Heist/
+  // Pursuit/Relaxed just change pacing, not which level this is) — it
+  // stays the classic red car rather than handing a brand-new player an
+  // unfamiliar job car before they've even seen the "free the red car"
+  // premise. jobUnlockCheck() reads this same function, so First Job
+  // (chapter 0 slot 0) correctly does NOT unlock off level 1 — you only
+  // get a car in the garage once you've actually driven and freed it.
+  if(idx === 0) return DEFAULT_CAR;
+  const chapter = Math.min(3, Math.floor(idx / CHAPTER_SIZE));
+  const slot = idx % CHAPTER_SIZE % POOL_SIZE;
+  const pool = JOB_CARS.filter(c => c.chapter === chapter);
+  return pool[slot]?.id ?? DEFAULT_CAR;
+}
+
+/* Which car is the hero for tonight's bounty, by its rarity tier. */
+export function carIdForBountyTier(tier){
+  return BOUNTY_CARS.find(c => c.bountyTier === tier)?.id ?? DEFAULT_CAR;
+}
 
 export function ownedCarIds(save, daily){
   const owned = new Set([DEFAULT_CAR]);

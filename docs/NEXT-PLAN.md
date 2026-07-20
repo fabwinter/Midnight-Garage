@@ -249,17 +249,91 @@ the identical `startBoard()` call with no other audio-relevant
 differences from `resetBtn`, so the same fix covers all three retry
 paths.
 
+✅ **Relaxed now has its own 5-track pool** (user-supplied), same
+architecture as Heist/Pursuit — started at level load, loops through
+moves/undo/retry, ducks for menu/settings and resumes, shuffled without
+back-to-back repeats. Previously Relaxed had no attempt track at all;
+the opening theme doubled as its only level music and stopped for good
+on the first move, which was really a placeholder standing in for the
+missing pool rather than an intended design. Every `gameMode !==
+'relaxed'` special case in `audio.js` is gone — the three modes are
+audio-uniform now. Verified headless: track starts at 0 moves, survives
+first-move and Retry with no gap, opening-theme handoff stays gapless.
+
 Still open — **adaptive intensity stems**: two or three stems per mode
 that layer in as the move budget shrinks, crossfading on top of the
 per-attempt lifecycle that already exists. Bigger felt upgrade than more
 static tracks; the pool above is the simpler win that shipped first.
 
-### N3c — Collection car art *(feeds N1)*
+### N3c — Job car art *(code ✅ shipped; blocked on your renders)*
 
-6–10 new collectible hero cars with rarity tiers for bounty rewards.
-Traffic art stays as-is (see N1). Wall-tile visual variety (dumpster,
-jersey barrier, cones alongside the hazard-stripe tile) rides along as
-cheap flavor whenever this batch happens.
+Direction decided (your call, "C" of three floated — see HEIST-PLAN.md
+§3b): campaign and bounty levels don't let you pick your car, the job
+does — clear it and it's yours. This also explains a bug you flagged:
+garage skins were rendering flipped/no-headlights because the beam/glow
+overlay was hard-coded to only ever draw over `classic.png`'s exact
+photo, and every skin was a recolored *traffic* photo shot for a
+completely different layout. Fixed at the code level (`js/art.js`'s
+`photoHeroExtra` now also fires for any car with bespoke art), but the
+actual fix is real art — traffic photos were never going to be heroes.
+
+**Shipped (code, placeholder-art-tested):**
+- `js/collection.js`: 20 job cars, five per campaign chapter
+  (`carIdForLevel()` round-robins a chapter's pool across its 50 levels,
+  ~10 missions per car), + the 4 existing bounty-tier marks unchanged.
+  Unlocks off clearing an assigned mission — no new meta-conditions,
+  chapter-gating (Pro paywall on ch. 3-4) already carries the rarity
+  signal. `js/game.js`'s `heroCarIdForAttempt()` is the single place that
+  decides: campaign/bounty → the job's car; Daily/Impound/Sandbox → your
+  equipped car (these aren't "jobs," so free choice stays there). Garage
+  screen groups tiles by chapter + a Bounty Marks section; equipping a
+  car mid-job now shows a toast explaining it'll apply next time you're
+  not on a job, instead of silently doing nothing.
+- Every job car has a `skin.photo` seam (`null` today) — until you supply
+  art it falls back to the same hue-rotated-traffic-photo render H0's
+  cars always used, so nothing regresses. `js/art.js` picks up
+  `skin.photo` automatically the moment it's set — one field per car, no
+  other code changes needed as renders land.
+- Verified headless: campaign level 1 shows "First Job" (chapter-0
+  slot-0 car), a bounty's hero matches its tier's mark, equipping a
+  locked-by-job car mid-mission is a no-op + toast, equipping in Daily
+  changes the hero immediately.
+
+**Roster (20 job + 4 marks = 24 total), by chapter:**
+
+| Ch. | Chapter | Cars (tier) |
+|---|---|---|
+| 1 | Night Shift | First Job, Understudy, Night Regular, Paid in Full (all common) · Under the Radar (uncommon) |
+| 2 | Neon District | Neon Ghost, Steady Hand, Street Tuner, The Low Rider (uncommon) · Clean Sweep (rare) |
+| 3 | Harbor Freight | Harbor Queen, Insomniac, Dockside Classic, American Steel (rare) · Crate Fresh (uncommon) |
+| 4 | Gridlock | Midnight Phantom, Grand Tourer, Apex Predator (legendary) · The Vintage Icon, Midnight Runner (rare) |
+| — | Bounty marks | Small Fish (common), The Fence's Favorite (uncommon), High-Value Mark (rare), The Big Score (legendary) |
+
+12 of the 20 job cars are H0's original reskins, regrouped into chapters
+by tier fit; 8 are new (Street Tuner, The Low Rider, Dockside Classic,
+Crate Fresh, American Steel, Grand Tourer, Apex Predator, Midnight
+Runner). "Completionist" — H0's 3-star-all-200 car — is renamed The
+Vintage Icon: its old meta-condition doesn't map to "cleared one Gridlock
+job," so it kept its skin colors but lost the name.
+
+**Art spec for your renders** (every one must match `classic.png`'s
+conventions, since the beam/glow geometry is tuned to it):
+- 800×400 PNG, transparent background, top-down, filling the frame edge
+  to edge with consistent margins across the set
+- Front of the car at the **right edge** (bumper at ~x=772/800) — one
+  canonical orientation, this is what fixes the wrong-facing bug for good
+- Visible headlight detail at the front corners (the beam anchors there)
+- Consistent lighting angle across all 24 — mismatched lighting is what
+  makes a set read as pasted-together
+- No baked-in drop shadow spilling past the body edge
+- Any paint color — the beam/glow is the "this is your car" signal now,
+  not red
+
+Drop files in as `assets/cars/<id>.png` and set that car's `skin.photo`
+in `js/collection.js` — each one goes live independently, no batch
+required. Wall-tile visual variety (dumpster, jersey barrier, cones
+alongside the hazard-stripe tile) still rides along as cheap flavor
+whenever there's a reason to touch that art.
 
 ### N3d — Chapter environments *(one chapter first, then judge)*
 

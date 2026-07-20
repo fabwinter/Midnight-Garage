@@ -82,6 +82,50 @@ the higher-rarity marks live) + all cosmetics + unlimited hints. Optional
 **fixed-contents** livery packs (contents shown before purchase — no
 randomness, so no PEGI/odds-disclosure trigger).
 
+### 3b. Job cars ✅ implemented — §2's "the mark, not always red" fiction
+
+H0 shipped with a simpler version of this system: 12 cosmetic reskins of
+the *same* red hero, freely equippable by the player at any time. That
+never actually delivered §2's founding fiction ("each level's hero car is
+*the mark*, not always red") — equipping was pure player preference,
+disconnected from what level you were on. Decided (your call, direction
+**C** of three floated): **the job decides the car.** Campaign and bounty
+levels don't let you pick — you drive whatever the mark is, and clearing
+the level is what makes it yours. Player choice moves to *which owned car
+you practice in* (Relaxed/Daily/Impound/Sandbox aren't "jobs," so they
+keep the free equip), not *which car a mission uses*.
+
+- **20 job cars, five per campaign chapter** (`js/collection.js`'s
+  `JOB_CARS`), round-robin-assigned across that chapter's 50 levels
+  (`carIdForLevel()`) so each car is the hero in ~10 missions before the
+  pool repeats. Unlocked the moment you clear any one of its missions —
+  chapter-gating (the existing Pro paywall on chapters 3-4, plus
+  `save.unlocked` progress within a chapter) already does the rarity work
+  for higher tiers, so no extra meta-condition was needed on top.
+- **4 bounty marks unchanged** (`BOUNTY_CARS`) — one per rarity tier,
+  unlocked by clearing a "Tonight's Mark" under its nightly reward
+  condition. Now also the hero shown *while playing* a bounty of that tier
+  (`carIdForBountyTier()`), where previously the bounty board used
+  whatever the player had equipped.
+- **`heroCarIdForAttempt()`** (js/game.js) is the single resolution point:
+  campaign → `carIdForLevel(cur)`, bounty → `carIdForBountyTier(mode.tier)`,
+  everything else (Daily/Impound/Sandbox) → `save.equippedCar`. Independent
+  of the Heist/Pursuit/Relaxed pacing toggle, which is an orthogonal axis.
+- **Art seam, not art yet**: every job car keeps `skin.photo: null` for now
+  and renders via the existing hue-rotated-traffic-photo fallback — the
+  same rendering H0's 12 reskins always used, so nothing regresses while
+  real art lands. Real art drops in car-by-car by setting `skin.photo` to
+  a bespoke PNG built to `classic.png`'s conventions (800×400, transparent,
+  top-down, front at the right edge, baked headlights) — `js/art.js` then
+  switches that car to the bespoke render *and* the beam/glow overlay that
+  was previously classic-only. This also fixed the standing bug where
+  every non-default skin rendered with no headlights at all: the beam
+  overlay's condition had silently excluded every skinned car since H0.
+- **Garage screen** now groups tiles by chapter + a "Bounty Marks" section
+  instead of one flat list, and equipping a locked-by-job tile mid-mission
+  shows a toast (`garage.equip.job`) rather than silently doing nothing —
+  the tap still saves the choice for the next non-job session.
+
 ---
 
 ## 4. "Security" = validated puzzle mechanics
@@ -203,6 +247,9 @@ verify hardening.
 4. **First car roster** — 12 marks shipped, mapped to existing milestones
    (chapter clears, star streaks, daily streaks, par-or-under, Pro purchase,
    full completion). See `js/collection.js`.
+   *(Superseded — see §3b: the roster and its unlock model were reworked
+   to "the job decides the car," growing to 20 job cars + 4 bounty marks.
+   Item 3's scope decision still stands unchanged.)*
 
 H0 shipped `b6f001c`: garage screen, 12 cosmetic hero skins, reveal-queue
 UX that intercepts the win-sheet's Next/Replay tap so a new-car moment is
