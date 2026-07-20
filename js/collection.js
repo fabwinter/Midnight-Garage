@@ -172,6 +172,13 @@ export const CARS = [...JOB_CARS, ...BOUNTY_CARS];
    Round-robins the level's chapter pool, five cars deep — same car is the
    mark for 10 missions before the pool repeats. */
 export function carIdForLevel(idx){
+  // Level 1 is everyone's first look at the game, in every mode (Heist/
+  // Pursuit/Relaxed just change pacing, not which level this is) — it
+  // stays the classic red car rather than handing a brand-new player an
+  // unfamiliar job car before they've even seen the "free the red car"
+  // premise. Clearing it still unlocks First Job (chapter 0 slot 0) same
+  // as any other level in its rotation; the car just isn't on screen for it.
+  if(idx === 0) return DEFAULT_CAR;
   const chapter = Math.min(3, Math.floor(idx / CHAPTER_SIZE));
   const slot = idx % CHAPTER_SIZE % POOL_SIZE;
   const pool = JOB_CARS.filter(c => c.chapter === chapter);
