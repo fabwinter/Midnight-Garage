@@ -556,17 +556,10 @@ function commitMove(i, mergedKeyStep = false){
     $('srLive').textContent = moveAnnounce;
   }
 
-  if(moves === 1 && !mergedKeyStep){
-    if(gm === 'relaxed'){
-      // No attempt track to hand off to — this is the only thing that
-      // ever stops the opening theme for Relaxed, so it still needs an
-      // explicit call here.
-      fadeOutMenuMusicOnFirstMove();
-    } else if(gm === 'pursuit'){
-      // Music already started at level load (see startBoard), same as
-      // Heist — only the countdown itself waits for the first move.
-      startPursuitTimer();
-    }
+  if(moves === 1 && !mergedKeyStep && gm === 'pursuit'){
+    // Music already started at level load (see startBoard), same as
+    // Heist/Relaxed — only the countdown itself waits for the first move.
+    startPursuitTimer();
   }
 
   if(gm !== 'relaxed' && moves === 1 && !mergedKeyStep && !won){
@@ -826,8 +819,8 @@ function loadLevel(idx){
   abandonIfMidLevel();
   // No stopMenuMusic() here on purpose: the opening theme should keep
   // playing right through this navigation, with no silent gap, until
-  // startBoard()'s attempt track (or, for Relaxed, the first move) is
-  // actually ready to hand off — see audio.js's crossfadeOutOtherTracks.
+  // startBoard()'s attempt track is actually ready to hand off — see
+  // audio.js's crossfadeOutOtherTracks.
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
@@ -909,8 +902,8 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  // Heist and Pursuit music both set the mood immediately at level load —
-  // only Pursuit's countdown itself still waits for the first move (see
+  // Every mode's music sets the mood immediately at level load — only
+  // Pursuit's countdown itself still waits for the first move (see
   // commitMove), same "the clock starts when you start moving" reasoning,
   // now decoupled from when its music starts. This also covers Retry/
   // Reset/Replay (they all call startBoard() directly): the attempt
@@ -919,8 +912,8 @@ function startBoard(){
   // whatever was already playing itself, so no separate stopAttemptTrack()
   // call here (that used to run first regardless, fighting the very
   // fadeIn that follows it a tick later — a measurable volume dip on
-  // every retry, worse than a plain cut for Pursuit's 4-track pool
-  // where the old and new tracks are different elements entirely).
+  // every retry, worse than a plain cut for Pursuit/Relaxed's multi-track
+  // pools where the old and new tracks are different elements entirely).
   //
   // Gated on pastIntro: startBoard() also runs once during boot(), before
   // Start/the mode picker have been dismissed — starting an attempt track
@@ -929,17 +922,8 @@ function startBoard(){
   // before the player ever reaches the picker. introPlayBtn sets pastIntro
   // and calls startBoard() again right as the player confirms, which is
   // the actual "level start" moment that matters here.
-  if(pastIntro && (save.settings.mode === 'heist' || save.settings.mode === 'pursuit')){
-    startAttemptTrack(save.settings.mode);
-  } else {
-    stopAttemptTrack(); // relaxed (no attempt track) or still pre-intro
-    // Relaxed has no attempt track — the opening theme is its only level
-    // music, and it stops for good on first move (fadeOutMenuMusicOnFirstMove).
-    // Restart it here too, so Retry/Reset/Replay/a fresh level all restore
-    // that same pre-move baseline instead of Relaxed going silent forever
-    // after your first-ever move in it.
-    if(pastIntro && save.settings.mode === 'relaxed') startMenuMusic();
-  }
+  if(pastIntro) startAttemptTrack(save.settings.mode);
+  else stopAttemptTrack(); // still pre-intro
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();
@@ -1923,10 +1907,6 @@ function applyStrings(){
 function updateThemeButtonText(){
   const isPlaying = menuAudio && !menuAudio.paused;
   $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
-}
-
-function fadeOutMenuMusicOnFirstMove(){
-  stopMenuMusic();
 }
 
 /* ================== GLOBAL WIRING ================== */
