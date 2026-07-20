@@ -117,7 +117,13 @@ export function setGameMode(mode){
 
 function ensureAttemptAudio(src){
   if(!attemptAudio || attemptTrackSrc !== src){
-    if(attemptAudio) attemptAudio.pause();
+    // Fade the old pick out instead of hard .pause()-ing it — a retry
+    // that lands on a different pool track (routine for Pursuit's
+    // 4-track shuffle) used to cut the old track dead silent on this
+    // same line, before the new one had buffered enough to be audible:
+    // a real, measurable gap. Now the two genuinely overlap.
+    const stale = attemptAudio;
+    if(stale) fadeOut(stale, 300).then(() => { stale.pause(); stale.currentTime = 0; });
     attemptAudio = new Audio(src);
     attemptAudio.preload = 'auto';
     attemptAudio.loop = true;
@@ -210,10 +216,16 @@ export function startMenuMusic(){
     menuAudio.loop = true;
     menuAudio.volume = 0;
   }
-  if(menuAudio.paused){
+  if(menuAudio.paused || menuAudio._fadeInterval){
     stopSettingsMusic();
-    menuAudio.currentTime = 0;
-    menuAudio.play().catch(() => {});
+    // Only jump back to the start on a genuine stop. A call arriving mid
+    // fade-out (e.g. Relaxed's Retry racing fadeOutMenuMusicOnFirstMove's
+    // still-running fade) should just reverse into a fade-in from wherever
+    // the volume currently is, not restart playback position too.
+    if(menuAudio.paused){
+      menuAudio.currentTime = 0;
+      menuAudio.play().catch(() => {});
+    }
     fadeIn(menuAudio, musicVol * 0.7, 800);
   }
 }
@@ -277,10 +289,11 @@ function clearFade(audio){
 
 function fadeIn(audio, targetVol, ms){
   clearFade(audio);
+  const startVol = audio.volume;
   const steps = Math.ceil(ms / 16);
   let step = 0;
   audio._fadeInterval = setInterval(() => {
-    audio.volume = targetVol * (step / steps);
+    audio.volume = startVol + (targetVol - startVol) * (step / steps);
     if(++step >= steps){
       audio.volume = targetVol;
       clearFade(audio);

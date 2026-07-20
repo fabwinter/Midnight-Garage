@@ -896,11 +896,19 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  stopAttemptTrack(); // reset any track from the previous attempt
   // Heist and Pursuit music both set the mood immediately at level load —
   // only Pursuit's countdown itself still waits for the first move (see
   // commitMove), same "the clock starts when you start moving" reasoning,
-  // now decoupled from when its music starts.
+  // now decoupled from when its music starts. This also covers Retry/
+  // Reset/Replay (they all call startBoard() directly): the attempt
+  // track restarts immediately rather than requiring a fresh first move
+  // — startAttemptTrack() -> ensureAttemptAudio() crossfades away
+  // whatever was already playing itself, so no separate stopAttemptTrack()
+  // call here (that used to run first regardless, fighting the very
+  // fadeIn that follows it a tick later — a measurable volume dip on
+  // every retry, worse than a plain cut for Pursuit's 4-track pool
+  // where the old and new tracks are different elements entirely).
+  //
   // Gated on pastIntro: startBoard() also runs once during boot(), before
   // Start/the mode picker have been dismissed — starting an attempt track
   // there would register its autoplay retry on literally the first tap of
@@ -910,6 +918,14 @@ function startBoard(){
   // the actual "level start" moment that matters here.
   if(pastIntro && (save.settings.mode === 'heist' || save.settings.mode === 'pursuit')){
     startAttemptTrack(save.settings.mode);
+  } else {
+    stopAttemptTrack(); // relaxed (no attempt track) or still pre-intro
+    // Relaxed has no attempt track — the opening theme is its only level
+    // music, and it stops for good on first move (fadeOutMenuMusicOnFirstMove).
+    // Restart it here too, so Retry/Reset/Replay/a fresh level all restore
+    // that same pre-move baseline instead of Relaxed going silent forever
+    // after your first-ever move in it.
+    if(pastIntro && save.settings.mode === 'relaxed') startMenuMusic();
   }
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;

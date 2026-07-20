@@ -205,6 +205,50 @@ mode picker starts its music immediately (0 moves made) while the clock
 display stays untouched until the first move, then ticks down normally;
 mid-session switch to Pursuit via Settings starts it immediately too.
 
+**Follow-up round** (still on N3b, next report — "make sure music on
+all modes start immediately on retry level"): Reset/Retry/Replay all call
+the same `startBoard()`, so the level-load fixes above should already
+cover them, but retrying didn't reuse the same audio element the way a
+fresh level load does, and that surfaced three more gaps:
+
+- ✅ **Pursuit's track-switch was a hard cut**: `ensureAttemptAudio()`
+  used to `.pause()` the stale element the instant a retry's freshly-
+  picked track differed from the last one (routine for its 4-track pool)
+  — an instant, unfaded silence before the new element had buffered
+  enough to be audible. Now fades the stale element out over 300ms
+  instead, so the two genuinely overlap.
+- ✅ **Heist's retry fought itself**: `startBoard()` called
+  `stopAttemptTrack()` unconditionally, then `startAttemptTrack()`
+  right after — a fade-out and fade-in racing on the same reused
+  element, a measurable dip on every retry. `stopAttemptTrack()` now
+  only runs in the branch that isn't immediately starting a new attempt
+  track; `startAttemptTrack()` → `ensureAttemptAudio()` already
+  crossfades away whatever was playing on its own.
+- ✅ **`fadeIn()` always ramped from 0**, regardless of the element's
+  actual current volume — harmless for a fresh element but an audible
+  dip-then-recover on Heist's retry, which reuses the same single-track
+  element rather than creating a new one. Now captures the element's
+  real starting volume and interpolates from there, matching `fadeOut`'s
+  existing pattern.
+- ✅ **Relaxed's opening theme never came back after Reset**: its only
+  level music stops for good on first move via a `fadeOut()`; Retry then
+  called `startMenuMusic()`, but that function's guard was `if
+  (menuAudio.paused)`, which is false for the whole 300ms the old
+  fade-out is still running — so the call did nothing and the stale
+  fade-out completed anyway, leaving true silence. `startBoard()` now
+  also calls `startMenuMusic()` on Relaxed's retry path (previously it
+  only played once, on first-ever boot), and the guard now also treats
+  an in-flight fade (`menuAudio._fadeInterval`) as something to reverse
+  into a fade-in, only resetting `currentTime` on a genuine stop so
+  reversing a fade doesn't jump playback position.
+
+Verified headless across all three modes on Reset: 60ms-interval volume
+traces show continuous, non-zero playback with no gap or silent sample
+in any of the six samples taken. `bustedRetryBtn` and `replayBtn` share
+the identical `startBoard()` call with no other audio-relevant
+differences from `resetBtn`, so the same fix covers all three retry
+paths.
+
 Still open — **adaptive intensity stems**: two or three stems per mode
 that layer in as the move budget shrinks, crossfading on top of the
 per-attempt lifecycle that already exists. Bigger felt upgrade than more
