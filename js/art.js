@@ -52,6 +52,11 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    paint, which read as a lighting bug (green/purple taillights) rather than
    "recolored car". Real photos any time they exist beats simulating them. */
 const SEDAN_PHOTOS = [
+  // NOTE: sedan-6's cutout shipped mirrored (front at the LEFT — the only
+  // one violating the normalization described above) and was flipped in
+  // place in the July '26 job-car pass. Nobody noticed while it was 1 of 23
+  // traffic cars; as the skin body it became the hero on every campaign
+  // level, visibly driving backwards out of the exit.
   { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar (skin body)
   { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
   { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
@@ -245,15 +250,16 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
      beam crosses the piece's own viewBox — plain opaque-fading-to-transparent
      reads bright enough against the dark board without that artifact.)
 
-     Only ever drawn over art that actually follows classic.png's layout
-     (front-right, headlights at this exact spot): the default red hero, or
-     a job car with its own bespoke `skin.photo` (see collection.js) built
-     to the same spec. A job car without art yet falls back to a recolored
-     traffic-sedan photo below, which was never shot to this layout — its
-     front end and lack of real headlights are why overlaying a beam here
-     used to look wrong for every skinned car, so it's withheld until that
-     car's own art lands. */
-  const photoHeroExtra = (isHero && (!skin || skin.photo)) ? `
+     Drawn for EVERY hero, whatever its body art: classic.png, a bespoke
+     `skin.photo` render, or the recolored SEDAN_PHOTOS[0] fallback — all
+     three follow the same normalization (front at the right end, ~97% of
+     the canvas length), so the beam anchors land close enough on each.
+     A job-car pass briefly withheld this for fallback heroes on the theory
+     that the traffic photo wasn't shot to classic.png's layout; that shipped
+     as "the hero has no headlights" on every campaign level, because with
+     jobs deciding the car, the fallback IS the common case until bespoke
+     art lands. The mark must always read as the car with its lights on. */
+  const photoHeroExtra = isHero ? `
     <path d="M ${L - 23} 14 L ${L + 185} -8 L ${L + 185} 46 L ${L - 11} 30 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
     <path d="M ${L - 23} 86 L ${L + 185} 108 L ${L + 185} 54 L ${L - 11} 70 Z" fill="url(#${gid}beam2)" filter="url(#${gid}bblur)"/>
     <ellipse cx="${L - 26}" cy="18" rx="15" ry="4.5" transform="rotate(24 ${L - 26} 18)" fill="#fff3c2" opacity=".55" filter="url(#${gid}bblur)"/>
@@ -278,16 +284,14 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // lines up the same way it does on the classic hero.
     body = `<image href="${skin.photo}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"/>${photoHeroExtra}`;
   } else if(isHero){
-    // Job car with no bespoke render yet: same photo body as the classic
-    // hero, recolored to the skin's paint via hueRotate (both photos fill
-    // the cell edge-to-edge so the positions carry over). No beam/glow
-    // overlay here — this traffic-sedan photo was never shot to
-    // classic.png's front-right layout, so the beam would sit on the
-    // wrong edge of the car; photoHeroExtra already withholds it above.
+    // Job car with no bespoke render yet: SEDAN_PHOTOS[0] recolored to the
+    // skin's paint via hueRotate, plus the same beam/glow overlay as every
+    // other hero (the photo is normalized front-right like classic.png, so
+    // the anchors carry over — see photoHeroExtra above).
     // trimSVG's beltline stripe was tuned to the old procedural sedan's
     // silhouette (paint above/below a windshield greenhouse) — this car's
     // canopy runs nearly the full width, so the same stripe cuts across
-    // the glass instead of following a body line. Skipping trim here too;
+    // the glass instead of following a body line. Skipping trim here;
     // paint color alone still distinguishes every unlocked skin.
     body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${photoHeroExtra}`;
   } else if(len >= 3){
