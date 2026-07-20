@@ -31,6 +31,7 @@ const PURSUIT_PAUSES_MAX = 3;                // pause tokens per Pursuit attempt
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
 let curImpound = 0;                           // Impound Lot index (js/impound-lot.data.js)
+let pastIntro = false;                        // true once the mode picker has been confirmed this session — see startBoard
 let curLevel = null;                          // {m, p, w?, g?, h?} for whatever is on the board
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
@@ -62,7 +63,6 @@ let save = {
   modeLevel: { relaxed: 0, heist: 0, pursuit: 0 }, // last-played campaign level index, per mode
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
-  introSeen: false,
   hitchSeen: false,
   admin: false,
   bounties: { done: {} },   // 'YYYY-MM-DD' -> {moves, par, met, tier, condition}
@@ -902,7 +902,14 @@ function startBoard(){
   // Heist's music sets the mood immediately (per-move budget, no reason to
   // wait); Pursuit's stays tied to the first move, same moment its clock
   // starts (see commitMove) — "the clock starts when you start moving."
-  if(save.settings.mode === 'heist') startAttemptTrack('heist');
+  // Gated on pastIntro: startBoard() also runs once during boot(), before
+  // Start/the mode picker have been dismissed — starting Heist there would
+  // register its autoplay retry on literally the first tap of the session
+  // (tapping "Start" itself), cutting the opening theme short before the
+  // player ever reaches the picker. introPlayBtn sets pastIntro and calls
+  // startBoard() again right as the player confirms, which is the actual
+  // "level start" moment that matters here.
+  if(pastIntro && save.settings.mode === 'heist') startAttemptTrack('heist');
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();
@@ -1961,16 +1968,16 @@ function wire(){
   $('startPlayBtn').addEventListener('click', () => {
     sfx('ui');
     hideOverlay('startOverlay');
-    if(!save.introSeen){
-      showOverlay('introOverlay');
-      setTimeout(() => $('introPlayBtn').focus(), 100);
-    } else {
-      setTimeout(() => $('board').focus(), 100);
-    }
+    // How to Play + mode picker shows on every launch (by request) — not
+    // just the first. Opening theme keeps playing under it either way;
+    // see audio.js's crossfadeOutOtherTracks for the handoff once a mode
+    // is confirmed.
+    showOverlay('introOverlay');
+    setTimeout(() => $('introPlayBtn').focus(), 100);
   });
-  // First-launch mode cards: picking one is the same act as picking in
-  // Settings — it sets the persisted mode, and every later launch defaults
-  // to whatever was played last (boot() reads save.settings.mode).
+  // Mode cards: picking one is the same act as picking in Settings — it
+  // sets the persisted mode, which boot() reads next launch as the
+  // pre-selected default here (still changeable every time).
   document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.addEventListener('click', () => {
     const m = b.dataset.mode;
     sfx('ui');
@@ -1982,12 +1989,13 @@ function wire(){
   }));
   $('introPlayBtn').addEventListener('click', () => {
     sfx('ui');
-    save.introSeen = true;
-    persist();
     hideOverlay('introOverlay');
+    pastIntro = true;
     // Re-init the board under the picked mode — boot loaded it before the
     // choice existed, and startBoard() is what seeds the mode's alarm
-    // budget / pursuit clock. Zero moves have been made, so this is free.
+    // budget / pursuit clock (this is also the first point Heist's music
+    // is allowed to start — see startBoard). Zero moves have been made,
+    // so re-initializing here is free.
     startBoard();
     setTimeout(() => $('board').focus(), 100);
   });

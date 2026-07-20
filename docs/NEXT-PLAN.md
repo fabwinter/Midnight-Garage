@@ -166,6 +166,36 @@ correctly on close; and a 720ms volume trace during the Start-tap
 handoff never shows both the opening theme and Heist silent at the same
 instant.
 
+**Follow-up round** (still on N3b, same session's next report — "opening
+theme not playing on startup", "bring back mode choice every time"):
+
+- ✅ **Real bug in the above**: `startMenuMusic()`'s guard checked the
+  `attemptActive` *flag* (set the instant an attempt is requested) rather
+  than whether anything was actually audible. Since Heist's level-load
+  trigger sets that flag immediately — often before the player has
+  interacted at all — the guard silently refused to ever start the
+  opening theme whenever Heist was the current mode. Now checks
+  `attemptAudio && !attemptAudio.paused` (real playback state) instead.
+- ✅ **Mode picker now shows on every launch**, not just the first —
+  reverses N3e's original "skip after first launch" design per explicit
+  request. `save.introSeen` removed (no longer gates anything);
+  `startPlayBtn` always opens the picker.
+- ✅ **Second-order bug this surfaced**: with the picker always showing,
+  Heist's level-load trigger (fired once during `boot()`, before Start
+  is even tapped) registered its autoplay-retry on the *first tap of the
+  session* — which is the Start button itself. That let Heist hijack the
+  audio the instant Start was tapped, cutting the opening theme short
+  before the player ever reached the picker to choose a mode. Fixed with
+  a `pastIntro` session flag: Heist's `startBoard()` trigger now only
+  fires once the picker has actually been confirmed (`introPlayBtn`),
+  which is the real "level start" moment now that the picker is always
+  in the way first.
+
+Verified headless with a realistic flow: tap Start, dwell 1.5s on the
+picker (opening theme audible >0.1 volume, Heist confirmed *not* yet
+started), confirm Heist, then it starts and hands off cleanly — and the
+picker still appears after a full page reload.
+
 Still open — **adaptive intensity stems**: two or three stems per mode
 that layer in as the move budget shrinks, crossfading on top of the
 per-attempt lifecycle that already exists. Bigger felt upgrade than more

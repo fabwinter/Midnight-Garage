@@ -195,7 +195,15 @@ export function resumeAttemptTrack(){
 /* Menu music playback with fade-in/fade-out. Never competes with a live
    Heist/Pursuit attempt — that track already owns the foreground. */
 export function startMenuMusic(){
-  if(gameMode !== 'relaxed' && attemptActive) return;
+  // Checked against actual playback, not the `attemptActive` flag: Heist
+  // now marks an attempt active immediately at level load (before the
+  // player has necessarily interacted at all — see startBoard), so on a
+  // fresh boot the attempt track is typically still pending its own
+  // autoplay-gesture retry. Gating on the flag left the opening theme
+  // refusing to ever start whenever Heist was the current mode. Once the
+  // attempt track genuinely IS playing, crossfadeOutOtherTracks already
+  // fades this one out, so the "don't play both" property still holds.
+  if(gameMode !== 'relaxed' && attemptAudio && !attemptAudio.paused) return;
   if(!menuAudio){
     menuAudio = new Audio(VELVET_GLOVE);
     menuAudio.preload = 'auto';

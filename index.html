@@ -319,11 +319,10 @@
   </div>
 </div>
 
-<!-- How-to-play + first-time mode picker, shown once after Start on the
-     very first launch only (save.introSeen gates it — see startPlayBtn).
-     Picking a mode here just sets save.settings.mode, same as the picker
-     in Settings; every later launch skips straight past this and uses
-     whatever mode was last played. -->
+<!-- How-to-play + mode picker, shown after Start on every launch (by
+     request — see startPlayBtn). Picking a mode here just sets
+     save.settings.mode, same as the picker in Settings, and is
+     pre-selected to whatever mode was last played. -->
 <div class="overlay" id="introOverlay">
   <div class="sheet intro-sheet">
     <h2 id="introTitle">How to Play</h2>
