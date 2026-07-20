@@ -23,6 +23,10 @@
         <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
         <span class="dot" id="dailyDot"></span>
       </button>
+      <button class="icon-btn" id="bountyBtn" aria-label="Tonight's Mark">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.7" fill="currentColor"/></svg>
+        <span class="dot" id="bountyDot"></span>
+      </button>
       <button class="icon-btn" id="levelsBtn" aria-label="Level select">
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       </button>
@@ -119,11 +123,13 @@
       <div><span id="labWinBest">Best</span><b id="winBest">–</b></div>
     </div>
     <div class="clean-getaway" id="cleanGetaway" hidden>Clean getaway! ⚡</div>
+    <div class="bounty-result" id="bountyResult" hidden></div>
     <div class="peek" id="peek" hidden>
       <span class="lab" id="peekLab">Next up</span>
       <div class="peek-board" id="peekBoard"></div>
     </div>
     <pre class="share-pre" id="sharePre" hidden></pre>
+    <button class="btn watch-sol" id="watchSolBtn" type="button">Watch the optimal solution</button>
     <div class="win-row">
       <button class="btn" id="replayBtn">Replay</button>
       <button class="btn primary" id="nextBtn"><span id="nextLabel">Next Level</span><span class="autobar" id="autobar"></span></button>
@@ -163,6 +169,25 @@
     </div>
     <div class="cal-grid" id="calGrid"></div>
     <div class="daily-note" id="dailyNote">Back-fills don’t extend your streak.</div>
+  </div>
+</div>
+
+<!-- Bounty ("Tonight's Mark", HEIST-PLAN H4) -->
+<div class="overlay" id="bountyOverlay">
+  <div class="sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="bountyTitle">Tonight's Mark</h2>
+    <p class="sub" id="bountySub">A new mark every night. Clear it under the nightly condition to earn the car.</p>
+    <div class="bounty-card">
+      <div class="peek-board" id="bountyBoard"></div>
+      <div class="bounty-card-info">
+        <span class="car-tier" id="bountyTierChip">Common</span>
+        <div class="bounty-par"><span id="labBountyPar">Par</span> <b id="bountyPar">–</b></div>
+        <div class="bounty-cond" id="bountyCond"></div>
+      </div>
+    </div>
+    <div class="bounty-status" id="bountyStatus" hidden></div>
+    <button class="btn primary" id="bountyPlayBtn" style="width:100%"><span id="bountyPlayLabel">Take the job</span></button>
   </div>
 </div>
 
@@ -238,14 +263,18 @@
   </div>
 </div>
 
-<!-- Start/Intro Screen (poster art, shown every launch) -->
-<div class="overlay" id="startOverlay">
+<!-- Start/Intro Screen (poster art, shown every launch). Starts with the
+     `show` class already present — this is the very first thing painted,
+     so there's no gap where the bare board/HUD flashes before JS can call
+     showOverlay('startOverlay') (boot() is async: save load, daily state,
+     analytics init all happen before that call used to land). -->
+<div class="overlay show" id="startOverlay">
   <div class="start-cta">
     <button class="btn primary" id="startPlayBtn"><span id="startPlayLabel">Start</span></button>
     <div class="admin-bar" id="adminBar" hidden>
       <div class="admin-lab">ADMIN</div>
       <form id="adminForm">
-        <input id="adminInput" type="text" placeholder="42 · pursuit 30 · daily · sandbox" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <input id="adminInput" type="text" placeholder="42 · pursuit 30 · daily · bounty · impound · sandbox" autocomplete="off" autocapitalize="off" spellcheck="false">
         <button class="btn" type="submit">Go</button>
       </form>
       <button class="btn" id="adminSandboxBtn" type="button">Sandbox editor</button>
@@ -290,16 +319,36 @@
   </div>
 </div>
 
-<!-- How-to-play popup, shown once after Start on the very first launch -->
+<!-- How-to-play + mode picker, shown after Start on every launch (by
+     request — see startPlayBtn). Picking a mode here just sets
+     save.settings.mode, same as the picker in Settings, and is
+     pre-selected to whatever mode was last played. -->
 <div class="overlay" id="introOverlay">
-  <div class="sheet">
+  <div class="sheet intro-sheet">
     <h2 id="introTitle">How to Play</h2>
     <div class="start-narration">
       <p id="introP1"></p>
       <p id="introP2"></p>
-      <p id="introP3"></p>
     </div>
-    <button class="btn primary" id="introPlayBtn" style="width:100%;margin-top:6px"><span id="introPlayLabel">Let's Go</span></button>
+    <h3 class="intro-modes-title" id="introModesTitle">Choose your mode</h3>
+    <div class="mode-cards" id="introModeCards">
+      <button class="mode-card" data-mode="relaxed" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3.5M12 16.5V20M4 12h3.5M16.5 12H20"/></svg>
+        <span class="mode-card-name" id="introModeRelaxedName">Relaxed</span>
+        <span class="mode-card-desc" id="introModeRelaxedDesc"></span>
+      </button>
+      <button class="mode-card" data-mode="heist" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 3a5 5 0 0 0-5 5v3.5c0 .8-.3 1.6-.9 2.2L4 16h16l-2.1-2.3c-.6-.6-.9-1.4-.9-2.2V8a5 5 0 0 0-5-5Z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/></svg>
+        <span class="mode-card-name" id="introModeHeistName">Heist</span>
+        <span class="mode-card-desc" id="introModeHeistDesc"></span>
+      </button>
+      <button class="mode-card" data-mode="pursuit" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/></svg>
+        <span class="mode-card-name" id="introModePursuitName">Pursuit</span>
+        <span class="mode-card-desc" id="introModePursuitDesc"></span>
+      </button>
+    </div>
+    <button class="btn primary" id="introPlayBtn" style="width:100%;margin-top:10px"><span id="introPlayLabel">Let's Go</span></button>
   </div>
 </div>
 

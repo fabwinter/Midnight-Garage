@@ -163,6 +163,10 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   animation:gatepulse 2.6s ease-in-out infinite;
 }
 @keyframes gatepulse{0%,100%{opacity:.8}50%{opacity:1}}
+/* Interlock gate tiles (data-gi, distinct from the exit-gate strip above):
+   dim while passable so board state reads at a glance. */
+.gate[data-gi]{transition:opacity .3s ease}
+.gate[data-gi].gate-open{opacity:.3}
 .gate .arrow{
   position:absolute;left:8px;top:50%;transform:translateY(-50%);
   color:var(--accent);font-family:var(--disp);font-weight:700;font-size:13px;
@@ -346,6 +350,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .tab.cur{border-color:var(--tabaccent,var(--amber));color:var(--ink);box-shadow:0 0 12px -4px var(--tabaccent,var(--amber))}
 .tab.locked{opacity:.55}
 .tab .lock{font-size:10px}
+.tab.impound-tab{border-style:dashed}
 .lvl-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .lvl{
   aspect-ratio:1;border-radius:12px;border:1px solid var(--line);cursor:pointer;
@@ -387,6 +392,10 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .win-stats{display:flex;justify-content:center;gap:22px;margin:10px 0 14px;color:var(--muted);font-size:13px}
 .win-stats b{color:var(--ink);font-family:var(--disp);font-size:17px;display:block;margin-top:2px}
 .clean-getaway{font-family:var(--disp);color:var(--amber);font-weight:600;font-size:14px;margin:8px 0 10px;text-shadow:0 0 12px rgba(255,180,84,.4)}
+.watch-sol{
+  width:100%;margin:0 0 10px;padding:9px 14px;font-size:12px;color:var(--muted);
+  border-style:dashed;background:none;box-shadow:none;
+}
 .win-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* ---------- Alarm mode: trigger flash + busted (hard fail) ---------- */
@@ -473,6 +482,23 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .cal-day.today{border-color:var(--amber);box-shadow:0 0 10px -2px rgba(255,180,84,.5)}
 .daily-note{font-size:11px;color:var(--muted);text-align:center;margin-top:10px}
 
+/* ---------- Bounty sheet ("Tonight's Mark", H4) ---------- */
+.bounty-card{
+  display:flex;gap:14px;align-items:center;border:1px solid var(--line);border-radius:14px;
+  padding:12px;margin-bottom:12px;background:linear-gradient(180deg,#181e2a,#131824);
+}
+.bounty-card .peek-board{flex:none}
+.bounty-card-info{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.bounty-par{font-size:12px;color:var(--muted)}
+.bounty-par b{color:var(--ink);font-family:var(--disp)}
+.bounty-cond{font-size:12px;color:var(--amber)}
+.bounty-status{font-size:12px;color:var(--muted);text-align:center;margin-bottom:10px}
+.bounty-result{
+  font-family:var(--disp);font-weight:600;font-size:14px;margin:8px 0 10px;text-align:center;
+}
+.bounty-result.met{color:var(--amber);text-shadow:0 0 12px rgba(255,180,84,.4)}
+.bounty-result.notmet{color:var(--muted)}
+
 /* ---------- Settings ---------- */
 .set-row{
   display:flex;align-items:center;justify-content:space-between;gap:14px;
@@ -514,6 +540,29 @@ input[type=range]::-moz-range-thumb{
 }
 .mode-btn.cur{border-color:var(--amber);color:var(--ink);box-shadow:0 0 12px -4px var(--amber)}
 .mode-desc{color:var(--muted);font-size:12px;margin:0 0 4px;padding:0 2px}
+
+/* ---------- First-launch mode picker (intro sheet) ---------- */
+.intro-sheet{max-width:520px}
+.intro-modes-title{
+  font-family:var(--disp);font-weight:700;letter-spacing:.08em;font-size:12px;
+  text-transform:uppercase;color:var(--muted);margin:14px 0 8px;
+}
+.mode-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mode-card{
+  display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
+  border:1px solid var(--line);border-radius:14px;padding:12px 6px 10px;cursor:pointer;
+  background:linear-gradient(180deg,#1c2331,#141a25);color:var(--ink);
+  transition:border-color .12s ease,box-shadow .12s ease,transform .1s ease;
+}
+.mode-card:active{transform:scale(.97)}
+.mode-card svg{width:26px;height:26px;fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mode-card.cur{border-color:var(--amber);box-shadow:0 0 14px -4px var(--amber)}
+.mode-card.cur svg{stroke:var(--amber)}
+.mode-card-name{font-family:var(--disp);font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase}
+.mode-card-desc{font-size:10.5px;color:var(--muted);line-height:1.35}
+@media (max-width:380px){
+  .mode-cards{grid-template-columns:1fr}
+}
 
 /* ---------- Pro sheet ---------- */
 .pro-sheet{text-align:center}

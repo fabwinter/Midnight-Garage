@@ -12,10 +12,14 @@ import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
+import { bountyFor, bountyConditionMet } from './bounty.js';
+import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor } from './collection.js';
+
+const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
 const $ = id => document.getElementById(id);
 const FREE_LEVELS = CHAPTER_SIZE * 2;        // chapters 1–2 free; 3–4 are Pro
@@ -26,6 +30,8 @@ const PURSUIT_PAUSES_MAX = 3;                // pause tokens per Pursuit attempt
 /* ================== STATE ================== */
 let mode = { type: 'campaign' };             // or {type:'daily', date, level}
 let cur = 0;                                  // campaign level index
+let curImpound = 0;                           // Impound Lot index (js/impound-lot.data.js)
+let pastIntro = false;                        // true once the mode picker has been confirmed this session — see startBoard
 let curLevel = null;                          // {m, p, w?, g?, h?} for whatever is on the board
 let pieces = [];
 let walls = [];                               // immovable roadworks cells [[r,c],…]
@@ -39,6 +45,7 @@ let solvedAnim = false;
 let levelStart = Date.now();
 let skipShown = false;
 let isCleanGetaway = false;
+let isBountyMet = false;
 
 // Pursuit mode: real-time countdown, ticks while running, freezes while paused.
 let pursuitTimeLeft = 0;
@@ -56,9 +63,10 @@ let save = {
   modeLevel: { relaxed: 0, heist: 0, pursuit: 0 }, // last-played campaign level index, per mode
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
-  introSeen: false,
   hitchSeen: false,
   admin: false,
+  bounties: { done: {} },   // 'YYYY-MM-DD' -> {moves, par, met, tier, condition}
+  impound: { stars: {}, best: {} },   // keyed by board `key` (levelKey), not array index
 };
 let memOnly = false;
 let carRevealQueue = [];
@@ -172,11 +180,11 @@ function buildPieces(){
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
   });
-  gates.forEach(gate => {
+  gates.forEach((gate, gi) => {
     const [r, c] = gate.gate;
     const el = document.createElement('div');
     el.className = 'gate';
-    el.dataset.r = r; el.dataset.c = c;
+    el.dataset.r = r; el.dataset.c = c; el.dataset.gi = gi;
     el.style.width = CELL + 'px';
     el.style.height = CELL + 'px';
     el.style.display = 'flex';
@@ -243,6 +251,8 @@ function buildPieces(){
   });
   updatePieceAria();
   renderPositions(false);
+  lastGateOpen = [];
+  updateGates(true);
 }
 function updatePieceAria(){
   board.querySelectorAll('.piece').forEach(el => {
@@ -285,6 +295,26 @@ function renderPositions(animate = true){
     const trailerCy = (trailer.r + (trailer.dir === 'v' ? trailer.len / 2 : 0.5)) * CELL;
     el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, CELL * 0.08);
   });
+}
+
+/* Interlock-gate state feedback: a gate cell is passable iff sensor
+   occupancy differs from its polarity (same rule as js/solver.js's
+   gateBlocks). Open gates dim so the player can read the board state at a
+   glance; a state flip caused by a committed move gets a chirp. Undo,
+   reset and level load refresh silently (silent=true). */
+let lastGateOpen = [];
+function updateGates(silent = false){
+  if(!gates.length){ lastGateOpen = []; return; }
+  const covered = (r, c) => pieces.some(p =>
+    p.dir === 'h' ? (p.r === r && c >= p.c && c < p.c + p.len)
+                  : (p.c === c && r >= p.r && r < p.r + p.len));
+  const now = gates.map(gt => gt.sensors.some(([sr, sc]) => covered(sr, sc)) !== gt.polarity);
+  const changed = lastGateOpen.length === now.length && now.some((v, i) => v !== lastGateOpen[i]);
+  board.querySelectorAll('.gate[data-gi]').forEach(el => {
+    el.classList.toggle('gate-open', now[+el.dataset.gi]);
+  });
+  if(!silent && changed) sfx('gate');
+  lastGateOpen = now;
 }
 
 /* ================== DRAG + FLICK ================== */
@@ -490,6 +520,7 @@ function commitMove(i, mergedKeyStep = false){
   if(!mergedKeyStep) moves++;
   sfx('snap');
   renderPositions(true);
+  updateGates();
   updateHud();
   updatePieceAria();
   const p = pieces[i];
@@ -513,9 +544,16 @@ function commitMove(i, mergedKeyStep = false){
   }
 
   if(moves === 1 && !mergedKeyStep){
-    fadeOutMenuMusicOnFirstMove();
-    if(gm !== 'relaxed') startAttemptTrack(gm);
-    if(gm === 'pursuit') startPursuitTimer();
+    if(gm === 'relaxed'){
+      // No attempt track to hand off to — this is the only thing that
+      // ever stops the opening theme for Relaxed, so it still needs an
+      // explicit call here.
+      fadeOutMenuMusicOnFirstMove();
+    } else if(gm === 'pursuit'){
+      // Music already started at level load (see startBoard), same as
+      // Heist — only the countdown itself waits for the first move.
+      startPursuitTimer();
+    }
   }
 
   if(gm !== 'relaxed' && moves === 1 && !mergedKeyStep && !won){
@@ -628,7 +666,7 @@ function hideBoardPause(){
 }
 
 function setNavLocked(locked){
-  ['levelsBtn', 'dailyBtn', 'garageBtn', 'settingsBtn'].forEach(id => { $(id).disabled = locked; });
+  ['levelsBtn', 'dailyBtn', 'bountyBtn', 'garageBtn', 'settingsBtn'].forEach(id => { $(id).disabled = locked; });
 }
 
 /* ================== HUD ================== */
@@ -664,8 +702,13 @@ function campaignUpperBound(){
   return Math.min(save.unlocked, save.pro ? LEVELS.length : FREE_LEVELS, LEVELS.length) - 1;
 }
 
+const IMPOUND_ACCENT = '#d4af37';
+
 function applyChapterAccent(){
-  const accent = mode.type === 'daily' ? '#ffb454' : CHAPTERS[chapterOf(cur)].accent;
+  const accent = mode.type === 'daily' ? '#ffb454'
+    : mode.type === 'bounty' ? BOUNTY_TIER_ACCENT[mode.tier]
+    : mode.type === 'impound' ? IMPOUND_ACCENT
+    : CHAPTERS[chapterOf(cur)].accent;
   document.documentElement.style.setProperty('--accent', accent);
 }
 
@@ -674,6 +717,15 @@ function updateHud(){
     $('hudLevel').textContent = '#' + mode.number;
     $('hudTier').textContent = t('hud.daily');
     $('hudStars').innerHTML = isDone(mode.date) ? starStr(daily().done[mode.date].stars) : starStr(0);
+  } else if(mode.type === 'bounty'){
+    $('hudLevel').textContent = '#' + mode.number;
+    $('hudTier').textContent = t('hud.bounty');
+    const done = save.bounties.done[mode.date];
+    $('hudStars').innerHTML = done ? (done.met ? '⚡' : '') : '';
+  } else if(mode.type === 'impound'){
+    $('hudLevel').textContent = '#' + (curImpound + 1);
+    $('hudTier').textContent = t('hud.impound');
+    $('hudStars').innerHTML = starStr(save.impound.stars[curLevel.key] || 0);
   } else if(mode.type === 'sandbox'){
     $('hudLevel').textContent = '✎';
     $('hudTier').textContent = 'Sandbox';
@@ -693,6 +745,7 @@ function updateHud(){
   updateControlsVisibility();
   updateHintBadge();
   $('dailyDot').classList.toggle('on', !isDone(todayStr()));
+  $('bountyDot').classList.toggle('on', !save.bounties.done[todayStr()]?.met);
 }
 
 function updateModeHud(){
@@ -750,7 +803,7 @@ function refreshHintTokens(){
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
-      mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1,
+      mode: mode.type, level: trackLevelId(),
       moves, time_s: Math.round((Date.now() - levelStart) / 1000),
     });
   }
@@ -758,7 +811,10 @@ function abandonIfMidLevel(){
 
 function loadLevel(idx){
   abandonIfMidLevel();
-  stopMenuMusic();
+  // No stopMenuMusic() here on purpose: the opening theme should keep
+  // playing right through this navigation, with no silent gap, until
+  // startBoard()'s attempt track (or, for Relaxed, the first move) is
+  // actually ready to hand off — see audio.js's crossfadeOutOtherTracks.
   mode = { type: 'campaign' };
   cur = idx;
   curLevel = LEVELS[idx];
@@ -772,7 +828,6 @@ function loadLevel(idx){
 
 function loadDailyLevel(dateStr){
   abandonIfMidLevel();
-  stopMenuMusic();
   const lv = dailyLevel(dateStr);
   mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
   curLevel = lv;
@@ -780,7 +835,45 @@ function loadDailyLevel(dateStr){
   track('daily_start', { date: dateStr, number: mode.number, par: lv.m });
 }
 
+function loadBountyLevel(dateStr){
+  abandonIfMidLevel();
+  const lv = bountyFor(dateStr);
+  if(!lv) return;
+  mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition };
+  curLevel = lv;
+  startBoard();
+  track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition });
+}
+
+/* Impound Lot (N2, docs/NEXT-PLAN.md): endgame board list, unlocked once
+   Pro + every campaign level is cleared. Not date-gated like the daily/
+   bounty — the whole curated list is available at once, worked through at
+   the player's own pace like the campaign, hence its own advance()-style
+   flow (see advanceImpound, nextImpoundIndex) rather than bounty's
+   one-shot dead end. */
+function impoundUnlocked(){
+  return save.pro && save.unlocked >= LEVELS.length;
+}
+
+function loadImpoundLevel(idx){
+  abandonIfMidLevel();
+  mode = { type: 'impound' };
+  curImpound = idx;
+  curLevel = IMPOUND_LOT[idx];
+  startBoard();
+  track('impound_start', { index: idx, par: curLevel.m });
+}
+
+/* Identifier used in analytics/undo/hint tracking: the date for date-keyed
+   modes, the board key for Impound, the campaign index otherwise. */
+function trackLevelId(){
+  if(mode.type === 'daily' || mode.type === 'bounty') return mode.date;
+  if(mode.type === 'impound') return curLevel.key;
+  return cur + 1;
+}
+
 function startBoard(){
+  stopSolutionReplay(false);   // a new attempt invalidates any in-flight replay
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
@@ -803,7 +896,37 @@ function startBoard(){
   updateHud();
   updateCoach();
   scheduleHand();
-  stopAttemptTrack(); // reset any track from the previous attempt; this attempt's track (if heist/pursuit) starts on first move
+  // Heist and Pursuit music both set the mood immediately at level load —
+  // only Pursuit's countdown itself still waits for the first move (see
+  // commitMove), same "the clock starts when you start moving" reasoning,
+  // now decoupled from when its music starts. This also covers Retry/
+  // Reset/Replay (they all call startBoard() directly): the attempt
+  // track restarts immediately rather than requiring a fresh first move
+  // — startAttemptTrack() -> ensureAttemptAudio() crossfades away
+  // whatever was already playing itself, so no separate stopAttemptTrack()
+  // call here (that used to run first regardless, fighting the very
+  // fadeIn that follows it a tick later — a measurable volume dip on
+  // every retry, worse than a plain cut for Pursuit's 4-track pool
+  // where the old and new tracks are different elements entirely).
+  //
+  // Gated on pastIntro: startBoard() also runs once during boot(), before
+  // Start/the mode picker have been dismissed — starting an attempt track
+  // there would register its autoplay retry on literally the first tap of
+  // the session (tapping "Start" itself), cutting the opening theme short
+  // before the player ever reaches the picker. introPlayBtn sets pastIntro
+  // and calls startBoard() again right as the player confirms, which is
+  // the actual "level start" moment that matters here.
+  if(pastIntro && (save.settings.mode === 'heist' || save.settings.mode === 'pursuit')){
+    startAttemptTrack(save.settings.mode);
+  } else {
+    stopAttemptTrack(); // relaxed (no attempt track) or still pre-intro
+    // Relaxed has no attempt track — the opening theme is its only level
+    // music, and it stops for good on first move (fadeOutMenuMusicOnFirstMove).
+    // Restart it here too, so Retry/Reset/Replay/a fresh level all restore
+    // that same pre-move baseline instead of Relaxed going silent forever
+    // after your first-ever move in it.
+    if(pastIntro && save.settings.mode === 'relaxed') startMenuMusic();
+  }
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();
@@ -820,8 +943,9 @@ function undo(){
   if(save.settings.mode !== 'heist') moves = Math.max(0, moves - 1);
   undos++;
   sfx('ui'); haptic('ui');
-  track('undo_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  track('undo_used', { mode: mode.type, level: trackLevelId() });
   renderPositions(true);
+  updateGates(true);
   updateHud();
   updatePieceAria();
 }
@@ -834,9 +958,9 @@ function decoupleTow(towIdx){
   pushHistory();
   decoupledHitches.add(hi);
   moves++;
-  sfx('snap');
+  sfx('decouple');
   haptic('ui');
-  track('decouple', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  track('decouple', { mode: mode.type, level: trackLevelId() });
   updateHud();
   return true;
 }
@@ -868,8 +992,8 @@ function showHint(){
     updateHintBadge();
   }
   hintsUsed++;
-  sfx('ui');
-  track('hint_used', { mode: mode.type, level: mode.type === 'daily' ? mode.date : cur + 1 });
+  sfx('hint');
+  track('hint_used', { mode: mode.type, level: trackLevelId() });
 
   if(mv.decouple !== undefined){
     // No destination to point at — the optimal move is to unhitch this
@@ -964,6 +1088,76 @@ function skipLevel(){
   advance();
 }
 
+/* ================== SOLUTION REPLAY (NEXT-PLAN N3e / v1.1) ==================
+   Offered on the win sheet only — the level is already cleared, so this
+   teaches par-matching for the 3-star retry without leaking solutions to
+   unsolved levels or undercutting the hint-token economy. Input stays
+   locked the whole time (solvedAnim is still true post-win); any tap
+   skips back to the win sheet. */
+let replayToken = 0;
+
+function stopSolutionReplay(reshow){
+  replayToken++;
+  document.removeEventListener('pointerdown', onReplaySkip);
+  setNavLocked(false);
+  if(reshow) showOverlay('winOverlay');
+}
+function onReplaySkip(){ sfx('ui'); stopSolutionReplay(true); }
+
+function playSolutionReplay(){
+  cancelAuto();
+  hideOverlay('winOverlay');
+  const token = ++replayToken;
+
+  // Reset to the level's starting position. Full rebuild (not just
+  // renderPositions) because the win animation left the hero element
+  // translated off-board with an inline transition.
+  pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  decoupledHitches = new Set();
+  buildPieces();
+
+  const sol = solve(pieces, { walls, gates, hitches });
+  if(!sol.solvable){ showOverlay('winOverlay'); return; }   // can't happen for a shipped level; bail politely
+
+  setNavLocked(true);
+  $('hudMoves').textContent = 0;
+  track('solution_replay', { mode: mode.type, level: trackLevelId(), par: sol.optimal });
+  // arm tap-to-skip on the next tick so the click that opened the replay
+  // doesn't immediately cancel it
+  setTimeout(() => { if(token === replayToken) document.addEventListener('pointerdown', onReplaySkip); }, 80);
+
+  let step = 0;
+  const tick = () => {
+    if(token !== replayToken) return;   // skipped, or a new level loaded
+    if(step >= sol.path.length){
+      const heroEl = board.querySelector('.piece[data-idx="0"]');
+      heroEl.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
+      heroEl.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
+      sfx('win');
+      setTimeout(() => { if(token === replayToken) stopSolutionReplay(true); }, 950);
+      return;
+    }
+    const mv = sol.path[step++];
+    if(mv.decouple !== undefined){
+      decoupledHitches.add(mv.decouple);
+      sfx('decouple');
+    } else {
+      const p = pieces[mv.i];
+      if(p.dir === 'h') p.c = mv.o; else p.r = mv.o;
+      if(mv.i2 !== undefined){
+        const q = pieces[mv.i2];
+        if(q.dir === 'h') q.c = mv.o2; else q.r = mv.o2;
+      }
+      sfx('snap');
+    }
+    renderPositions(true);
+    updateGates();
+    $('hudMoves').textContent = step;
+    setTimeout(tick, 480);
+  };
+  setTimeout(tick, 500);
+}
+
 /* ================== WIN ================== */
 let autoTimer = null;
 function winSequence(){
@@ -987,7 +1181,7 @@ function winSequence(){
   isCleanGetaway = false;
   if(save.settings.mode === 'heist'){
     isCleanGetaway = moves <= par;
-    if(isCleanGetaway) track('alarm_clean_getaway', { level: mode.type === 'campaign' ? cur + 1 : mode.number, moves, par, date: mode.date });
+    if(isCleanGetaway) track('alarm_clean_getaway', { level: trackLevelId(), moves, par, date: mode.date });
   }
 
   if(mode.type === 'campaign'){
@@ -1002,6 +1196,22 @@ function winSequence(){
     if(res.usedFreeze) toast(t('toast.freeze'));
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
+  } else if(mode.type === 'bounty'){
+    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed, gameMode: save.settings.mode });
+    const prev = save.bounties.done[mode.date];
+    save.bounties.done[mode.date] = {
+      moves: prev ? Math.min(prev.moves, moves) : moves,
+      par, tier: mode.tier, condition: mode.condition,
+      met: (prev?.met || false) || isBountyMet,   // once earned, always earned — retries can't un-clear it
+    };
+    persist();
+    track('bounty_complete', { date: mode.date, number: mode.number, moves, par, tier: mode.tier, condition: mode.condition, met: isBountyMet });
+  } else if(mode.type === 'impound'){
+    const key = curLevel.key;
+    save.impound.stars[key] = Math.max(save.impound.stars[key] || 0, stars);
+    save.impound.best[key] = Math.min(save.impound.best[key] || Infinity, moves);
+    persist();
+    track('impound_win', { index: curImpound, moves, par, stars, time_s: timeS });
   }
   // sandbox playtests record nothing — no stars, no streaks, no daily state
 
@@ -1022,6 +1232,10 @@ function showWinSheet(stars){
   $('winFlag').textContent = t('win.flag');
   $('winTitle').textContent = mode.type === 'daily'
     ? t('win.daily', { n: mode.number })
+    : mode.type === 'bounty'
+    ? t('win.bounty', { n: mode.number })
+    : mode.type === 'impound'
+    ? t('win.impound', { n: curImpound + 1 })
     : mode.type === 'sandbox'
     ? 'Sandbox level cleared'
     : t('win.title', { n: cur + 1 });
@@ -1029,10 +1243,20 @@ function showWinSheet(stars){
   $('winPar').textContent = par;
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
+    : mode.type === 'bounty'
+    ? (save.bounties.done[mode.date]?.moves ?? moves)
+    : mode.type === 'impound'
+    ? (save.impound.best[curLevel.key] ?? moves)
     : mode.type === 'sandbox' ? moves
     : save.best[cur];
   $('cleanGetaway').hidden = !isCleanGetaway;
   if(isCleanGetaway) $('cleanGetaway').textContent = t('win.clean');
+  $('watchSolBtn').hidden = mode.type === 'sandbox';
+  $('bountyResult').hidden = mode.type !== 'bounty';
+  if(mode.type === 'bounty'){
+    $('bountyResult').textContent = t(isBountyMet ? 'bounty.result.met' : 'bounty.result.notmet');
+    $('bountyResult').className = 'bounty-result ' + (isBountyMet ? 'met' : 'notmet');
+  }
   const ws = $('winStars');
   ws.innerHTML = '';
   for(let i = 0; i < 3; i++){
@@ -1052,6 +1276,35 @@ function showWinSheet(stars){
     // Playtest loop: straight back to the editor, no peek/share/auto-advance.
     $('nextLabel').textContent = 'Back to editor';
     $('nextBtn').dataset.action = 'sandbox';
+    showOverlay('winOverlay');
+    return;
+  }
+  if(mode.type === 'bounty'){
+    // No natural "next" until tomorrow's mark — a dead end like sandbox,
+    // no peek/share/auto-advance.
+    $('nextLabel').textContent = t('btn.done');
+    $('nextBtn').dataset.action = 'bounty';
+    showOverlay('winOverlay');
+    return;
+  }
+  if(mode.type === 'impound'){
+    // Unlike bounty, the Impound Lot IS an ordered list — mirrors the
+    // campaign's own peek/next/auto-advance flow, just off IMPOUND_LOT.
+    const next = nextImpoundIndex();
+    if(next !== -1){
+      renderPeek(IMPOUND_LOT[next]);
+      $('peek').hidden = false;
+      $('peekLab').textContent = t('win.next');
+      $('nextLabel').textContent = t('btn.next');
+    } else {
+      $('nextLabel').textContent = t('btn.levels');
+    }
+    $('nextBtn').dataset.action = 'impound';
+    if(save.settings.autoAdvance && next !== -1 && !carRevealQueue.length && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      $('autobar').style.setProperty('--automs', '2600ms');
+      requestAnimationFrame(() => $('autobar').classList.add('run'));
+      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); advanceImpound(); }, 2600);
+    }
     showOverlay('winOverlay');
     return;
   }
@@ -1111,7 +1364,7 @@ function showNextCarReveal(){
   $('carRevealTier').className = 'car-tier tier-' + car.tier;
   const holder = $('carRevealArt');
   holder.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: car.skin });
-  sfx('win');
+  sfx('fanfare');
   haptic('success');
   showOverlay('carRevealOverlay');
 }
@@ -1183,8 +1436,20 @@ function advance(){
   buildLevelList(); showOverlay('levelsOverlay');
 }
 
-function renderPeek(lv){
-  const holder = $('peekBoard');
+function nextImpoundIndex(){
+  const next = curImpound + 1;
+  return next < IMPOUND_LOT.length ? next : -1;
+}
+
+function advanceImpound(){
+  cancelAuto();
+  const next = nextImpoundIndex();
+  if(next !== -1){ loadImpoundLevel(next); return; }
+  tabChapter = IMPOUND_TAB;
+  buildLevelList(); showOverlay('levelsOverlay');
+}
+
+function renderPeek(lv, holder = $('peekBoard')){
   holder.innerHTML = '';
   const u = 96 / 6;
   (lv.w ?? []).forEach(([r, c]) => {
@@ -1284,6 +1549,7 @@ function toast(msg){
 /* ================== LEVEL SELECT ================== */
 let tabChapter = 0;
 const ROMAN = ['I', 'II', 'III', 'IV'];
+const IMPOUND_TAB = 'impound';   // sentinel tabChapter value — not a real chapter index
 
 function buildChapterTabs(){
   const holder = $('chapterTabs');
@@ -1298,12 +1564,57 @@ function buildChapterTabs(){
     b.addEventListener('click', () => { sfx('ui'); tabChapter = i; buildLevelList(); });
     holder.appendChild(b);
   });
+  const ib = document.createElement('button');
+  const iLocked = !impoundUnlocked();
+  ib.className = 'tab impound-tab' + (tabChapter === IMPOUND_TAB ? ' cur' : '') + (iLocked ? ' locked' : '');
+  ib.style.setProperty('--tabaccent', IMPOUND_ACCENT);
+  ib.innerHTML = `<span class="roman">★</span><span>${t('impound.title')}</span>` +
+    (iLocked ? `<span class="lock">🔒</span>` : '');
+  ib.addEventListener('click', () => {
+    sfx('ui');
+    if(iLocked){
+      if(!save.pro){
+        toast(t('toast.locked'));
+        showOverlay('proOverlay');
+        track('iap_view', { source: 'impound_tab' });
+      } else {
+        toast(t('impound.locked.incomplete'));
+      }
+      return;
+    }
+    tabChapter = IMPOUND_TAB;
+    buildLevelList();
+  });
+  holder.appendChild(ib);
 }
 
 function buildLevelList(){
   buildChapterTabs();
   const holder = $('levelList');
   holder.innerHTML = '';
+
+  if(tabChapter === IMPOUND_TAB){
+    $('levelsTitle').textContent = t('impound.title');
+    $('levelsSub').textContent = t('impound.sub');
+    const g = document.createElement('div');
+    g.className = 'lvl-grid';
+    IMPOUND_LOT.forEach((lv, i) => {
+      const b = document.createElement('button');
+      const st = save.impound.stars[lv.key] || 0;
+      b.className = 'lvl' + (i === curImpound && mode.type === 'impound' ? ' cur' : '') + (st > 0 ? ' done' : '');
+      b.innerHTML = `<span class="n">${i + 1}</span><span class="s">${starStr(st)}</span>`;
+      b.addEventListener('click', () => {
+        sfx('ui'); stopSettingsMusic(); hideOverlay('levelsOverlay'); loadImpoundLevel(i);
+      });
+      b.setAttribute('aria-label', `Impound job ${i + 1}`);
+      g.appendChild(b);
+    });
+    holder.appendChild(g);
+    return;
+  }
+
+  $('levelsTitle').textContent = t('levels.title');
+  $('levelsSub').textContent = t('levels.sub');
   const chLocked = tabChapter >= 2 && !save.pro;
   const g = document.createElement('div');
   g.className = 'lvl-grid';
@@ -1401,6 +1712,34 @@ function renderCalendar(){
   }
 }
 
+/* ================== BOUNTY (H4 "Tonight's Mark") ================== */
+function openBounty(){
+  renderBountySheet();
+  showOverlay('bountyOverlay');
+}
+
+function renderBountySheet(){
+  const today = todayStr();
+  const lv = bountyFor(today);
+  if(!lv){ return; }   // before BOUNTY_EPOCH — shouldn't happen once shipped
+  const done = save.bounties.done[today];
+
+  $('bountyTierChip').textContent = t('tier.' + lv.tier);
+  $('bountyTierChip').className = 'car-tier tier-' + lv.tier;
+  $('bountyPar').textContent = lv.m;
+  $('bountyCond').textContent = t('bounty.cond.' + lv.condition);
+  renderPeek(lv, $('bountyBoard'));
+
+  if(done){
+    $('bountyStatus').hidden = false;
+    $('bountyStatus').textContent = t('bounty.done', { n: done.moves })
+      + (done.met ? ' — ' + t('bounty.metyes') : ' — ' + t('bounty.metno'));
+  } else {
+    $('bountyStatus').hidden = true;
+  }
+  $('bountyPlayLabel').textContent = done ? t('bounty.replay') : t('bounty.play');
+}
+
 /* ================== SETTINGS ================== */
 function applySettings(){
   const s = save.settings;
@@ -1420,6 +1759,7 @@ function applySettings(){
 function updateModeSelectUI(){
   const m = save.settings.mode;
   document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
+  document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
   $('modeDesc').textContent = t('mode.desc.' + m);
 }
 
@@ -1487,11 +1827,15 @@ function applyStrings(){
   $('labWinPar').textContent = t('win.par');
   $('labWinBest').textContent = t('win.best');
   $('replayBtn').textContent = t('btn.replay');
+  $('watchSolBtn').textContent = t('win.watch');
   $('dailyTitle').textContent = t('daily.title');
   $('dailySub').textContent = t('daily.sub');
   $('labStreak').textContent = t('daily.streak');
   $('labFreezes').textContent = t('daily.freezes');
   $('dailyNote').textContent = t('daily.backfill');
+  $('bountyTitle').textContent = t('bounty.title');
+  $('bountySub').textContent = t('bounty.sub');
+  $('labBountyPar').textContent = t('hud.par');
   $('settingsTitle').textContent = t('settings.title');
   $('labSfx').textContent = t('settings.sfx');
   $('labMusic').textContent = t('settings.music');
@@ -1524,7 +1868,13 @@ function applyStrings(){
   $('introTitle').textContent = t('intro.title');
   $('introP1').textContent = t('start.p1');
   $('introP2').textContent = t('start.p2');
-  $('introP3').textContent = t('start.p3');
+  $('introModesTitle').textContent = t('intro.modes');
+  $('introModeRelaxedName').textContent = t('mode.relaxed');
+  $('introModeRelaxedDesc').textContent = t('mode.desc.relaxed');
+  $('introModeHeistName').textContent = t('mode.heist');
+  $('introModeHeistDesc').textContent = t('mode.desc.heist');
+  $('introModePursuitName').textContent = t('mode.pursuit');
+  $('introModePursuitDesc').textContent = t('mode.desc.pursuit');
   $('introPlayLabel').textContent = t('intro.play');
 }
 
@@ -1539,18 +1889,23 @@ function fadeOutMenuMusicOnFirstMove(){
 
 /* ================== GLOBAL WIRING ================== */
 function wire(){
-  $('levelsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); tabChapter = chapterOf(cur); buildLevelList(); showOverlay('levelsOverlay'); });
+  $('levelsBtn').addEventListener('click', () => {
+    sfx('ui'); playSettingsMusic();
+    tabChapter = mode.type === 'impound' ? IMPOUND_TAB : chapterOf(cur);
+    buildLevelList(); showOverlay('levelsOverlay');
+  });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
+  $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
   $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
-    if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
+    if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
       o.classList.remove('show');
-      if(['settingsOverlay', 'dailyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+      if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
@@ -1578,6 +1933,7 @@ function wire(){
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); startBoard(); });
   });
+  $('watchSolBtn').addEventListener('click', () => { sfx('ui'); playSolutionReplay(); });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);
@@ -1591,6 +1947,16 @@ function wire(){
       openSandbox();
       return;
     }
+    if($('nextBtn').dataset.action === 'bounty'){
+      cancelAuto(); sfx('ui');
+      proceedOrReveal(() => hideOverlay('winOverlay'));
+      return;
+    }
+    if($('nextBtn').dataset.action === 'impound'){
+      cancelAuto(); sfx('ui');
+      proceedOrReveal(() => { hideOverlay('winOverlay'); advanceImpound(); });
+      return;
+    }
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
   });
@@ -1599,6 +1965,9 @@ function wire(){
   $('dailyPlayBtn').addEventListener('click', () => {
     sfx('ui'); stopSettingsMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
+  $('bountyPlayBtn').addEventListener('click', () => {
+    sfx('ui'); stopSettingsMusic(); hideOverlay('bountyOverlay'); loadBountyLevel(todayStr());
+  });
   $('calPrev').addEventListener('click', () => { calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; } renderCalendar(); });
   $('calNext').addEventListener('click', () => { calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; } renderCalendar(); });
 
@@ -1606,7 +1975,7 @@ function wire(){
     if(e.key === 'z' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); undo(); }
     if(e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.target.closest('input')){ startBoard(); }
     if(e.key === 'Escape'){
-      ['levelsOverlay', 'dailyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay', 'sandboxOverlay'].forEach(hideOverlay);
+      ['levelsOverlay', 'dailyOverlay', 'bountyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay', 'sandboxOverlay'].forEach(hideOverlay);
       stopSettingsMusic();
     }
   });
@@ -1616,18 +1985,35 @@ function wire(){
   $('startPlayBtn').addEventListener('click', () => {
     sfx('ui');
     hideOverlay('startOverlay');
-    if(!save.introSeen){
-      showOverlay('introOverlay');
-      setTimeout(() => $('introPlayBtn').focus(), 100);
-    } else {
-      setTimeout(() => $('board').focus(), 100);
-    }
+    // How to Play + mode picker shows on every launch (by request) — not
+    // just the first. Opening theme keeps playing under it either way;
+    // see audio.js's crossfadeOutOtherTracks for the handoff once a mode
+    // is confirmed.
+    showOverlay('introOverlay');
+    setTimeout(() => $('introPlayBtn').focus(), 100);
   });
+  // Mode cards: picking one is the same act as picking in Settings — it
+  // sets the persisted mode, which boot() reads next launch as the
+  // pre-selected default here (still changeable every time).
+  document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.addEventListener('click', () => {
+    const m = b.dataset.mode;
+    sfx('ui');
+    if(save.settings.mode === m){ updateModeSelectUI(); return; }
+    save.settings.mode = m;
+    setGameMode(m);
+    updateModeSelectUI();
+    persist();
+  }));
   $('introPlayBtn').addEventListener('click', () => {
     sfx('ui');
-    save.introSeen = true;
-    persist();
     hideOverlay('introOverlay');
+    pastIntro = true;
+    // Re-init the board under the picked mode — boot loaded it before the
+    // choice existed, and startBoard() is what seeds the mode's alarm
+    // budget / pursuit clock (this is also the first point Heist's music
+    // is allowed to start — see startBoard). Zero moves have been made,
+    // so re-initializing here is free.
+    startBoard();
     setTimeout(() => $('board').focus(), 100);
   });
 }
@@ -1655,6 +2041,22 @@ function runAdminCommand(raw){
     toast('Daily ' + date);
     return;
   }
+  if(s.startsWith('bounty')){
+    const d = s.split(/\s+/)[1];
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : todayStr();
+    hideOverlay('startOverlay');
+    loadBountyLevel(date);
+    toast('Bounty ' + date);
+    return;
+  }
+  if(s.startsWith('impound')){
+    const n = s.split(/\s+/)[1];
+    const idx = Math.min(IMPOUND_LOT.length - 1, Math.max(0, (Number(n) || 1) - 1));
+    hideOverlay('startOverlay');
+    loadImpoundLevel(idx);   // admin jump ignores the Pro+finished gate on purpose
+    toast(`Impound ${idx + 1}`);
+    return;
+  }
   const m = s.match(/^(relaxed|heist|pursuit)?\s*#?(\d+)$/);
   if(m){
     if(m[1] && m[1] !== save.settings.mode){
@@ -1669,7 +2071,7 @@ function runAdminCommand(raw){
     toast(`Level ${idx + 1} · ${save.settings.mode}`);
     return;
   }
-  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · sandbox');
+  toast('Try: 42 · pursuit 30 · daily 2026-07-01 · bounty · impound 5 · sandbox');
 }
 
 function wireAdmin(){
@@ -2046,6 +2448,8 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     }
     delete save.settings.alarm;
     save.hints = Object.assign({ day: '', left: HINT_TOKENS_PER_DAY }, loaded.hints);
+    save.bounties = Object.assign({ done: {} }, loaded.bounties);
+    save.impound = Object.assign({ stars: {}, best: {} }, loaded.impound);
     // Older saves have no per-mode level tracking — seed all three modes
     // from wherever the player's single shared progress pointer was.
     if(!loaded.modeLevel){
@@ -2067,8 +2471,9 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
   loadLevel(startAt);
   startMenuMusic();
-  // Poster start screen shows on every launch; the how-to-play popup
-  // that follows it is gated to the first launch only (see startPlayBtn).
-  showOverlay('startOverlay');
+  // Poster start screen already has the `show` class in the static HTML
+  // (no flash-of-bare-board while this async boot sequence runs) and
+  // shows on every launch; the how-to-play/mode-picker popup that follows
+  // it is gated to the first launch only (see startPlayBtn).
   setTimeout(() => $('startPlayBtn').focus(), 100);
 })();

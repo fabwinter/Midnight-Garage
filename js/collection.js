@@ -7,9 +7,10 @@
 
 export const DEFAULT_CAR = 'classic';
 
-/* unlock(save, dailyState) → boolean. Every condition below reads fields
-   that already exist in save_v1 / daily_v1 — H0 adds no new persistent
-   tracking beyond `equippedCar` and `carsSeen` (see game.js). */
+/* unlock(save, dailyState) → boolean. H0's conditions read fields that
+   already existed in save_v1 / daily_v1 (plus `equippedCar`/`carsSeen`,
+   see game.js); the H4 bounty cars below read `save.bounties.done`
+   (see js/bounty.js), the one new field that phase added. */
 export const CARS = [
   {
     id: 'first-job', name: 'First Job', tier: 'common',
@@ -73,6 +74,32 @@ export const CARS = [
       for(let i = 0; i < 200; i++) if((save.stars[i] || 0) !== 3) return false;
       return true;
     },
+  },
+  // Bounty rewards (HEIST-PLAN.md §6, phase H4): earned by clearing a
+  // "Tonight's Mark" bounty under its reward condition (par/no-hints/
+  // alarm-intact — see js/bounty.js). Rarity matches the cleared board's
+  // own par bucket, not a completion count, so a single lucky legendary
+  // night is enough — same "skill-gated, not grindy" spirit as the rest
+  // of the collection.
+  {
+    id: 'small-fish', name: 'Small Fish', tier: 'common',
+    skin: { base: '#8fbf6b', dark: '#4d7a34', glass: '#1c2b14', trim: 'none' },
+    unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'common'),
+  },
+  {
+    id: 'fence-favorite', name: "The Fence's Favorite", tier: 'uncommon',
+    skin: { base: '#e0a840', dark: '#946a1c', glass: '#2c1e08', trim: 'none' },
+    unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'uncommon'),
+  },
+  {
+    id: 'high-value-mark', name: 'High-Value Mark', tier: 'rare',
+    skin: { base: '#d43f6a', dark: '#7a1f3a', glass: '#2b0e18', trim: 'chrome' },
+    unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'rare'),
+  },
+  {
+    id: 'the-big-score', name: 'The Big Score', tier: 'legendary',
+    skin: { base: '#f5d442', dark: '#a68c1f', glass: '#332b08', trim: 'plaque' },
+    unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'legendary'),
   },
 ];
 
