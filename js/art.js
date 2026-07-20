@@ -116,6 +116,7 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-sports-cyan.png', fixed: true },
   { img: 'assets/cars/hero-sedan-green.png', fixed: true },
   { img: 'assets/cars/hero-sedan-bronze.png', fixed: true },
+  { img: 'assets/cars/traffic-sedan-new-lightblue.png', fixed: true },  // light-blue modern
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
@@ -130,6 +131,9 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-3.png', fixed: true },   // tanker
   { img: 'assets/cars/traffic-truck-4.png', hue: 358 },      // tow truck
   { img: 'assets/cars/traffic-truck-5.png', fixed: true },   // chrome tanker
+  { img: 'assets/cars/traffic-truck-new.png', fixed: true },  // blue pickup
+  { img: 'assets/cars/traffic-truck-new-rusty.png', fixed: true },  // rusty truck
+  { img: 'assets/cars/traffic-truck-new-white.png', fixed: true },  // white truck
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a
