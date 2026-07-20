@@ -51,89 +51,91 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    was shifting each photo's own baked taillight red along with the body
    paint, which read as a lighting bug (green/purple taillights) rather than
    "recolored car". Real photos any time they exist beats simulating them. */
+/* ORDER MATTERS for colour variety, not just membership: a level's sedans
+   are consecutive entries starting at a seeded offset (see levelPhotoSeed
+   in js/game.js), so the cars that appear TOGETHER on one board are always
+   a contiguous window of this array. Entries are therefore arranged so that
+   any two cars of the same colour family sit ≥8 apart (circularly) — with
+   ~4-8 sedans per level, no board shows the same colour twice. Measured
+   from the art (dominant paint hue), not from the names. If you add a car,
+   place it away from its colour-mates rather than appending blindly.
+
+   NOTE: sedan-6's cutout shipped mirrored (front at the LEFT — the only
+   one violating the normalization described above) and was flipped in
+   place in the July '26 job-car pass. Nobody noticed while it was 1 of 23
+   traffic cars; as the skin body it became the hero on every campaign
+   level, visibly driving backwards out of the exit. It must stay at
+   index 0: that slot is the Garage-skin body (see vehicleSVG).
+
+   sedan-13 keeps the shared fitted footprint of its old hatchback family
+   (776x343 in the 800x400 canvas): its source photo measured ~12% fatter
+   than its shoot-mates and was the real cause of the "colored cars are
+   narrower than the white one" bug. The other 8 hatchback colours were
+   dropped in July '26 (too much mirror-shine reflection) and replaced by
+   the hero cars below doubling as traffic.
+
+   The olive G-wagon (sedan-9) stays dropped: too stubby (~1.7:1) for the
+   shared 97%-of-length norm. Same call as the shadowed Countach cutout. */
 const SEDAN_PHOTOS = [
-  // NOTE: sedan-6's cutout shipped mirrored (front at the LEFT — the only
-  // one violating the normalization described above) and was flipped in
-  // place in the July '26 job-car pass. Nobody noticed while it was 1 of 23
-  // traffic cars; as the skin body it became the hero on every campaign
-  // level, visibly driving backwards out of the exit.
-  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar (skin body)
-  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
-  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
-  // white paint + gray stripe and matte olive-drab are both near-desaturated
-  // in the source photo — hueRotate can't manufacture chroma that isn't
-  // there, so these stay fixed like the other branded/utility liveries.
-  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },   // silver + yellow stripe GT
-  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },   // yellow Ferrari, tricolor stripe
-  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },   // white classic 911, black stripe
-  // the olive G-wagon (sedan-9) was dropped: its source photo is stubby
-  // enough (~1.7:1) that fitting it to the shared 97%-of-length norm every
-  // other car uses would overflow the cell's height, and shrinking it to
-  // fit instead left it visibly shorter than every other piece on the
-  // board — same "doesn't belong in rotation" call as the shadowed Countach.
-  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
-  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
-  // generic hatchback body, all real-photo colors (see note above). Every
-  // entry here shares the exact same fitted footprint (776x343 within the
-  // 800x400 canvas) rather than each being scaled from its own measured
-  // bbox — sedan-13's source photo turns out to be from a different shoot
-  // than the other twelve (they share identical raw dimensions; it doesn't)
-  // and independently measured ~12% "fatter", which is what actually caused
-  // the "colored cars are narrower than the white one" bug: it wasn't the
-  // colored ones that were wrong, sedan-13 was oversized. A second same-body
-  // photo (traffic-sedan-26, meant to be a silver variant) turned out on
-  // inspection to be white too — dropped as a duplicate color rather than
-  // kept alongside sedan-13.
-  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // white
-  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
-  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
-  { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
-  // Hero cars added to traffic pool (July '26) — all bespoke renders, fixed livery
-  { img: 'assets/cars/hero-red-exotic.png', fixed: true },
-  { img: 'assets/cars/hero-ferrari-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-muscle.png', fixed: true },
-  { img: 'assets/cars/hero-porsche-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-cobra-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-mclaren-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-jeep-rubicon-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-fluro-yellow.png', fixed: true },
-  { img: 'assets/cars/hero-fluro-orange.png', fixed: true },
-  { img: 'assets/cars/hero-fluro-cyan.png', fixed: true },
-  { img: 'assets/cars/hero-fluro-green.png', fixed: true },
-  { img: 'assets/cars/hero-fluro-pink.png', fixed: true },
-  { img: 'assets/cars/hero-muscle-grey-stripe.png', fixed: true },
-  { img: 'assets/cars/hero-muscle-sage.png', fixed: true },
-  { img: 'assets/cars/hero-countach-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-pagani-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-miura-nobadge.png', fixed: true },
-  { img: 'assets/cars/hero-ferrari-red-stripe.png', fixed: true },
-  { img: 'assets/cars/hero-classic-white-green.png', fixed: true },
-  { img: 'assets/cars/hero-convertible-brown.png', fixed: true },
-  { img: 'assets/cars/hero-classic-blue-stripe.png', fixed: true },
-  { img: 'assets/cars/hero-vintage-white.png', fixed: true },
-  { img: 'assets/cars/hero-porsche-911-silver.png', fixed: true },
-  { img: 'assets/cars/hero-classic-cream.png', fixed: true },
-  { img: 'assets/cars/hero-sports-cyan.png', fixed: true },
-  { img: 'assets/cars/hero-sedan-green.png', fixed: true },
-  { img: 'assets/cars/hero-sedan-bronze.png', fixed: true },
-  { img: 'assets/cars/traffic-sedan-new-lightblue.png', fixed: true },  // light-blue modern
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },                 // recolors · skin body
+  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },            // white hatchback
+  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },             // yellow Ferrari, tricolor stripe
+  { img: 'assets/cars/hero-mclaren-nobadge.png', fixed: true },        // amber-orange F1
+  { img: 'assets/cars/hero-sports-cyan.png', fixed: true },            // cyan track 911
+  { img: 'assets/cars/traffic-sedan-new-lightblue.png', fixed: true }, // light-blue racer
+  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },             // silver + yellow stripe GT
+  { img: 'assets/cars/hero-ferrari-nobadge.png', fixed: true },        // red prancing exotic
+  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },            // police K-9 unit
+  { img: 'assets/cars/hero-classic-white-green.png', fixed: true },    // white 911, green stripe
+  { img: 'assets/cars/hero-sedan-green.png', fixed: true },            // dark green sedan
+  { img: 'assets/cars/hero-convertible-brown.png', fixed: true },      // brown grand tourer
+  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },            // yellow taxi
+  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },            // Gulf-blue GT40 (numbered race car)
+  { img: 'assets/cars/hero-ferrari-red-stripe.png', fixed: true },     // carbon/silver, red stripe
+  { img: 'assets/cars/hero-fluro-cyan.png', fixed: true },             // fluro cyan muscle
+  { img: 'assets/cars/hero-jeep-rubicon-nobadge.png', fixed: true },   // orange 4x4
+  { img: 'assets/cars/hero-vintage-white.png', fixed: true },          // white vintage bug
+  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },                // recolors · navy classic GT
+  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },            // silver 300SL
+  { img: 'assets/cars/hero-fluro-green.png', fixed: true },            // fluro green muscle
+  { img: 'assets/cars/hero-cobra-nobadge.png', fixed: true },          // blue roadster
+  { img: 'assets/cars/hero-porsche-nobadge.png', fixed: true },        // pale-yellow 911
+  { img: 'assets/cars/hero-red-exotic.png', fixed: true },             // red exotic
+  { img: 'assets/cars/hero-fluro-pink.png', fixed: true },             // fluro pink muscle
+  { img: 'assets/cars/hero-classic-cream.png', fixed: true },          // cream coupe
+  { img: 'assets/cars/hero-muscle.png', fixed: true },                 // grey muscle
+  { img: 'assets/cars/traffic-sedan-28.png', fixed: true },            // rusted/weathered hatchback
+  { img: 'assets/cars/hero-pagani-nobadge.png', fixed: true },         // teal hypercar
+  { img: 'assets/cars/hero-miura-nobadge.png', fixed: true },          // blue classic exotic
+  { img: 'assets/cars/hero-muscle-sage.png', fixed: true },            // sage muscle
+  { img: 'assets/cars/hero-fluro-orange.png', fixed: true },           // fluro orange muscle
+  { img: 'assets/cars/hero-fluro-yellow.png', fixed: true },           // fluro yellow muscle
+  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },             // white classic 911, black stripe
+  { img: 'assets/cars/hero-porsche-911-silver.png', fixed: true },     // silver longtail
+  { img: 'assets/cars/hero-sedan-bronze.png', fixed: true },           // bronze sedan
+  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },                 // recolors · lime GT3 RS
+  { img: 'assets/cars/hero-classic-blue-stripe.png', fixed: true },    // steel-blue coupe, white stripe
+  { img: 'assets/cars/hero-muscle-grey-stripe.png', fixed: true },     // grey-stripe muscle
+  { img: 'assets/cars/hero-countach-nobadge.png', fixed: true },       // green wedge
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
-   are chosen by gameplay role (hitch trailer), never by index accident. */
+   are chosen by gameplay role (hitch trailer), never by index accident.
+   Same colour-spacing rule as SEDAN_PHOTOS (levels take a consecutive
+   window): the two silver tankers sit 4 apart, as do the two blue-cab
+   trucks — with ~1-3 trucks per level no board doubles a colour.
+   School bus stays fixed: hue-rotating its big unshaded roof panel turns
+   it into a flat featureless block, and a non-yellow school bus reads
+   wrong anyway. */
 const TRUCK_PHOTOS = [
-  { img: 'assets/cars/traffic-truck-1.png', fixed: true },   // garbage truck
-  // school bus was hue-rotatable but its roof is one large, almost
-  // unshaded panel — hueRotate turns that into a flat, featureless block
-  // of whatever the target color is (worst on a piece landing on a purple
-  // palette slot), and a non-yellow school bus reads wrong anyway.
-  { img: 'assets/cars/traffic-truck-2.png', fixed: true },   // school bus
-  { img: 'assets/cars/traffic-truck-3.png', fixed: true },   // tanker
-  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },      // tow truck
-  { img: 'assets/cars/traffic-truck-5.png', fixed: true },   // chrome tanker
-  { img: 'assets/cars/traffic-truck-new.png', fixed: true },  // blue pickup
-  { img: 'assets/cars/traffic-truck-new-rusty.png', fixed: true },  // rusty truck
-  { img: 'assets/cars/traffic-truck-new-white.png', fixed: true },  // white truck
+  { img: 'assets/cars/traffic-truck-3.png', fixed: true },          // silver tanker
+  { img: 'assets/cars/traffic-truck-new.png', fixed: true },        // blue pickup
+  { img: 'assets/cars/traffic-truck-2.png', fixed: true },          // yellow school bus
+  { img: 'assets/cars/traffic-truck-1.png', fixed: true },          // green garbage truck
+  { img: 'assets/cars/traffic-truck-5.png', fixed: true },          // chrome tanker
+  { img: 'assets/cars/traffic-truck-new-rusty.png', fixed: true },  // rusty flatbed
+  { img: 'assets/cars/traffic-truck-new-white.png', fixed: true },  // white box truck
+  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },             // tow truck (recolors)
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a
