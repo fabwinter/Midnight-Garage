@@ -39,6 +39,17 @@ const lastPick = { heist: null, pursuit: null, relaxed: null };   // avoids back
 let curAttemptTrack = null;   // the src chosen for the attempt in progress — stable across duck/resume
 const warmed = new Set();     // srcs already nudged to preload, so a pool only warms once per session
 
+/* Relaxed has no per-level tension arc (no alarm budget, no countdown) —
+   its music is a continuous, session-long playlist, not a per-attempt
+   track. attemptContinuous marks that the current track belongs to that
+   playlist: startAttemptTrack() won't cut it off or restart it at a level
+   boundary (win/retry/reset/next), and ensureAttemptAudio() lets it play to
+   its own natural end (loop=false) and auto-advance to the next pool pick
+   instead of looping — see advanceContinuousTrack. continuousPoolMode
+   records which TRACK_POOLS key to keep drawing from. */
+let attemptContinuous = false;
+let continuousPoolMode = null;
+
 /* Picks a new track for a fresh attempt (called from startAttemptTrack
    only — resumeAttemptTrack reuses curAttemptTrack so ducking out to a
    menu and back doesn't swap the song mid-attempt). Never repeats the
@@ -132,25 +143,42 @@ function ensureAttemptAudio(src){
     // same line, before the new one had buffered enough to be audible:
     // a real, measurable gap. Now the two genuinely overlap.
     const stale = attemptAudio;
-    if(stale) fadeOut(stale, 300).then(() => { stale.pause(); stale.currentTime = 0; });
+    if(stale){ stale.onended = null; fadeOut(stale, 300).then(() => { stale.pause(); stale.currentTime = 0; }); }
     attemptAudio = new Audio(src);
     attemptAudio.preload = 'auto';
-    attemptAudio.loop = true;
+    // Heist/Pursuit: loop the single attempt track for as long as this one
+    // attempt runs (stopAttemptTrack ends it on win/bust). Relaxed: play
+    // once and hand off to the next pool pick on natural end instead — see
+    // advanceContinuousTrack.
+    attemptAudio.loop = !attemptContinuous;
+    attemptAudio.onended = attemptContinuous ? advanceContinuousTrack : null;
     attemptAudio.volume = 0;
     attemptTrackSrc = src;
   }
   return attemptAudio;
 }
 
-/* Called once per level attempt — picks a fresh track from the mode's pool
-   (never the same one twice in a row) and restarts it from the top. Stays
-   silent while a tab/menu track has priority (duckAttempt);
+/* Called at every level load (fresh level, next-after-win, retry, reset).
+   For Heist/Pursuit this picks a fresh track from the mode's pool (never
+   the same one twice in a row) and restarts it from the top, same as
+   always. For Relaxed, music is a continuous session-long playlist rather
+   than a per-level attempt track (see attemptContinuous above) — a level
+   boundary must never cut it off or restart it, so this is a no-op
+   whenever a Relaxed track is already playing; it only picks+starts one
+   the first time (a fresh session, or switching into Relaxed from another
+   mode). Stays silent while a tab/menu track has priority (duckAttempt);
    resumeAttemptTrack picks it up once that track closes. Whatever's
    currently audible (the opening/menu theme, most often) keeps playing
    until THIS track actually starts, then hands off — see
    crossfadeOutOtherTracks — so there's never a silent gap between them. */
 export function startAttemptTrack(mode){
   attemptActive = true;
+  if(mode === 'relaxed' && attemptContinuous && attemptAudio && !attemptAudio.paused
+     && TRACK_POOLS.relaxed.includes(attemptTrackSrc)){
+    return;
+  }
+  attemptContinuous = mode === 'relaxed';
+  continuousPoolMode = mode;
   curAttemptTrack = pickTrack(mode);
   const src = curAttemptTrack;
   if(!src) return;
@@ -162,6 +190,23 @@ export function startAttemptTrack(mode){
     playWithRetry(a, Math.max(0, Math.min(1, musicVol)), 300,
       () => a !== attemptAudio || duckAttempt || !attemptActive,
       crossfadeOutOtherTracks);
+  }
+}
+
+/* Relaxed-only: fires when the current playlist track reaches its own
+   natural end. Picks the next track (never repeating the one that just
+   played) and crossfades into it — the playlist keeps going indefinitely,
+   independent of whatever level is loaded, until something actually stops
+   it (switching modes, muting, or a genuine stopAttemptTrack). */
+function advanceContinuousTrack(){
+  if(!attemptContinuous || !attemptActive || duckAttempt) return;
+  const next = pickTrack(continuousPoolMode);
+  if(!next) return;
+  curAttemptTrack = next;
+  const a = ensureAttemptAudio(next);
+  a.currentTime = 0;
+  if(musicVol > 0){
+    playWithRetry(a, Math.max(0, Math.min(1, musicVol)), 600, () => a !== attemptAudio || duckAttempt || !attemptActive);
   }
 }
 

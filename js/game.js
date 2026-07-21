@@ -56,6 +56,11 @@ let pursuitPausesLeft = PURSUIT_PAUSES_MAX;
 let save = {
   unlocked: 1,
   stars: {}, best: {},
+  // Which campaign levels have been cleared under a car-earning pacing
+  // (Heist or Pursuit) — separate from `stars`, which tracks completion
+  // for every pacing including Relaxed. js/collection.js's jobUnlockCheck
+  // reads this, not stars, so a Relaxed clear never unlocks a job car.
+  jobClears: {},
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
@@ -168,14 +173,20 @@ function levelPhotoSeed(){
 }
 
 /* Which car is the hero on the board right now (js/collection.js's job-car
-   system). Campaign and bounty are "jobs" — the mark decides the car, not
-   the player, same as a real crew doesn't pick what's in the truck; see
-   HEIST-PLAN.md §2. Daily/Impound/Sandbox aren't jobs (no mark to match),
-   so they stay on whatever the player last equipped in the Garage. This is
-   independent of the Heist/Pursuit/Relaxed toggle (save.settings.mode) —
-   that only changes pacing pressure, not whose car you're driving. */
+   system). Campaign under Heist or Pursuit pacing is a "job" — the mark
+   decides the car, not the player, same as a real crew doesn't pick what's
+   in the truck; see HEIST-PLAN.md §2. Bounty is always a job too (that's
+   the whole point of "Tonight's Mark"), regardless of pacing.
+
+   Relaxed has no job framing — no alarm, no timer, just your own driving —
+   so a campaign level played under Relaxed pacing stays on whatever the
+   player last equipped in the Garage (default: the classic red car),
+   exactly like Daily/Impound/Sandbox. It does NOT show the level's mark.
+   This also means clearing a level in Relaxed can't unlock that mark's
+   car — see the save.jobClears gate in winSequence — matching Relaxed's
+   "no job, no reward" framing all the way through. */
 function heroCarIdForAttempt(){
-  if(mode.type === 'campaign') return carIdForLevel(cur);
+  if(mode.type === 'campaign' && save.settings.mode !== 'relaxed') return carIdForLevel(cur);
   if(mode.type === 'bounty') return carIdForBountyTier(mode.tier);
   return save.equippedCar;
 }
@@ -1156,7 +1167,12 @@ function winSequence(){
   solvedAnim = true;
   clearHint(); clearHand();
   clearPursuitTimer();
-  stopAttemptTrack();
+  // Relaxed's music is a continuous session-long playlist (see
+  // attemptContinuous in js/audio.js), not tied to any one level — a win
+  // must let it keep playing straight into whatever's next, same as it
+  // already does through Retry/Reset. Heist/Pursuit still stop clean: the
+  // tension music belongs to that one attempt.
+  if(save.settings.mode !== 'relaxed') stopAttemptTrack();
   updateHud();
   sfx('win');
   haptic('success');
@@ -1181,6 +1197,14 @@ function winSequence(){
     save.best[cur] = Math.min(save.best[cur] || Infinity, moves);
     save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, cur + 2));
     save.streak3 = stars === 3 ? save.streak3 + 1 : 0;
+    // Cars are earned by driving the job's actual mark under real
+    // pressure (Heist/Pursuit) — Relaxed reuses whatever's equipped (see
+    // heroCarIdForAttempt) and clearing a level there doesn't count
+    // towards unlocking it. save.jobClears is what jobUnlockCheck in
+    // js/collection.js reads, separate from save.stars (which still just
+    // tracks puzzle-completion/progression for every pacing, Relaxed
+    // included).
+    if(save.settings.mode !== 'relaxed') save.jobClears[cur] = true;
     persist();
     track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed });
   } else if(mode.type === 'daily'){
@@ -2474,6 +2498,12 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
       const shared = Math.max(0, campaignUpperBound());
       save.modeLevel = { relaxed: shared, heist: shared, pursuit: shared };
     }
+    // Older saves predate jobClears (Relaxed clears used to count towards
+    // unlocking a level's mark same as Heist/Pursuit) — grandfather in
+    // whatever was already starred rather than silently repossessing cars
+    // a returning player already earned under the old rule. Only clears
+    // from here on actually require a car-earning pacing.
+    if(!loaded.jobClears) save.jobClears = Object.assign({}, loaded.stars);
   }
   await loadDaily();
   await initAnalytics();
