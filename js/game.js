@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove, solve } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -885,7 +885,7 @@ function trackLevelId(){
 }
 
 function startBoard(){
-  stopSolutionReplay(false);   // a new attempt invalidates any in-flight replay
+  stopReplay(false);   // a new attempt invalidates any in-flight replay
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
@@ -1091,21 +1091,25 @@ function skipLevel(){
   advance();
 }
 
-/* ================== SOLUTION REPLAY (NEXT-PLAN N3e / v1.1) ==================
-   Offered on the win sheet only — the level is already cleared, so this
-   teaches par-matching for the 3-star retry without leaking solutions to
-   unsolved levels or undercutting the hint-token economy. Input stays
-   locked the whole time (solvedAnim is still true post-win); any tap
-   skips back to the win sheet. */
+/* ================== REPLAYS (win sheet only) ==================
+   Two distinct replays share this tap-to-skip / input-lock machinery — the
+   level is already cleared, so neither leaks anything to an unsolved level
+   or undercuts the hint-token economy:
+   - playSolutionReplay (NEXT-PLAN N3e / v1.1): the solver's own optimal
+     path — "here's the ideal way," for chasing the 3-star retry.
+   - playMoveReplay: the PLAYER's actual move sequence, sped up — "here's
+     what you just did," independent of whether it matched par.
+   Input stays locked the whole time (solvedAnim is still true post-win);
+   any tap skips back to the win sheet. */
 let replayToken = 0;
 
-function stopSolutionReplay(reshow){
+function stopReplay(reshow){
   replayToken++;
   document.removeEventListener('pointerdown', onReplaySkip);
   setNavLocked(false);
   if(reshow) showOverlay('winOverlay');
 }
-function onReplaySkip(){ sfx('ui'); stopSolutionReplay(true); }
+function onReplaySkip(){ sfx('ui'); stopReplay(true); }
 
 function playSolutionReplay(){
   cancelAuto();
@@ -1137,7 +1141,7 @@ function playSolutionReplay(){
       heroEl.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
       heroEl.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
       sfx('win');
-      setTimeout(() => { if(token === replayToken) stopSolutionReplay(true); }, 950);
+      setTimeout(() => { if(token === replayToken) stopReplay(true); }, 950);
       return;
     }
     const mv = sol.path[step++];
@@ -1157,6 +1161,61 @@ function playSolutionReplay(){
     updateGates();
     $('hudMoves').textContent = step;
     setTimeout(tick, 480);
+  };
+  setTimeout(tick, 500);
+}
+
+/* "Replay" on the win sheet — the player's own moves, sped up. `history`
+   holds a full board snapshot from before each non-merged move this
+   attempt (see pushHistory/undo); nothing touches it between the win and
+   this being clicked (input stays locked), so history[k] is exactly the
+   state after move k for k>0, and the last move's result is just whatever
+   `pieces`/decoupledHitches currently are — the win animation only sets an
+   inline transform on the hero element, it never mutates `pieces` itself. */
+function playMoveReplay(){
+  cancelAuto();
+  hideOverlay('winOverlay');
+  const token = ++replayToken;
+
+  const finalFrame = { pieces: pieces.map(p => ({ r: p.r, c: p.c })), decoupled: new Set(decoupledHitches) };
+  const frames = [...history.slice(1), finalFrame];
+
+  pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  decoupledHitches = new Set();
+  buildPieces();
+
+  if(!frames.length){ showOverlay('winOverlay'); return; }   // shouldn't happen — a win needs ≥1 move
+
+  setNavLocked(true);
+  $('hudMoves').textContent = 0;
+  track('move_replay', { mode: mode.type, level: trackLevelId(), moves: frames.length });
+  setTimeout(() => { if(token === replayToken) document.addEventListener('pointerdown', onReplaySkip); }, 80);
+
+  // Sped up relative to the optimal-solution replay's fixed 480ms/step, and
+  // scaled down further for long solves (Gridlock levels run up to 60
+  // moves) so watching your own clear back never takes longer than ~5s.
+  const stepMs = Math.max(90, Math.min(260, 4800 / frames.length));
+
+  let step = 0;
+  const tick = () => {
+    if(token !== replayToken) return;
+    const decoupledBefore = decoupledHitches.size;
+    const frame = frames[step++];
+    pieces.forEach((p, i) => { p.r = frame.pieces[i].r; p.c = frame.pieces[i].c; });
+    decoupledHitches = new Set(frame.decoupled);
+    sfx(decoupledHitches.size > decoupledBefore ? 'decouple' : 'snap');
+    renderPositions(true);
+    updateGates();
+    $('hudMoves').textContent = step;
+    if(step >= frames.length){
+      const heroEl = board.querySelector('.piece[data-idx="0"]');
+      heroEl.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
+      heroEl.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
+      sfx('win');
+      setTimeout(() => { if(token === replayToken) stopReplay(true); }, 950);
+      return;
+    }
+    setTimeout(tick, stepMs);
   };
   setTimeout(tick, 500);
 }
@@ -1871,7 +1930,8 @@ function applyStrings(){
   $('labWinMoves').textContent = t('win.moves');
   $('labWinPar').textContent = t('win.par');
   $('labWinBest').textContent = t('win.best');
-  $('replayBtn').textContent = t('btn.replay');
+  $('tryAgainBtn').textContent = t('btn.tryagain');
+  $('moveReplayBtn').textContent = t('btn.replay');
   $('watchSolBtn').textContent = t('win.watch');
   $('dailyTitle').textContent = t('daily.title');
   $('dailySub').textContent = t('daily.sub');
@@ -1894,7 +1954,7 @@ function applyStrings(){
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labTheme').textContent = t('theme.label');
-  $('themePlayBtn').textContent = t('theme.play');
+  updateThemeButtonUI();
   $('labRestore').textContent = t('btn.restore');
   $('proTitle').textContent = t('pro.title');
   $('proPitch').textContent = t('pro.pitch');
@@ -1923,9 +1983,11 @@ function applyStrings(){
   $('introPlayLabel').textContent = t('intro.play');
 }
 
-function updateThemeButtonText(){
-  const isPlaying = menuAudio && !menuAudio.paused;
-  $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
+function updateThemeButtonUI(){
+  const isPlaying = isThemePlaying();
+  $('themePlayIcon').hidden = isPlaying;
+  $('themePauseIcon').hidden = !isPlaying;
+  $('themePlayBtn').setAttribute('aria-label', t(isPlaying ? 'theme.pause' : 'theme.play'));
 }
 
 /* ================== GLOBAL WIRING ================== */
@@ -1938,7 +2000,7 @@ function wire(){
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
   $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
   $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
-  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
+  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonUI(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
     if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
@@ -1970,11 +2032,13 @@ function wire(){
   $('boardResumeBtn').addEventListener('click', togglePursuitPause);
   $('hintBtn').addEventListener('click', showHint);
   $('skipBtn').addEventListener('click', skipLevel);
-  $('replayBtn').addEventListener('click', () => {
+  $('tryAgainBtn').addEventListener('click', () => {
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); startBoard(); });
   });
+  $('moveReplayBtn').addEventListener('click', () => { sfx('ui'); playMoveReplay(); });
   $('watchSolBtn').addEventListener('click', () => { sfx('ui'); playSolutionReplay(); });
+  $('winCloseBtn').addEventListener('click', () => { sfx('ui'); cancelAuto(); hideOverlay('winOverlay'); });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);

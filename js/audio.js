@@ -115,11 +115,25 @@ let settingsAudio = null;
 const VELVET_GLOVE = 'assets/audio/velvet-glove.mp3';
 const CLEAN_GETAWAY = 'assets/audio/clean-getaway.mp3';
 
+/* The Settings "Play" button is a deliberate, full-length listen to the
+   theme — distinct from menuAudio's ambient pre-intro loop of the same
+   file, so it gets its own element rather than fighting over one Audio's
+   .loop flag and playback position. themePlaying is checked everywhere the
+   attempt track would otherwise resume/start, so the theme keeps sole
+   possession of the foreground even after Settings is closed and the
+   player goes back to Heist/Pursuit/Relaxed; it only hands off (to the
+   attempt track if a level's in progress, else the ambient loop) once the
+   song actually ends or is stopped — see handOffAfterTheme. */
+let themeAudio = null;
+let themePlaying = false;
+export function isThemePlaying(){ return themePlaying; }
+
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
   if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
+  if(themeAudio && themePlaying) themeAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(attemptAudio && !duckAttempt){
     attemptAudio.volume = Math.max(0, Math.min(1, v));
     if(v === 0) attemptAudio.pause();
@@ -243,6 +257,12 @@ export function duckAttemptTrack(){
 }
 
 export function resumeAttemptTrack(){
+  // The theme song (Settings' "Play" button) owns the foreground until it
+  // ends or is manually stopped — see handOffAfterTheme, which is what
+  // actually calls this once that's true. A tab closing in the meantime
+  // (e.g. Settings, with the theme still going) must not prematurely hand
+  // the attempt track back early and double up on the theme.
+  if(themePlaying) return;
   duckAttempt = false;
   if(!attemptActive) return;
   ensureAttemptAudio(curAttemptTrack);   // same track this attempt already picked — no re-roll on resume
@@ -255,6 +275,7 @@ export function resumeAttemptTrack(){
 /* Menu music playback with fade-in/fade-out. Never competes with a live
    attempt track (any mode) — that track already owns the foreground. */
 export function startMenuMusic(){
+  if(themePlaying) return;   // theme song has exclusive foreground — see resumeAttemptTrack
   // Checked against actual playback, not the `attemptActive` flag: Heist
   // now marks an attempt active immediately at level load (before the
   // player has necessarily interacted at all — see startBoard), so on a
@@ -297,6 +318,7 @@ export function stopMenuMusic(){
    the two never sound at once; closing the tab (stopSettingsMusic) hands
    the foreground back to whichever track should be playing. */
 export function playSettingsMusic(){
+  if(themePlaying) return;   // theme song has exclusive foreground — see toggleThemePlayer
   if(!settingsAudio){
     settingsAudio = new Audio(CLEAN_GETAWAY);
     settingsAudio.preload = 'auto';
@@ -319,19 +341,52 @@ export function stopSettingsMusic(){
       settingsAudio.currentTime = 0;
     });
   }
+  // A no-op while the theme song is playing — see resumeAttemptTrack.
   resumeAttemptTrack();
 }
 
+/* Once the theme song actually stops (natural end or the player pressing
+   Pause), hand the foreground to whatever should be making sound now: the
+   attempt track if a level is in progress (any of Heist/Pursuit/Relaxed —
+   this also covers the player having left Settings and started playing
+   again while the song kept going), otherwise the ambient menu loop. */
+function handOffAfterTheme(){
+  themePlaying = false;
+  if(attemptActive) resumeAttemptTrack();
+  else startMenuMusic();
+}
+
+/* The Settings "Play" button: a deliberate full listen to the theme, not
+   ambient backing music — so unlike startMenuMusic's loop, this plays the
+   song once through and silences everything else (menu loop, settings
+   jingle, the current mode's attempt track) for its whole length, exactly
+   as if it were its own attempt track with nothing to duck for. Closing
+   Settings and going to play Heist/Pursuit/Relaxed does NOT cut it short
+   (see the themePlaying guards on resumeAttemptTrack/startMenuMusic/
+   playSettingsMusic above) — it keeps playing across that navigation and
+   only hands off once it actually ends or is paused. Returns the new
+   playing state so the caller can swap the button's icon. */
 export function toggleThemePlayer(){
-  if(!menuAudio) menuAudio = new Audio(VELVET_GLOVE);
-  if(menuAudio.paused){
-    stopSettingsMusic();
-    menuAudio.currentTime = 0;
-    menuAudio.play().catch(() => {});
-    fadeIn(menuAudio, musicVol * 0.7, 300);
-  } else {
-    fadeOut(menuAudio, 300).then(() => menuAudio.pause());
+  if(themePlaying){
+    themeAudio.onended = null;
+    fadeOut(themeAudio, 300).then(() => themeAudio.pause());
+    handOffAfterTheme();
+    return false;
   }
+  if(!themeAudio){
+    themeAudio = new Audio(VELVET_GLOVE);
+    themeAudio.preload = 'auto';
+    themeAudio.loop = false;
+  }
+  themePlaying = true;
+  stopMenuMusic();
+  duckAttemptTrack();   // silences the current mode's attempt track for the song's whole length
+  if(settingsAudio && !settingsAudio.paused){ settingsAudio.pause(); settingsAudio.currentTime = 0; }
+  themeAudio.currentTime = 0;
+  themeAudio.volume = 0;
+  themeAudio.onended = handOffAfterTheme;
+  playWithRetry(themeAudio, Math.max(0, Math.min(1, musicVol * 0.7)), 300, () => !themePlaying);
+  return true;
 }
 
 /* Fade helpers for smooth volume transitions. Each audio element tracks its

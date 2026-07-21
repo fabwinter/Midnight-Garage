@@ -114,12 +114,13 @@
 <!-- Win -->
 <div class="overlay" id="winOverlay">
   <div class="sheet win-sheet">
+    <button class="icon-btn close-x" id="winCloseBtn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="flag" id="winFlag">Traffic cleared</div>
     <h2 id="winTitle">Level 1 complete</h2>
     <div class="win-stars" id="winStars"></div>
-    <div class="win-stats">
+    <div class="win-stats" id="winStats">
       <div><span id="labWinMoves">Moves</span><b id="winMoves">0</b></div>
-      <div><span id="labWinPar">Par</span><b id="winPar">0</b></div>
+      <div id="winParRow"><span id="labWinPar">Par</span><b id="winPar">0</b></div>
       <div><span id="labWinBest">Best</span><b id="winBest">–</b></div>
     </div>
     <div class="clean-getaway" id="cleanGetaway" hidden>Clean getaway! ⚡</div>
@@ -131,9 +132,10 @@
     <pre class="share-pre" id="sharePre" hidden></pre>
     <button class="btn watch-sol" id="watchSolBtn" type="button">Watch the optimal solution</button>
     <div class="win-row">
-      <button class="btn" id="replayBtn">Replay</button>
-      <button class="btn primary" id="nextBtn"><span id="nextLabel">Next Level</span><span class="autobar" id="autobar"></span></button>
+      <button class="btn" id="tryAgainBtn">Try Again</button>
+      <button class="btn" id="moveReplayBtn">Replay</button>
     </div>
+    <button class="btn primary" id="nextBtn" style="width:100%;margin-top:10px"><span id="nextLabel">Next Level</span><span class="autobar" id="autobar"></span></button>
   </div>
 </div>
 
@@ -206,7 +208,10 @@
     </div>
     <div class="set-row">
       <span class="lab" id="labTheme">Midnight Garage Theme</span>
-      <button class="btn" id="themePlayBtn" style="padding:8px 16px;font-size:14px">▶ Play</button>
+      <button class="icon-btn theme-play-btn" id="themePlayBtn" aria-label="Play">
+        <svg id="themePlayIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l12 7-12 7z"/></svg>
+        <svg id="themePauseIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none" hidden><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
     </div>
     <div class="set-row">
       <span class="lab" id="labHaptics">Haptics</span>

@@ -540,6 +540,9 @@ input[type=range]::-moz-range-thumb{
 }
 .mode-btn.cur{border-color:var(--amber);color:var(--ink);box-shadow:0 0 12px -4px var(--amber)}
 .mode-desc{color:var(--muted);font-size:12px;margin:0 0 4px;padding:0 2px}
+/* Theme play/pause: a solid triangle/bars icon needs a fill, unlike the
+   stroke-only outline icons .icon-btn svg is styled for elsewhere. */
+.theme-play-btn svg{fill:currentColor;stroke:none}
 
 /* ---------- First-launch mode picker (intro sheet) ---------- */
 .intro-sheet{max-width:520px}
