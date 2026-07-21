@@ -43,12 +43,20 @@ export const POOL_SIZE = 5;
    letting you earn a car in the garage you never once drove. Routing
    through carIdForLevel() means any future override (here or elsewhere)
    can't cause that class of bug again — the unlock condition is always
-   "you cleared a level that actually showed you this car." */
+   "you cleared a level that actually showed you this car."
+
+   Reads save.jobClears, not save.stars: stars tracks puzzle completion
+   under every pacing (Heist/Pursuit/Relaxed alike), but Relaxed never
+   shows the level's mark as the hero (see heroCarIdForAttempt in
+   js/game.js — Relaxed has no "job" framing, just your own driving), so
+   clearing a level there can't be what unlocks its car. jobClears only
+   gets a level added when it was actually cleared under Heist or Pursuit
+   — see winSequence. */
 function jobUnlockCheck(car){
   const from = car.chapter * CHAPTER_SIZE;
   return save => {
     for(let i = from; i < from + CHAPTER_SIZE; i++){
-      if(carIdForLevel(i) === car.id && (save.stars[i] || 0) > 0) return true;
+      if(carIdForLevel(i) === car.id && save.jobClears?.[i]) return true;
     }
     return false;
   };

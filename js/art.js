@@ -51,66 +51,92 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    was shifting each photo's own baked taillight red along with the body
    paint, which read as a lighting bug (green/purple taillights) rather than
    "recolored car". Real photos any time they exist beats simulating them. */
+/* Every entry carries a `color` bucket tag (measured from the art: base
+   paint hue plus any distinguishing stripe/livery, not just the name) —
+   this is what actually prevents two same-looking cars sharing a level, via
+   bucketSequence()'s seeded round-robin below. A level's traffic no longer
+   walks this array's raw order at all: array order here is just for human
+   readability (roughly grouped by family). Only merge two cars into the
+   same bucket when they'd genuinely read as "the same car" at a glance
+   (e.g. the two plain red exotics); a stripe, livery, or shape that changes
+   the read gets its own bucket even at the same base hue.
+
+   NOTE: sedan-6's cutout shipped mirrored (front at the LEFT — the only
+   one violating the normalization described above) and was flipped in
+   place in the July '26 job-car pass. Nobody noticed while it was 1 of 23
+   traffic cars; as the skin body it became the hero on every campaign
+   level, visibly driving backwards out of the exit. It must stay at
+   index 0: that slot is the Garage-skin body (see vehicleSVG).
+
+   sedan-13 keeps the shared fitted footprint of its old hatchback family
+   (776x343 in the 800x400 canvas): its source photo measured ~12% fatter
+   than its shoot-mates and was the real cause of the "colored cars are
+   narrower than the white one" bug. The other 8 hatchback colours were
+   dropped in July '26 (too much mirror-shine reflection) and replaced by
+   the hero cars below doubling as traffic.
+
+   The olive G-wagon (sedan-9) stays dropped: too stubby (~1.7:1) for the
+   shared 97%-of-length norm. Same call as the shadowed Countach cutout. */
 const SEDAN_PHOTOS = [
-  // NOTE: sedan-6's cutout shipped mirrored (front at the LEFT — the only
-  // one violating the normalization described above) and was flipped in
-  // place in the July '26 job-car pass. Nobody noticed while it was 1 of 23
-  // traffic cars; as the skin body it became the hero on every campaign
-  // level, visibly driving backwards out of the exit.
-  { img: 'assets/cars/traffic-sedan-6.png', hue: 29 },       // orange hypercar (skin body)
-  { img: 'assets/cars/traffic-sedan-3.png', hue: 212 },      // navy classic GT
-  { img: 'assets/cars/traffic-sedan-8.png', hue: 90 },       // lime GT3 RS
-  // white paint + gray stripe and matte olive-drab are both near-desaturated
-  // in the source photo — hueRotate can't manufacture chroma that isn't
-  // there, so these stay fixed like the other branded/utility liveries.
-  { img: 'assets/cars/traffic-sedan-4.png', fixed: true },   // silver + yellow stripe GT
-  { img: 'assets/cars/traffic-sedan-5.png', fixed: true },   // yellow Ferrari, tricolor stripe
-  { img: 'assets/cars/traffic-sedan-7.png', fixed: true },   // white classic 911, black stripe
-  // the olive G-wagon (sedan-9) was dropped: its source photo is stubby
-  // enough (~1.7:1) that fitting it to the shared 97%-of-length norm every
-  // other car uses would overflow the cell's height, and shrinking it to
-  // fit instead left it visibly shorter than every other piece on the
-  // board — same "doesn't belong in rotation" call as the shadowed Countach.
-  { img: 'assets/cars/traffic-sedan-11.png', fixed: true },  // Gulf GT40 (numbered race car)
-  { img: 'assets/cars/traffic-sedan-12.png', fixed: true },  // silver 300SL
-  // generic hatchback body, all real-photo colors (see note above). Every
-  // entry here shares the exact same fitted footprint (776x343 within the
-  // 800x400 canvas) rather than each being scaled from its own measured
-  // bbox — sedan-13's source photo turns out to be from a different shoot
-  // than the other twelve (they share identical raw dimensions; it doesn't)
-  // and independently measured ~12% "fatter", which is what actually caused
-  // the "colored cars are narrower than the white one" bug: it wasn't the
-  // colored ones that were wrong, sedan-13 was oversized. A second same-body
-  // photo (traffic-sedan-26, meant to be a silver variant) turned out on
-  // inspection to be white too — dropped as a duplicate color rather than
-  // kept alongside sedan-13.
-  { img: 'assets/cars/traffic-sedan-13.png', fixed: true },  // white
-  { img: 'assets/cars/traffic-sedan-21.png', fixed: true },  // purple + yellow stripes
-  { img: 'assets/cars/traffic-sedan-22.png', fixed: true },  // Biarritz blue
-  { img: 'assets/cars/traffic-sedan-24.png', fixed: true },  // yellow taxi
-  { img: 'assets/cars/traffic-sedan-25.png', fixed: true },  // police K-9 unit
-  { img: 'assets/cars/traffic-sedan-27.png', fixed: true },  // dark green
-  { img: 'assets/cars/traffic-sedan-28.png', fixed: true },  // rusted/weathered
-  { img: 'assets/cars/traffic-sedan-29.png', fixed: true },  // gunmetal gray
-  { img: 'assets/cars/traffic-sedan-30.png', fixed: true },  // teal
-  { img: 'assets/cars/traffic-sedan-31.png', fixed: true },  // pink
-  { img: 'assets/cars/traffic-sedan-32.png', fixed: true },  // gold
-  { img: 'assets/cars/traffic-sedan-33.png', fixed: true },  // orange
-  { img: 'assets/cars/traffic-sedan-34.png', fixed: true },  // brown
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29, color: 'recolor' },              // skin body, recolors
+  { img: 'assets/cars/traffic-sedan-13.png', fixed: true, color: 'white-plain' },
+  { img: 'assets/cars/traffic-sedan-5.png', fixed: true, color: 'yellow-tricolor' },  // Ferrari, tricolor stripe
+  { img: 'assets/cars/hero-mclaren-nobadge.png', fixed: true, color: 'orange-f1' },
+  { img: 'assets/cars/hero-sports-cyan.png', fixed: true, color: 'cyan-track' },
+  { img: 'assets/cars/traffic-sedan-new-lightblue.png', fixed: true, color: 'blue-plain' },
+  { img: 'assets/cars/traffic-sedan-4.png', fixed: true, color: 'silver-yellow-stripe' },
+  { img: 'assets/cars/hero-ferrari-nobadge.png', fixed: true, color: 'red' },
+  { img: 'assets/cars/traffic-sedan-25.png', fixed: true, color: 'police' },          // K-9 unit
+  { img: 'assets/cars/hero-classic-white-green.png', fixed: true, color: 'white-green-stripe' },
+  { img: 'assets/cars/hero-sedan-green.png', fixed: true, color: 'green-sedan' },
+  { img: 'assets/cars/hero-convertible-brown.png', fixed: true, color: 'brown' },
+  { img: 'assets/cars/traffic-sedan-24.png', fixed: true, color: 'yellow-taxi' },
+  { img: 'assets/cars/traffic-sedan-11.png', fixed: true, color: 'blue-gulf-race' },  // numbered Gulf GT40
+  { img: 'assets/cars/hero-ferrari-red-stripe.png', fixed: true, color: 'carbon-red-stripe' },
+  { img: 'assets/cars/hero-fluro-cyan.png', fixed: true, color: 'cyan-fluro' },
+  { img: 'assets/cars/hero-jeep-rubicon-nobadge.png', fixed: true, color: 'orange-suv' },
+  { img: 'assets/cars/hero-vintage-white.png', fixed: true, color: 'ivory-bug' },
+  { img: 'assets/cars/traffic-sedan-3.png', hue: 212, color: 'recolor' },             // navy classic GT
+  { img: 'assets/cars/traffic-sedan-12.png', fixed: true, color: 'silver-plain' },    // 300SL
+  { img: 'assets/cars/hero-fluro-green.png', fixed: true, color: 'green-fluro' },
+  { img: 'assets/cars/hero-cobra-nobadge.png', fixed: true, color: 'blue-white-stripe' },
+  { img: 'assets/cars/hero-porsche-nobadge.png', fixed: true, color: 'yellow-911-pale' },
+  { img: 'assets/cars/hero-red-exotic.png', fixed: true, color: 'red' },
+  { img: 'assets/cars/hero-fluro-pink.png', fixed: true, color: 'pink-fluro' },
+  { img: 'assets/cars/hero-classic-cream.png', fixed: true, color: 'cream-coupe' },
+  { img: 'assets/cars/hero-muscle.png', fixed: true, color: 'grey-muscle' },
+  { img: 'assets/cars/traffic-sedan-28.png', fixed: true, color: 'rust-weathered' },
+  { img: 'assets/cars/hero-pagani-nobadge.png', fixed: true, color: 'teal' },
+  { img: 'assets/cars/hero-miura-nobadge.png', fixed: true, color: 'blue-classic' },
+  { img: 'assets/cars/hero-muscle-sage.png', fixed: true, color: 'green-sage' },
+  { img: 'assets/cars/hero-fluro-orange.png', fixed: true, color: 'orange-fluro' },
+  { img: 'assets/cars/hero-fluro-yellow.png', fixed: true, color: 'yellow-fluro' },
+  { img: 'assets/cars/traffic-sedan-7.png', fixed: true, color: 'white-black-stripe' }, // 911
+  { img: 'assets/cars/hero-porsche-911-silver.png', fixed: true, color: 'silver-track' }, // longtail
+  { img: 'assets/cars/hero-sedan-bronze.png', fixed: true, color: 'bronze' },
+  { img: 'assets/cars/traffic-sedan-8.png', hue: 90, color: 'recolor' },              // lime GT3 RS
+  { img: 'assets/cars/hero-classic-blue-stripe.png', fixed: true, color: 'blue-white-stripe' },
+  { img: 'assets/cars/hero-muscle-grey-stripe.png', fixed: true, color: 'grey-stripe-muscle' },
+  { img: 'assets/cars/hero-countach-nobadge.png', fixed: true, color: 'green-wedge' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
-   are chosen by gameplay role (hitch trailer), never by index accident. */
+   are chosen by gameplay role (hitch trailer), never by index accident.
+   Same per-entry `color` tagging as SEDAN_PHOTOS, feeding the same
+   bucketSequence() round-robin — 8 distinct colours here comfortably
+   covers the largest level (6 concurrent trucks measured across all 200
+   campaign levels). School bus stays fixed: hue-rotating its big unshaded
+   roof panel turns it into a flat featureless block, and a non-yellow
+   school bus reads wrong anyway. */
 const TRUCK_PHOTOS = [
-  { img: 'assets/cars/traffic-truck-1.png', fixed: true },   // garbage truck
-  // school bus was hue-rotatable but its roof is one large, almost
-  // unshaded panel — hueRotate turns that into a flat, featureless block
-  // of whatever the target color is (worst on a piece landing on a purple
-  // palette slot), and a non-yellow school bus reads wrong anyway.
-  { img: 'assets/cars/traffic-truck-2.png', fixed: true },   // school bus
-  { img: 'assets/cars/traffic-truck-3.png', fixed: true },   // tanker
-  { img: 'assets/cars/traffic-truck-4.png', hue: 358 },      // tow truck
-  { img: 'assets/cars/traffic-truck-5.png', fixed: true },   // chrome tanker
+  { img: 'assets/cars/traffic-truck-3.png', fixed: true, color: 'silver-tanker' },
+  { img: 'assets/cars/traffic-truck-new.png', fixed: true, color: 'blue-pickup' },
+  { img: 'assets/cars/traffic-truck-2.png', fixed: true, color: 'yellow-bus' },
+  { img: 'assets/cars/traffic-truck-1.png', fixed: true, color: 'green-garbage' },
+  { img: 'assets/cars/traffic-truck-5.png', fixed: true, color: 'chrome-tanker' },
+  { img: 'assets/cars/traffic-truck-new-rusty.png', fixed: true, color: 'rust-flatbed' },
+  { img: 'assets/cars/traffic-truck-new-white.png', fixed: true, color: 'white-box' },
+  { img: 'assets/cars/traffic-truck-4.png', hue: 358, color: 'recolor' },   // tow truck
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a
@@ -121,6 +147,69 @@ const TRAILER_PHOTOS = [
   { img: 'assets/cars/traffic-truck-7.png', fixed: true },
   { img: 'assets/cars/traffic-truck-8.png', fixed: true },
 ];
+
+/* Colour-safe traffic photo picker (fixes: two same-coloured cars landing
+   on one board — see the July '26 bug report). The old scheme walked
+   SEDAN_PHOTOS in a fixed cyclic order, offset per level by a seed; that
+   only rotates a SHARED order, so it can't stop two same-coloured entries
+   ~8 apart from both landing in one level's window once that level needs
+   more than ~8 cars. Campaign levels go up to 14 concurrent sedans and 6
+   concurrent trucks (measured across all 200 levels), which is well past
+   what any fixed rotation can guarantee.
+
+   bucketSequence() instead groups entries by their `color` tag and, for a
+   given level seed, visits every bucket ONCE in a seed-shuffled order
+   before repeating any bucket — i.e. round-robin across colours, not
+   across raw array slots. With 36 sedan buckets and 8 truck buckets, both
+   comfortably above the measured per-level maximums, every level's first
+   pass through this sequence draws each car from a DIFFERENT colour bucket,
+   so no level can show the same colour twice. (Only if a level ever needed
+   more traffic pieces than there are buckets would a colour repeat — and
+   even then it'd be the least-recently-used colour, maximally spread out.)
+   Different seeds shuffle both the bucket visiting order and which member
+   of each bucket comes first, so distinct levels don't all reach for the
+   same "first" car — while the same level keeps the same seed and so looks
+   identical across replays/undos, matching the surrounding design intent. */
+function seedHash(seed, salt){
+  let h = (Math.imul(seed | 0, 2654435761) ^ 0) >>> 0;
+  for(let i = 0; i < salt.length; i++) h = Math.imul(h ^ salt.charCodeAt(i), 16777619) >>> 0;
+  return h;
+}
+
+function bucketize(pool){
+  const buckets = {};
+  pool.forEach(entry => (buckets[entry.color] ??= []).push(entry));
+  return buckets;
+}
+
+const SEDAN_BUCKETS = bucketize(SEDAN_PHOTOS);
+const TRUCK_BUCKETS = bucketize(TRUCK_PHOTOS);
+const sequenceCache = new Map(); // "poolName:seed" -> resolved pick order
+
+function bucketSequence(poolName, buckets, seed){
+  const key = poolName + ':' + seed;
+  const cached = sequenceCache.get(key);
+  if(cached) return cached;
+
+  const names = Object.keys(buckets);
+  const start = seedHash(seed, poolName) % names.length;
+  const order = names.slice(start).concat(names.slice(0, start));
+
+  const seq = [];
+  for(let round = 0; ; round++){
+    let addedAny = false;
+    for(const name of order){
+      const bucket = buckets[name];
+      if(round >= bucket.length) continue;
+      const rot = seedHash(seed, name) % bucket.length;
+      seq.push(bucket[(rot + round) % bucket.length]);
+      addedAny = true;
+    }
+    if(!addedAny) break;
+  }
+  sequenceCache.set(key, seq);
+  return seq;
+}
 
 function hexHue(hex){
   const n = parseInt(hex.slice(1), 16);
@@ -189,25 +278,33 @@ function decal(idx, cx, cy){
   }
 }
 
-/* opts.photoIdx — this piece's ordinal among pieces of the same class
-   (sedan / truck / trailer) in the level, so every piece in one level gets
-   a different photo. Falls back to the global piece index for callers that
-   don't pass it. opts.trailer — this piece is a hitch trailer: len-3 draws
-   from TRAILER_PHOTOS (caravan / utility trailer / boat); a len-2 trailer
-   is a broken-down car and renders desaturated + dimmed so "needs a tow"
-   reads at a glance. */
+/* opts.photoOrd — this piece's 0-based ordinal among pieces of the same
+   class (sedan / truck / trailer) in the level; opts.seed — the level's
+   photo seed (see levelPhotoSeed in js/game.js). Together they index into
+   this seed's colour-safe bucketSequence() (see above) rather than a raw
+   array slot, so every piece in one level gets a different photo AND a
+   different colour. Both default to 0 for callers that don't pass them.
+   opts.trailer — this piece is a hitch trailer: len-3 draws from
+   TRAILER_PHOTOS (caravan / utility trailer / boat); a len-2 trailer is a
+   broken-down car and renders desaturated + dimmed so "needs a tow" reads
+   at a glance. */
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
   const base = skin ? skin.base : (isHero ? PALETTE[0][0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)][0]);
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
-  const photoIdx = opts.photoIdx ?? idx;
+  const seed = opts.seed ?? 0;
+  const photoOrd = opts.photoOrd ?? 0;
   const isTrailer = !!opts.trailer && !isHero;
-  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : SEDAN_PHOTOS[photoIdx % SEDAN_PHOTOS.length];
+  // Computed unconditionally (cheap — memoized per seed) even though heroes
+  // don't use them, so the unused branch below never indexes into null.
+  const sedanSeq = bucketSequence('sedan', SEDAN_BUCKETS, seed);
+  const truckSeq = bucketSequence('truck', TRUCK_BUCKETS, seed);
+  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : sedanSeq[photoOrd % sedanSeq.length];
   const truckPhoto = isTrailer
-    ? TRAILER_PHOTOS[photoIdx % TRAILER_PHOTOS.length]
-    : TRUCK_PHOTOS[photoIdx % TRUCK_PHOTOS.length];
+    ? TRAILER_PHOTOS[photoOrd % TRAILER_PHOTOS.length]
+    : truckSeq[photoOrd % truckSeq.length];
   const brokenDown = isTrailer && len < 3;
   const hueAttr = brokenDown ? ` filter="url(#${gid}broke)"` : (sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`);
   const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
