@@ -148,6 +148,26 @@ const TRAILER_PHOTOS = [
   { img: 'assets/cars/traffic-truck-8.png', fixed: true },
 ];
 
+/* Fire-and-forget background prefetch of every vehicle photo — mirrors
+   js/audio.js's warmPool() for music. A level's first render can need 15+
+   distinct, previously-unseen photos at once (see the colour-safe picker
+   below: up to 14 concurrent sedans, all different), so without this the
+   cold-cache image fetches land in the middle of actual gameplay instead
+   of during idle time before the player's picked a mode. Never touches
+   anything rendered — just nudges the browser to fetch+cache now. */
+export function warmVehiclePhotos(){
+  const all = [
+    CLASSIC_CAR_IMG,
+    ...SEDAN_PHOTOS.map(p => p.img),
+    ...TRUCK_PHOTOS.map(p => p.img),
+    ...TRAILER_PHOTOS.map(p => p.img),
+  ];
+  for(const src of all){
+    const img = new Image();
+    img.src = src;
+  }
+}
+
 /* Colour-safe traffic photo picker (fixes: two same-coloured cars landing
    on one board — see the July '26 bug report). The old scheme walked
    SEDAN_PHOTOS in a fixed cyclic order, offset per level by a seed; that

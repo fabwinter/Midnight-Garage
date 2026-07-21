@@ -128,6 +128,16 @@ let themeAudio = null;
 let themePlaying = false;
 export function isThemePlaying(){ return themePlaying; }
 
+/* The Settings button's icon needs to reflect themePlaying at every point
+   it can change — not just the moment the button itself is clicked. A
+   natural end (or the song still playing when Settings is reopened after
+   being closed) previously left the icon stuck on whatever it showed when
+   Settings was last open, since nothing told the button anything had
+   changed in the meantime. game.js registers its icon-update function here
+   once at startup; every place themePlaying changes calls it. */
+let onThemeStateChange = null;
+export function setThemeStateListener(fn){ onThemeStateChange = fn; }
+
 export function setSfxVolume(v){ sfxVol = v; }
 export function setMusicVolume(v){
   musicVol = v;
@@ -352,6 +362,7 @@ export function stopSettingsMusic(){
    again while the song kept going), otherwise the ambient menu loop. */
 function handOffAfterTheme(){
   themePlaying = false;
+  onThemeStateChange?.();
   if(attemptActive) resumeAttemptTrack();
   else startMenuMusic();
 }
@@ -379,6 +390,7 @@ export function toggleThemePlayer(){
     themeAudio.loop = false;
   }
   themePlaying = true;
+  onThemeStateChange?.();
   stopMenuMusic();
   duckAttemptTrack();   // silences the current mode's attempt track for the song's whole length
   if(settingsAudio && !settingsAudio.paused){ settingsAudio.pause(); settingsAudio.currentTime = 0; }

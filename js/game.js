@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove, solve } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -16,7 +16,7 @@ import { bountyFor, bountyConditionMet } from './bounty.js';
 import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
@@ -2023,6 +2023,7 @@ function updateThemeButtonUI(){
 
 /* ================== GLOBAL WIRING ================== */
 function wire(){
+  setThemeStateListener(updateThemeButtonUI);
   $('levelsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic();
     tabChapter = mode.type === 'impound' ? IMPOUND_TAB : chapterOf(cur);
@@ -2030,8 +2031,11 @@ function wire(){
   });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
   $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
-  $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
-  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonUI(); });
+  $('settingsBtn').addEventListener('click', () => {
+    sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay');
+    updateThemeButtonUI();   // re-sync in case the theme ended/kept playing while Settings was closed
+  });
+  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
     if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
@@ -2614,6 +2618,12 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
   loadLevel(startAt);
   startMenuMusic();
+  // Deferred so it never competes with this first level's own images —
+  // idle time on the start screen (before a mode's even picked) is enough
+  // to warm most of the library before it's actually needed.
+  const warmLater = () => warmVehiclePhotos();
+  if('requestIdleCallback' in window) requestIdleCallback(warmLater, { timeout: 4000 });
+  else setTimeout(warmLater, 1500);
   // Poster start screen already has the `show` class in the static HTML
   // (no flash-of-bare-board while this async boot sequence runs) and
   // shows on every launch; the how-to-play/mode-picker popup that follows
