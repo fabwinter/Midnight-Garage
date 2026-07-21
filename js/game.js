@@ -223,22 +223,16 @@ function buildPieces(){
     board.appendChild(el);
   });
   /* Per-class photo ordinals: pieces of the same class (sedan / truck /
-     hitch trailer) count up separately, so no two pieces in one level share
-     a photo — the global piece index would collide once it wraps a photo
-     array (e.g. trucks at idx 3 and 11 both landing on photo 3). Sedans
-     start at 1: photo 0 is the Garage-skin body.
-
-     Each counter is also offset by a per-level seed (see levelPhotoSeed)
-     before it starts counting. Without this every level's sedans walked
-     the SEDAN_PHOTOS array from the same starting point (1, 2, 3…), so with
-     ~4-8 sedans per level and 22 photos in the array, indices past ~8 were
-     essentially never reached — the back two-thirds of the library (all
-     the newer real-photo colors) never showed up in normal play even
-     though they were correctly in rotation code-wise. The seed makes
-     different levels start at different offsets while still walking
-     sequentially, so "no duplicate within a level" still holds. */
+     hitch trailer) count up separately from 0, so no two pieces in one
+     level share a photo — the global piece index would collide once it
+     wraps a photo array (e.g. trucks at idx 3 and 11 both landing on
+     photo 3). Colour variety (no two same-coloured cars in one level) is
+     handled inside vehicleSVG's bucketSequence(), keyed off the level's
+     own seed (see levelPhotoSeed) — passed straight through here so the
+     ordinal only needs to track "which one of this level's sedans/trucks/
+     trailers is this", not fold the seed into itself. */
   const seed = levelPhotoSeed();
-  let sedanOrd = 1 + seed, truckOrd = seed * 3, trailerOrd = seed * 5;
+  let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
     const isTow = hitches.some(h => h.tow === i);
@@ -249,11 +243,12 @@ function buildPieces(){
     el.setAttribute('role', 'button');
     el.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
     el.style.height = (p.dir === 'v' ? p.len : 1) * CELL + 'px';
-    const photoIdx = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
+    const photoOrd = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
     el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
       colorblind: save.settings.colorblind,
       skin: i === 0 ? skinFor(heroCarIdForAttempt()) : null,
-      photoIdx,
+      seed,
+      photoOrd,
       trailer: isTrailer,
     });
     el.classList.add('enter');
@@ -2192,7 +2187,8 @@ function sbRender(){
     el.innerHTML = wallSVG('sb' + wi);
     b.appendChild(el);
   });
-  let sedanOrd = 1, truckOrd = 0;
+  const seed = hashStr(JSON.stringify(sbState.pieces));
+  let sedanOrd = 0, truckOrd = 0;
   sbState.pieces.forEach((p, i) => {
     const el = document.createElement('div');
     el.className = 'sb-piece' + (p.hero ? ' hero' : '');
@@ -2200,8 +2196,8 @@ function sbRender(){
     el.style.width = (p.dir === 'h' ? p.len : 1) * SB_CELL + 'px';
     el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
     el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
-    const photoIdx = p.hero ? 0 : (p.len >= 3 ? truckOrd++ : sedanOrd++);
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { photoIdx });
+    const photoOrd = p.hero ? 0 : (p.len >= 3 ? truckOrd++ : sedanOrd++);
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd });
     b.appendChild(el);
   });
   sbStatus();
