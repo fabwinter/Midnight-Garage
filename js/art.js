@@ -9,6 +9,8 @@
    varied traffic, not clones. There is no procedural fallback body
    anymore — the photo library is the only source of vehicle art. */
 
+import { getLibrary, libraryVersion } from './library.js';
+
 /* Classic hero car: a top-down photoreal render, front at the right end
    (matches the procedural convention above) so it drops in with no flip.
    Only the default/unowned-skin hero uses this — Garage skins use the
@@ -158,9 +160,9 @@ const TRAILER_PHOTOS = [
 export function warmVehiclePhotos(){
   const all = [
     CLASSIC_CAR_IMG,
-    ...SEDAN_PHOTOS.map(p => p.img),
-    ...TRUCK_PHOTOS.map(p => p.img),
-    ...TRAILER_PHOTOS.map(p => p.img),
+    ...combinedSedanPhotos().map(p => p.img),
+    ...combinedTruckPhotos().map(p => p.img),
+    ...combinedTrailerPhotos().map(p => p.img),
   ];
   for(const src of all){
     const img = new Image();
@@ -202,14 +204,44 @@ function bucketize(pool){
   return buckets;
 }
 
-const SEDAN_BUCKETS = bucketize(SEDAN_PHOTOS);
-const TRUCK_BUCKETS = bucketize(TRUCK_PHOTOS);
-const sequenceCache = new Map(); // "poolName:seed" -> resolved pick order
+/* Admin library (js/library.js) additions/removals layer on top of the
+   hardcoded arrays above at lookup time — nothing here is baked in at
+   module load, so an admin adding or deleting an asset from the Sandbox's
+   Library panel takes effect on the very next render, no reload needed.
+   `disabledBase` lets an admin retire one of the hardcoded entries above
+   without deleting code — it's just filtered out of rotation. */
+function combinedPool(basePool, category){
+  const lib = getLibrary();
+  const disabled = new Set(lib.disabledBase);
+  return [...basePool.filter(e => !disabled.has(e.img)), ...(lib[category] || [])];
+}
+function combinedSedanPhotos(){ return combinedPool(SEDAN_PHOTOS, 'sedans'); }
+function combinedTruckPhotos(){ return combinedPool(TRUCK_PHOTOS, 'trucks'); }
+function combinedTrailerPhotos(){ return combinedPool(TRAILER_PHOTOS, 'trailers'); }
 
-function bucketSequence(poolName, buckets, seed){
-  const key = poolName + ':' + seed;
+/* Read accessors for the Sandbox's Library panel and car/truck picker
+   (js/game.js) — the hardcoded arrays above are module-private, so this is
+   the only way that UI can see what's in rotation. `category` is
+   'sedans' | 'trucks' | 'trailers' throughout, matching js/library.js's
+   own shape. */
+export function basePhotos(category){
+  if(category === 'sedans') return SEDAN_PHOTOS;
+  if(category === 'trucks') return TRUCK_PHOTOS;
+  return TRAILER_PHOTOS;
+}
+export function combinedPhotos(category){
+  if(category === 'sedans') return combinedSedanPhotos();
+  if(category === 'trucks') return combinedTruckPhotos();
+  return combinedTrailerPhotos();
+}
+
+const sequenceCache = new Map(); // "poolName:seed:libVersion" -> resolved pick order
+
+function bucketSequence(poolName, seed){
+  const key = poolName + ':' + seed + ':' + libraryVersion();
   const cached = sequenceCache.get(key);
   if(cached) return cached;
+  const buckets = bucketize(poolName === 'sedan' ? combinedSedanPhotos() : combinedTruckPhotos());
 
   const names = Object.keys(buckets);
   const start = seedHash(seed, poolName) % names.length;
@@ -319,12 +351,16 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const isTrailer = !!opts.trailer && !isHero;
   // Computed unconditionally (cheap — memoized per seed) even though heroes
   // don't use them, so the unused branch below never indexes into null.
-  const sedanSeq = bucketSequence('sedan', SEDAN_BUCKETS, seed);
-  const truckSeq = bucketSequence('truck', TRUCK_BUCKETS, seed);
-  const sedanPhoto = isHero ? SEDAN_PHOTOS[0] : sedanSeq[photoOrd % sedanSeq.length];
-  const truckPhoto = isTrailer
-    ? TRAILER_PHOTOS[photoOrd % TRAILER_PHOTOS.length]
-    : truckSeq[photoOrd % truckSeq.length];
+  const sedanSeq = bucketSequence('sedan', seed);
+  const truckSeq = bucketSequence('truck', seed);
+  // opts.photoOverride: the Sandbox's car/truck picker pins an exact asset
+  // to one piece instead of letting the colour-safe rotation pick — used
+  // nowhere else (real levels always want the rotation's variety).
+  const override = opts.photoOverride ? { img: opts.photoOverride, fixed: true } : null;
+  const sedanPhoto = override ?? (isHero ? SEDAN_PHOTOS[0] : sedanSeq[photoOrd % sedanSeq.length]);
+  const truckPhoto = override ?? (isTrailer
+    ? combinedTrailerPhotos()[photoOrd % combinedTrailerPhotos().length]
+    : truckSeq[photoOrd % truckSeq.length]);
   const brokenDown = isTrailer && len < 3;
   const hueAttr = brokenDown ? ` filter="url(#${gid}broke)"` : (sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`);
   const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;

@@ -25,6 +25,7 @@
      H4's original design. */
 
 import { CHAPTER_SIZE } from './levels.data.js';
+import { getLibrary } from './library.js';
 
 export const DEFAULT_CAR = 'classic';
 export const POOL_SIZE = 5;
@@ -244,7 +245,13 @@ export function carById(id){
   return CARS.find(c => c.id === id) || null;
 }
 
+/* An admin-assigned photo (Sandbox → Library → Hero Art) always wins over
+   whatever's hardcoded here, including replacing a bespoke skin.photo — so
+   reassigning a job car's art from the library takes effect immediately,
+   the same "no code change needed" promise the rest of the library makes. */
 export function skinFor(carId){
   const car = carById(carId);
-  return car ? car.skin : null;   // null → caller falls back to PALETTE[0] (classic)
+  if(!car) return null;   // null → caller falls back to PALETTE[0] (classic)
+  const override = getLibrary().heroPhotos[carId];
+  return override ? { ...car.skin, photo: override } : car.skin;
 }

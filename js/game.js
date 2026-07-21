@@ -16,8 +16,9 @@ import { bountyFor, bountyConditionMet } from './bounty.js';
 import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
+import { loadLibrary, getLibrary, addAsset, updateAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, fileToDataURL } from './library.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -2245,7 +2246,7 @@ function wireAdmin(){
 const SB_KEY = 'sandbox_levels_v1';
 const SB_CELL = 46;                     // must match --sbc in css
 let sbTool = 'car', sbDir = 'h';
-let sbState = { pieces: [], walls: [] };   // pieces: {r,c,len,dir,hero?}
+let sbState = { pieces: [], walls: [] };   // pieces: {r,c,len,dir,hero?,photo?}
 let sbSaved = [];
 
 function openSandbox(){
@@ -2253,6 +2254,68 @@ function openSandbox(){
   showOverlay('sandboxOverlay');
   sbRender();
   sbRenderSaved();
+  sbRenderPicker();
+}
+
+/* Car/truck picker: drag a specific asset from the library straight onto
+   the grid, instead of only getting whatever the generic Car/Truck tool's
+   round-robin would pick. Shown only while one of those two tools is
+   active — Hero/Wall/Erase have nothing to pick from. */
+function sbRenderPicker(){
+  const holder = $('sbPicker');
+  holder.innerHTML = '';
+  if(sbTool !== 'car' && sbTool !== 'truck') return;
+  const category = sbTool === 'car' ? 'sedans' : 'trucks';
+  const len = sbTool === 'car' ? 2 : 3;
+  combinedPhotos(category).forEach(entry => {
+    const b = document.createElement('div');
+    b.className = 'sb-pick';
+    b.innerHTML = vehicleSVG(0, len, 'h', false, { photoOverride: entry.img });
+    b.addEventListener('pointerdown', e => sbStartPickerDrag(e, entry.img, len));
+    holder.appendChild(b);
+  });
+}
+
+/* Pointer-tracked drag from a picker thumbnail to a board cell — a ghost
+   element follows the pointer (position:fixed, viewport coordinates) the
+   same way sbAttachBoard's in-board piece drag does, just starting from
+   outside the board instead of an existing piece. */
+function sbStartPickerDrag(e, img, len){
+  e.preventDefault();
+  const pickEl = e.currentTarget;
+  pickEl.classList.add('dragging');
+  const ghost = document.createElement('div');
+  ghost.className = 'sb-drag-ghost';
+  ghost.innerHTML = vehicleSVG(0, len, sbDir, false, { photoOverride: img });
+  document.body.appendChild(ghost);
+  const move = ev => {
+    ghost.style.left = (ev.clientX - 46) + 'px';
+    ghost.style.top = (ev.clientY - 23) + 'px';
+  };
+  move(e);
+  const up = ev => {
+    document.removeEventListener('pointermove', move);
+    pickEl.classList.remove('dragging');
+    ghost.remove();
+    const rect = $('sbBoard').getBoundingClientRect();
+    if(ev.clientX >= rect.left && ev.clientX <= rect.right && ev.clientY >= rect.top && ev.clientY <= rect.bottom){
+      const cell = sbCellFromEvent(ev);
+      sbPlaceFromPicker(cell.r, cell.c, img, len);
+    }
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', up, { once: true });
+}
+
+function sbPlaceFromPicker(r, c, img, len){
+  const p = {
+    r: Math.min(Math.max(0, r), N - (sbDir === 'v' ? len : 1)),
+    c: Math.min(Math.max(0, c), N - (sbDir === 'h' ? len : 1)),
+    len, dir: sbDir, photo: img,
+  };
+  if(!sbFits(p)){ sfx('deny'); return; }
+  sbState.pieces.push(p);
+  sbRender();
 }
 
 function sbGrid(){
@@ -2320,7 +2383,7 @@ function sbRender(){
     el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
     el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
     const photoOrd = p.hero ? 0 : (p.len >= 3 ? truckOrd++ : sedanOrd++);
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd });
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo });
     b.appendChild(el);
   });
   sbStatus();
@@ -2536,6 +2599,7 @@ function wireSandbox(){
   document.querySelectorAll('.sb-tool').forEach(btn => btn.addEventListener('click', () => {
     sbTool = btn.dataset.tool;
     document.querySelectorAll('.sb-tool').forEach(x => x.classList.toggle('cur', x === btn));
+    sbRenderPicker();
   }));
   $('sbDirBtn').addEventListener('click', () => {
     sbDir = sbDir === 'h' ? 'v' : 'h';
@@ -2564,7 +2628,149 @@ function wireSandbox(){
     const ok = await copyToClipboard(JSON.stringify(sbSaved.map(sbLevelExportObj), null, 2));
     toast(ok ? `Copied ${sbSaved.length} level(s)` : t('toast.copyfail'));
   });
+  $('sbLibraryBtn').addEventListener('click', () => { sfx('ui'); openLibrary(); });
   sbAttachBoard();
+}
+
+/* ================== ADMIN ASSET LIBRARY ================== */
+let libTab = 'sedans';
+
+function openLibrary(){
+  showOverlay('libraryOverlay');
+  renderLibraryOverlay();
+}
+
+function libCard(entry, len, meta){
+  const card = document.createElement('div');
+  card.className = 'lib-card' + (meta.isDisabled ? ' disabled' : '');
+  const art = document.createElement('div');
+  art.className = 'lib-card-art';
+  art.innerHTML = vehicleSVG(0, len, 'h', false, { photoOverride: entry.img });
+  card.appendChild(art);
+  const tag = document.createElement('div');
+  tag.className = 'lib-card-tag';
+  tag.textContent = entry.color || (entry.fixed ? 'fixed' : `hue ${entry.hue ?? 0}`);
+  card.appendChild(tag);
+  const row = document.createElement('div');
+  row.className = 'lib-card-row';
+  if(meta.origin === 'base'){
+    const btn = document.createElement('button');
+    btn.className = 'btn'; btn.type = 'button';
+    btn.textContent = meta.isDisabled ? 'Enable' : 'Disable';
+    btn.addEventListener('click', async () => {
+      sfx('ui');
+      await setBaseDisabled(entry.img, !meta.isDisabled);
+      renderLibraryOverlay();
+      sbRenderPicker();
+    });
+    row.appendChild(btn);
+  } else {
+    const del = document.createElement('button');
+    del.className = 'btn'; del.type = 'button'; del.textContent = 'Delete';
+    del.addEventListener('click', async () => {
+      sfx('ui');
+      await removeAsset(libTab, meta.index);
+      renderLibraryOverlay();
+      sbRenderPicker();
+    });
+    row.appendChild(del);
+  }
+  card.appendChild(row);
+  return card;
+}
+
+function renderLibraryHeroTab(){
+  const grid = $('libGrid');
+  grid.innerHTML = '';
+  const lib = getLibrary();
+  CARS.forEach(car => {
+    const row = document.createElement('div');
+    row.className = 'lib-hero-row';
+    const art = document.createElement('div');
+    art.className = 'lib-hero-art';
+    art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: skinFor(car.id), headlights: false });
+    row.appendChild(art);
+    const name = document.createElement('div');
+    name.className = 'lib-hero-name';
+    name.textContent = car.name;
+    row.appendChild(name);
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.className = 'lib-hero-file';
+    const photo = lib.heroPhotos[car.id];
+    const uploadBtn = document.createElement('button');
+    uploadBtn.className = 'btn'; uploadBtn.type = 'button';
+    uploadBtn.textContent = photo ? 'Replace' : 'Assign';
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if(!file) return;
+      const dataUrl = await fileToDataURL(file, 'sedans');
+      await setHeroPhoto(car.id, dataUrl);
+      renderLibraryOverlay();
+      sfx('ui');
+      toast(`Assigned ${car.name}`);
+    });
+    row.appendChild(fileInput);
+    row.appendChild(uploadBtn);
+    if(photo){
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'btn'; clearBtn.type = 'button'; clearBtn.textContent = 'Clear';
+      clearBtn.addEventListener('click', async () => {
+        sfx('ui');
+        await clearHeroPhoto(car.id);
+        renderLibraryOverlay();
+      });
+      row.appendChild(clearBtn);
+    }
+    grid.appendChild(row);
+  });
+}
+
+function renderLibraryOverlay(){
+  $('libAddForm').hidden = libTab === 'hero';
+  if(libTab === 'hero'){ renderLibraryHeroTab(); return; }
+
+  const grid = $('libGrid');
+  grid.innerHTML = '';
+  const lib = getLibrary();
+  const disabled = new Set(lib.disabledBase);
+  const len = libTab === 'trucks' ? 3 : 2;
+
+  basePhotos(libTab).forEach(entry => {
+    grid.appendChild(libCard(entry, len, { origin: 'base', isDisabled: disabled.has(entry.img) }));
+  });
+  (lib[libTab] || []).forEach((entry, i) => {
+    grid.appendChild(libCard(entry, len, { origin: 'lib', index: i }));
+  });
+}
+
+function wireLibrary(){
+  document.querySelectorAll('#libTabs .tab').forEach(btn => btn.addEventListener('click', () => {
+    sfx('ui');
+    libTab = btn.dataset.libtab;
+    document.querySelectorAll('#libTabs .tab').forEach(x => x.classList.toggle('cur', x === btn));
+    renderLibraryOverlay();
+  }));
+  $('libAddFixed').addEventListener('change', () => {
+    $('libAddHue').hidden = $('libAddFixed').checked;
+  });
+  $('libAddBtn').addEventListener('click', async () => {
+    const file = $('libAddFile').files[0];
+    if(!file){ toast('Choose an image first'); return; }
+    const color = ($('libAddColor').value || '').trim();
+    if(!color){ toast('Give it a colour tag'); return; }
+    const fixed = $('libAddFixed').checked;
+    const hue = Number($('libAddHue').value) || 0;
+    const dataUrl = await fileToDataURL(file, libTab);
+    const entry = fixed ? { img: dataUrl, color, fixed: true } : { img: dataUrl, color, hue };
+    await addAsset(libTab, entry);
+    $('libAddFile').value = ''; $('libAddColor').value = ''; $('libAddHue').value = '';
+    renderLibraryOverlay();
+    sbRenderPicker();
+    sfx('ui');
+    toast('Added to library');
+  });
+  $('adminLibraryBtn').addEventListener('click', () => { sfx('ui'); openLibrary(); });
 }
 
 /* Browsers block audio.play() until a user gesture; retry menu music
@@ -2577,6 +2783,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
 (async function boot(){
   initI18n();
   applyStrings();
+  await loadLibrary();
   const loaded = await load('save_v1');
   if(loaded){
     save = Object.assign(save, loaded);
@@ -2612,6 +2819,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   wirePro();
   wireAdmin();
   wireSandbox();
+  wireLibrary();
   await sbLoadSaved();
   applyAdminUI();
   layout();

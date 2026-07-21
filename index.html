@@ -284,6 +284,7 @@
         <button class="btn" type="submit">Go</button>
       </form>
       <button class="btn" id="adminSandboxBtn" type="button">Sandbox editor</button>
+      <button class="btn" id="adminLibraryBtn" type="button">Asset library</button>
     </div>
   </div>
 </div>
@@ -293,7 +294,7 @@
   <div class="sheet sandbox-sheet">
     <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h2>Sandbox</h2>
-    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row.</p>
+    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid.</p>
     <div class="sb-tools" id="sbTools">
       <button class="btn sb-tool" data-tool="hero" type="button">Hero</button>
       <button class="btn sb-tool cur" data-tool="car" type="button">Car</button>
@@ -301,10 +302,12 @@
       <button class="btn sb-tool" data-tool="wall" type="button">Wall</button>
       <button class="btn sb-tool" data-tool="erase" type="button">Erase</button>
       <button class="btn" id="sbDirBtn" type="button" aria-label="Placement orientation">Dir: H</button>
+      <button class="btn" id="sbLibraryBtn" type="button">Library</button>
     </div>
     <div class="sb-board-wrap">
       <div class="sb-board" id="sbBoard"><span class="sb-exit">▶</span></div>
     </div>
+    <div class="sb-picker" id="sbPicker"></div>
     <div class="sb-status" id="sbStatus"></div>
     <div class="sb-actions">
       <button class="btn primary" id="sbTestBtn" type="button">Playtest</button>
@@ -322,6 +325,32 @@
     <p class="sb-export-note">Export copies level JSON to your clipboard.
       Hand it to <code>tools/promote-sandbox-levels.mjs</code> (or paste it
       into chat) to verify and add it to the shipped campaign.</p>
+  </div>
+</div>
+
+<!-- Admin asset library: add/edit/delete vehicle art and assign hero art
+     per job-car, persisted client-side (js/library.js) so the app
+     references it automatically on the very next render — no code change
+     or redeploy needed. -->
+<div class="overlay" id="libraryOverlay">
+  <div class="sheet sandbox-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2>Asset Library</h2>
+    <p class="sub">Add, edit, or delete traffic art, and assign hero art per job car. Changes apply immediately — no restart needed.</p>
+    <div class="tabs" id="libTabs">
+      <button class="tab cur" data-libtab="sedans" type="button">Sedans</button>
+      <button class="tab" data-libtab="trucks" type="button">Trucks</button>
+      <button class="tab" data-libtab="trailers" type="button">Trailers</button>
+      <button class="tab" data-libtab="hero" type="button">Hero Art</button>
+    </div>
+    <div id="libAddForm" class="lib-add">
+      <input id="libAddFile" type="file" accept="image/*">
+      <input id="libAddColor" type="text" placeholder="Colour tag (e.g. white-plain)" autocomplete="off">
+      <label class="lib-add-fixed"><input id="libAddFixed" type="checkbox" checked> Fixed livery (no recolor)</label>
+      <input id="libAddHue" type="number" placeholder="Hue (if recolorable)" min="0" max="360" hidden>
+      <button class="btn primary" id="libAddBtn" type="button">Add to library</button>
+    </div>
+    <div class="lib-grid" id="libGrid"></div>
   </div>
 </div>
 

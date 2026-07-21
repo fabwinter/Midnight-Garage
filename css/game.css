@@ -738,3 +738,49 @@ input[type=range]::-moz-range-thumb{
 .sb-saved-row .btn{padding:6px 10px;font-size:11px}
 .sb-export-note{margin:10px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
 .sb-export-note code{background:#0d1119;border-radius:5px;padding:1px 5px;font-size:10px}
+
+/* ---------- Sandbox car/truck picker (drag a specific asset onto the grid) ---------- */
+.sb-picker{
+  display:flex;gap:6px;overflow-x:auto;padding:8px 2px;margin:2px 0 4px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.sb-picker:empty{display:none;border:none;padding:0;margin:0}
+.sb-pick{
+  flex:none;width:64px;height:40px;border-radius:9px;border:1px solid var(--line);cursor:grab;
+  background:linear-gradient(180deg,#1c2331,#141a25);display:flex;align-items:center;justify-content:center;
+  touch-action:none;
+}
+.sb-pick svg{width:52px;height:26px}
+.sb-pick.dragging{opacity:.4}
+.sb-drag-ghost{
+  position:fixed;pointer-events:none;z-index:500;width:92px;height:46px;opacity:.9;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.6));
+}
+.sb-drag-ghost svg{width:100%;height:100%}
+
+/* ---------- Admin asset library ---------- */
+.lib-add{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px;border:1px dashed var(--line);border-radius:12px}
+.lib-add input[type=text],.lib-add input[type=number]{
+  background:#11151f;border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--ink);font-size:13px;
+}
+.lib-add-fixed{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.lib-card{
+  border-radius:14px;border:1px solid var(--line);padding:8px;background:linear-gradient(180deg,#1a2130,#131824);
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+}
+.lib-card.disabled{opacity:.4}
+.lib-card-art{width:100%;height:36px;display:flex;align-items:center;justify-content:center}
+.lib-card-art svg{width:72px;height:36px}
+.lib-card-tag{font-size:10px;color:var(--muted);text-align:center;line-height:1.3;word-break:break-word}
+.lib-card-row{display:flex;gap:4px;width:100%}
+.lib-card-row .btn{flex:1;padding:5px 4px;font-size:10px}
+.lib-hero-row{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;
+  border:1px solid var(--line);background:linear-gradient(180deg,#1c2331,#141a25);margin-bottom:8px;
+}
+.lib-hero-art{width:64px;height:32px;flex:none;display:flex;align-items:center;justify-content:center}
+.lib-hero-art svg{width:100%;height:100%}
+.lib-hero-name{flex:1;min-width:0;font-size:13px}
+.lib-hero-row .btn{padding:6px 10px;font-size:11px}
+.lib-hero-file{display:none}
