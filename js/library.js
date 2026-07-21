@@ -130,44 +130,100 @@ function floodFillBackground(imageData, width, height, tolerance = 32){
   }
 }
 
+/* Rotates a canvas/image by `degrees` about its own center onto a new,
+   larger canvas sized to the rotated bounding box (so corners aren't
+   clipped) — the margin outside the original rectangle is transparent,
+   same as any photo-editor's rotate. */
+function rotateCanvas(src, degrees){
+  const rad = degrees * Math.PI / 180;
+  const w = src.width, h = src.height;
+  const newW = Math.round(Math.abs(w * Math.cos(rad)) + Math.abs(h * Math.sin(rad))) || 1;
+  const newH = Math.round(Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad))) || 1;
+  const canvas = document.createElement('canvas');
+  canvas.width = newW; canvas.height = newH;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(newW / 2, newH / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(src, -w / 2, -h / 2);
+  return canvas;
+}
+
+/* True "colorize" (as opposed to the hue-rotate filter, which just spins
+   existing hues around and leaves multi-colored source art multi-colored):
+   flattens every opaque pixel onto one target hue/chroma while keeping its
+   original luminance, via the canvas spec's 'color' blend mode — blending
+   a solid HSL fill over the image at reduced alpha gives a 0-100 "amount"
+   dial between the original photo and the fully colorized result. */
+function applyColorize(ctx, w, h, hueDeg, amount){
+  if(amount <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(100, amount)) / 100;
+  ctx.globalCompositeOperation = 'color';
+  ctx.fillStyle = `hsl(${((hueDeg % 360) + 360) % 360}, 65%, 50%)`;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
 /* Renders a loaded image onto the app's established per-category canvas
    size (cars 800x400, trucks 1200x400 — matching every hand-processed
    asset already in the library, so an admin upload behaves the same way
    at runtime instead of shipping at whatever resolution/fit the source
    photo happened to have — a real regression this app hit once already,
    see git history on the hero-* asset resize). scalePercent controls how
-   much of the canvas the car fills (the established convention is 97);
-   removeBackground runs floodFillBackground first. Returns a canvas, not
-   a data URL yet, so the caller can re-render live as the admin adjusts
-   the scale slider or toggles background removal, only encoding to PNG
-   once they actually commit it. */
-export function renderToCanvas(img, category, { removeBackground = false, scalePercent = 97 } = {}){
+   much of the canvas the car fills (the established convention is 97).
+   Returns a canvas, not a data URL yet, so the caller can re-render live
+   as the admin drags any slider, only encoding to PNG once they actually
+   commit it.
+
+   Pipeline order matters: colour correction and colorize run first (so
+   background-removal's corner-colour sample sees the corrected colours,
+   not the original ones), then background removal (at native resolution,
+   before any downscale, so the cutout edge stays crisp instead of picking
+   up a blurry half-transparent halo), then rotate (so a removed
+   background leaves the new corners cleanly transparent instead of
+   smearing solid backdrop colour into them), then the final fit/scale. */
+export function renderToCanvas(img, category, opts = {}){
+  const {
+    removeBackground = false,
+    tolerance = 32,
+    scalePercent = 97,
+    rotate = 0,
+    brightness = 100,
+    contrast = 100,
+    saturation = 100,
+    hue = 0,
+    colorizeHue = 0,
+    colorizeAmount = 0,
+  } = opts;
   const [W, H] = category === 'trucks' ? [1200, 400] : [800, 400];
+
+  const work = document.createElement('canvas');
+  work.width = img.width; work.height = img.height;
+  const wctx = work.getContext('2d');
+  const filterParts = [];
+  if(brightness !== 100) filterParts.push(`brightness(${brightness}%)`);
+  if(contrast !== 100) filterParts.push(`contrast(${contrast}%)`);
+  if(saturation !== 100) filterParts.push(`saturate(${saturation}%)`);
+  if(hue !== 0) filterParts.push(`hue-rotate(${hue}deg)`);
+  wctx.filter = filterParts.length ? filterParts.join(' ') : 'none';
+  wctx.drawImage(img, 0, 0);
+  wctx.filter = 'none';
+  applyColorize(wctx, work.width, work.height, colorizeHue, colorizeAmount);
+
+  if(removeBackground){
+    const imageData = wctx.getImageData(0, 0, work.width, work.height);
+    floodFillBackground(imageData, work.width, work.height, tolerance);
+    wctx.putImageData(imageData, 0, 0);
+  }
+
+  const rotated = rotate ? rotateCanvas(work, rotate) : work;
+
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-
-  if(removeBackground){
-    // Process at the source's own resolution first — flood-filling after
-    // it's already been downscaled onto the small target canvas would
-    // blur the silhouette edge into a fuzzy halo of half-transparent
-    // pixels; doing it at full resolution keeps that edge crisp.
-    const src = document.createElement('canvas');
-    src.width = img.width; src.height = img.height;
-    const sctx = src.getContext('2d');
-    sctx.drawImage(img, 0, 0);
-    const imageData = sctx.getImageData(0, 0, img.width, img.height);
-    floodFillBackground(imageData, img.width, img.height);
-    sctx.putImageData(imageData, 0, 0);
-    const frac = Math.max(10, Math.min(100, scalePercent)) / 100;
-    const scale = Math.min((W * frac) / img.width, (H * frac) / img.height);
-    const w = img.width * scale, h = img.height * scale;
-    ctx.drawImage(src, (W - w) / 2, (H - h) / 2, w, h);
-  } else {
-    const frac = Math.max(10, Math.min(100, scalePercent)) / 100;
-    const scale = Math.min((W * frac) / img.width, (H * frac) / img.height);
-    const w = img.width * scale, h = img.height * scale;
-    ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
-  }
+  const frac = Math.max(10, Math.min(100, scalePercent)) / 100;
+  const scale = Math.min((W * frac) / rotated.width, (H * frac) / rotated.height);
+  const w = rotated.width * scale, h = rotated.height * scale;
+  ctx.drawImage(rotated, (W - w) / 2, (H - h) / 2, w, h);
   return canvas;
 }

@@ -2634,10 +2634,33 @@ function wireSandbox(){
 
 /* ================== ADMIN ASSET LIBRARY ================== */
 let libTab = 'sedans';
+// Index within lib[libTab] currently showing its inline rename input
+// instead of its normal tag+buttons — cleared on tab switch and after
+// commit/cancel. Only 'lib'-origin entries are renamable: base entries are
+// hardcoded array constants with no per-instance name to persist (that's
+// what Duplicate is for — it copies a base entry into the editable layer,
+// where it then CAN be renamed).
+let libRenamingIndex = null;
 
 function openLibrary(){
   showOverlay('libraryOverlay');
   renderLibraryOverlay();
+}
+
+// Copies any entry (base or lib-origin) into the library's editable layer
+// under a "-copy" tag, then drops the new card straight into rename mode —
+// this is the "duplicate and save as" flow: one action, immediately
+// followed by naming the result. Duplicating a base entry is how an admin
+// gets an editable variant of a hardcoded asset (same image, independently
+// recolorable/renamable) without touching source.
+async function duplicateAsset(entry){
+  sfx('ui');
+  const copy = Object.assign({}, entry, { color: `${entry.color || 'asset'}-copy` });
+  await addAsset(libTab, copy);
+  libRenamingIndex = (getLibrary()[libTab] || []).length - 1;
+  renderLibraryOverlay();
+  sbRenderPicker();
+  toast('Duplicated — rename it below');
 }
 
 function libCard(entry, len, meta){
@@ -2647,12 +2670,49 @@ function libCard(entry, len, meta){
   art.className = 'lib-card-art';
   art.innerHTML = vehicleSVG(0, len, 'h', false, { photoOverride: entry.img });
   card.appendChild(art);
+
+  if(meta.isRenaming){
+    const input = document.createElement('input');
+    input.type = 'text'; input.className = 'lib-card-rename'; input.autocomplete = 'off';
+    input.value = entry.color || '';
+    card.appendChild(input);
+    const commit = async () => {
+      const val = input.value.trim();
+      if(val) await updateAsset(libTab, meta.index, { color: val });
+      libRenamingIndex = null;
+      renderLibraryOverlay();
+      sbRenderPicker();
+    };
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){ e.preventDefault(); sfx('ui'); commit(); }
+      if(e.key === 'Escape'){ sfx('ui'); libRenamingIndex = null; renderLibraryOverlay(); }
+    });
+    const row = document.createElement('div');
+    row.className = 'lib-card-row';
+    const save = document.createElement('button');
+    save.className = 'btn primary'; save.type = 'button'; save.textContent = 'Save';
+    save.addEventListener('click', () => { sfx('ui'); commit(); });
+    row.appendChild(save);
+    const cancel = document.createElement('button');
+    cancel.className = 'btn'; cancel.type = 'button'; cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => { sfx('ui'); libRenamingIndex = null; renderLibraryOverlay(); });
+    row.appendChild(cancel);
+    card.appendChild(row);
+    return card;
+  }
+
   const tag = document.createElement('div');
   tag.className = 'lib-card-tag';
   tag.textContent = entry.color || (entry.fixed ? 'fixed' : `hue ${entry.hue ?? 0}`);
   card.appendChild(tag);
+
   const row = document.createElement('div');
   row.className = 'lib-card-row';
+  const dup = document.createElement('button');
+  dup.className = 'btn'; dup.type = 'button'; dup.textContent = 'Duplicate';
+  dup.addEventListener('click', () => duplicateAsset(entry));
+  row.appendChild(dup);
+
   if(meta.origin === 'base'){
     const btn = document.createElement('button');
     btn.className = 'btn'; btn.type = 'button';
@@ -2664,7 +2724,20 @@ function libCard(entry, len, meta){
       sbRenderPicker();
     });
     row.appendChild(btn);
+    card.appendChild(row);
   } else {
+    const ren = document.createElement('button');
+    ren.className = 'btn'; ren.type = 'button'; ren.textContent = 'Rename';
+    ren.addEventListener('click', () => {
+      sfx('ui');
+      libRenamingIndex = meta.index;
+      renderLibraryOverlay();
+    });
+    row.appendChild(ren);
+    card.appendChild(row);
+
+    const row2 = document.createElement('div');
+    row2.className = 'lib-card-row';
     const del = document.createElement('button');
     del.className = 'btn'; del.type = 'button'; del.textContent = 'Delete';
     del.addEventListener('click', async () => {
@@ -2673,9 +2746,9 @@ function libCard(entry, len, meta){
       renderLibraryOverlay();
       sbRenderPicker();
     });
-    row.appendChild(del);
+    row2.appendChild(del);
+    card.appendChild(row2);
   }
-  card.appendChild(row);
   return card;
 }
 
@@ -2744,22 +2817,62 @@ function renderLibraryOverlay(){
   basePhotos(libTab).forEach(entry => {
     grid.appendChild(libCard(entry, len, { origin: 'base', isDisabled: disabled.has(entry.img) }));
   });
+  let renamingCard = null;
   (lib[libTab] || []).forEach((entry, i) => {
-    grid.appendChild(libCard(entry, len, { origin: 'lib', index: i }));
+    const card = libCard(entry, len, { origin: 'lib', index: i, isRenaming: i === libRenamingIndex });
+    if(i === libRenamingIndex) renamingCard = card;
+    grid.appendChild(card);
   });
+  if(renamingCard){
+    const input = renamingCard.querySelector('input');
+    if(input){ input.focus(); input.select(); }
+    renamingCard.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 }
 
 // The currently-loaded source image for the add-form's live preview — kept
 // in memory (not re-read from the file input) so toggling "remove
-// background" or dragging the scale slider can re-render instantly without
+// background" or dragging any slider can re-render instantly without
 // re-decoding the file each time.
 let libPendingImg = null;
+
+// [rangeId, valueLabelId, default] for every preview-adjustment slider —
+// one list drives both the 'input' wiring and the two reset paths (the
+// explicit Reset-adjustments button, and clearing the form after Add/on
+// tab switch) so the defaults only live in one place.
+const LIB_SLIDERS = [
+  ['libTolerance', 'libToleranceVal', 32],
+  ['libScaleRange', 'libScaleVal', 97],
+  ['libRotate', 'libRotateVal', 0],
+  ['libBrightness', 'libBrightnessVal', 100],
+  ['libContrast', 'libContrastVal', 100],
+  ['libSaturation', 'libSaturationVal', 100],
+  ['libHue', 'libHueVal', 0],
+  ['libColorizeAmount', 'libColorizeAmountVal', 0],
+  ['libColorizeHue', 'libColorizeHueVal', 0],
+];
+
+function libResetSliders(){
+  LIB_SLIDERS.forEach(([id, labelId, def]) => {
+    $(id).value = def;
+    $(labelId).textContent = def;
+  });
+  $('libToleranceLab').hidden = !$('libRemoveBg').checked;
+}
 
 function libRenderPreview(){
   if(!libPendingImg) return;
   const canvas = renderToCanvas(libPendingImg, libTab, {
     removeBackground: $('libRemoveBg').checked,
+    tolerance: Number($('libTolerance').value),
     scalePercent: Number($('libScaleRange').value),
+    rotate: Number($('libRotate').value),
+    brightness: Number($('libBrightness').value),
+    contrast: Number($('libContrast').value),
+    saturation: Number($('libSaturation').value),
+    hue: Number($('libHue').value),
+    colorizeHue: Number($('libColorizeHue').value),
+    colorizeAmount: Number($('libColorizeAmount').value),
   });
   const preview = $('libPreviewCanvas');
   preview.width = canvas.width; preview.height = canvas.height;
@@ -2774,7 +2887,10 @@ function wireLibrary(){
     // differ, and Hero Art has no add-form at all — clear the pending
     // preview rather than carry a stale one across tabs.
     libPendingImg = null;
+    libRenamingIndex = null;
     $('libAddFile').value = '';
+    $('libRemoveBg').checked = false;
+    libResetSliders();
     $('libPreviewWrap').hidden = true;
     document.querySelectorAll('#libTabs .tab').forEach(x => x.classList.toggle('cur', x === btn));
     renderLibraryOverlay();
@@ -2789,9 +2905,19 @@ function wireLibrary(){
     $('libPreviewWrap').hidden = false;
     libRenderPreview();
   });
-  $('libRemoveBg').addEventListener('change', libRenderPreview);
-  $('libScaleRange').addEventListener('input', () => {
-    $('libScaleVal').textContent = $('libScaleRange').value;
+  $('libRemoveBg').addEventListener('change', () => {
+    $('libToleranceLab').hidden = !$('libRemoveBg').checked;
+    libRenderPreview();
+  });
+  LIB_SLIDERS.forEach(([id, labelId]) => {
+    $(id).addEventListener('input', () => {
+      $(labelId).textContent = $(id).value;
+      libRenderPreview();
+    });
+  });
+  $('libResetAdjustBtn').addEventListener('click', () => {
+    sfx('ui');
+    libResetSliders();
     libRenderPreview();
   });
   $('libAddBtn').addEventListener('click', async () => {
@@ -2805,7 +2931,8 @@ function wireLibrary(){
     await addAsset(libTab, entry);
     libPendingImg = null;
     $('libAddFile').value = ''; $('libAddColor').value = ''; $('libAddHue').value = '';
-    $('libRemoveBg').checked = false; $('libScaleRange').value = 97; $('libScaleVal').textContent = '97';
+    $('libRemoveBg').checked = false;
+    libResetSliders();
     $('libPreviewWrap').hidden = true;
     renderLibraryOverlay();
     sbRenderPicker();

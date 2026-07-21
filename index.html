@@ -357,9 +357,36 @@
       <div class="lib-preview-wrap" id="libPreviewWrap" hidden>
         <canvas class="lib-preview" id="libPreviewCanvas"></canvas>
         <label class="lib-add-fixed"><input id="libRemoveBg" type="checkbox"> Remove background</label>
-        <label class="lib-scale-lab">Scale <span id="libScaleVal">97</span>%
+        <label class="lib-slider-lab" id="libToleranceLab" hidden>Tolerance <span id="libToleranceVal">32</span>
+          <input id="libTolerance" type="range" min="4" max="100" value="32">
+        </label>
+        <label class="lib-slider-lab">Scale <span id="libScaleVal">97</span>%
           <input id="libScaleRange" type="range" min="30" max="100" value="97">
         </label>
+        <label class="lib-slider-lab">Rotate <span id="libRotateVal">0</span>&deg;
+          <input id="libRotate" type="range" min="-180" max="180" value="0">
+        </label>
+        <div class="lib-adjust-grid">
+          <label class="lib-slider-lab">Brightness <span id="libBrightnessVal">100</span>%
+            <input id="libBrightness" type="range" min="30" max="200" value="100">
+          </label>
+          <label class="lib-slider-lab">Contrast <span id="libContrastVal">100</span>%
+            <input id="libContrast" type="range" min="30" max="200" value="100">
+          </label>
+          <label class="lib-slider-lab">Saturation <span id="libSaturationVal">100</span>%
+            <input id="libSaturation" type="range" min="0" max="200" value="100">
+          </label>
+          <label class="lib-slider-lab">Hue shift <span id="libHueVal">0</span>&deg;
+            <input id="libHue" type="range" min="-180" max="180" value="0">
+          </label>
+          <label class="lib-slider-lab">Colorize <span id="libColorizeAmountVal">0</span>%
+            <input id="libColorizeAmount" type="range" min="0" max="100" value="0">
+          </label>
+          <label class="lib-slider-lab">Colorize hue <span id="libColorizeHueVal">0</span>&deg;
+            <input id="libColorizeHue" type="range" min="0" max="360" value="0">
+          </label>
+        </div>
+        <button class="btn" id="libResetAdjustBtn" type="button">Reset adjustments</button>
       </div>
       <input id="libAddColor" type="text" placeholder="Colour tag (e.g. white-plain)" autocomplete="off">
       <label class="lib-add-fixed"><input id="libAddFixed" type="checkbox" checked> Fixed livery (no recolor)</label>
