@@ -343,8 +343,24 @@
       <button class="tab" data-libtab="trailers" type="button">Trailers</button>
       <button class="tab" data-libtab="hero" type="button">Hero Art</button>
     </div>
+    <div class="lib-io-row">
+      <button class="btn" id="libExportBtn" type="button">Export library</button>
+      <button class="btn" id="libResetBtn" type="button">Clear library</button>
+    </div>
+    <p class="lib-io-note">Export copies the library JSON to your clipboard —
+      hand it to <code>tools/promote-library.mjs</code> (or paste it into
+      chat) to commit these assets into the codebase for real. Once that's
+      done and deployed, Clear library so promoted assets don't show up
+      twice.</p>
     <div id="libAddForm" class="lib-add">
       <input id="libAddFile" type="file" accept="image/*">
+      <div class="lib-preview-wrap" id="libPreviewWrap" hidden>
+        <canvas class="lib-preview" id="libPreviewCanvas"></canvas>
+        <label class="lib-add-fixed"><input id="libRemoveBg" type="checkbox"> Remove background</label>
+        <label class="lib-scale-lab">Scale <span id="libScaleVal">97</span>%
+          <input id="libScaleRange" type="range" min="30" max="100" value="97">
+        </label>
+      </div>
       <input id="libAddColor" type="text" placeholder="Colour tag (e.g. white-plain)" autocomplete="off">
       <label class="lib-add-fixed"><input id="libAddFixed" type="checkbox" checked> Fixed livery (no recolor)</label>
       <input id="libAddHue" type="number" placeholder="Hue (if recolorable)" min="0" max="360" hidden>

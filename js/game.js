@@ -18,7 +18,7 @@ import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
-import { loadLibrary, getLibrary, addAsset, updateAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, fileToDataURL } from './library.js';
+import { loadLibrary, getLibrary, addAsset, updateAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, renderToCanvas } from './library.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -2704,8 +2704,13 @@ function renderLibraryHeroTab(){
     fileInput.addEventListener('change', async () => {
       const file = fileInput.files[0];
       if(!file) return;
-      const dataUrl = await fileToDataURL(file, 'sedans');
-      await setHeroPhoto(car.id, dataUrl);
+      // Hero uploads skip the interactive preview (scale/background-removal
+      // controls) the main library add-form has — a fixed 97% centered fit
+      // is a reasonable default per-car, and building a 24-row-deep preview
+      // panel for a much less frequent action wasn't worth the UI weight.
+      const img = await loadImageFromFile(file);
+      const canvas = renderToCanvas(img, 'sedans', { scalePercent: 97 });
+      await setHeroPhoto(car.id, canvas.toDataURL('image/png'));
       renderLibraryOverlay();
       sfx('ui');
       toast(`Assigned ${car.name}`);
@@ -2744,31 +2749,80 @@ function renderLibraryOverlay(){
   });
 }
 
+// The currently-loaded source image for the add-form's live preview — kept
+// in memory (not re-read from the file input) so toggling "remove
+// background" or dragging the scale slider can re-render instantly without
+// re-decoding the file each time.
+let libPendingImg = null;
+
+function libRenderPreview(){
+  if(!libPendingImg) return;
+  const canvas = renderToCanvas(libPendingImg, libTab, {
+    removeBackground: $('libRemoveBg').checked,
+    scalePercent: Number($('libScaleRange').value),
+  });
+  const preview = $('libPreviewCanvas');
+  preview.width = canvas.width; preview.height = canvas.height;
+  preview.getContext('2d').drawImage(canvas, 0, 0);
+}
+
 function wireLibrary(){
   document.querySelectorAll('#libTabs .tab').forEach(btn => btn.addEventListener('click', () => {
     sfx('ui');
     libTab = btn.dataset.libtab;
+    // Switching category mid-upload: base canvas size (sedans/trucks) may
+    // differ, and Hero Art has no add-form at all — clear the pending
+    // preview rather than carry a stale one across tabs.
+    libPendingImg = null;
+    $('libAddFile').value = '';
+    $('libPreviewWrap').hidden = true;
     document.querySelectorAll('#libTabs .tab').forEach(x => x.classList.toggle('cur', x === btn));
     renderLibraryOverlay();
   }));
   $('libAddFixed').addEventListener('change', () => {
     $('libAddHue').hidden = $('libAddFixed').checked;
   });
-  $('libAddBtn').addEventListener('click', async () => {
+  $('libAddFile').addEventListener('change', async () => {
     const file = $('libAddFile').files[0];
-    if(!file){ toast('Choose an image first'); return; }
+    if(!file){ libPendingImg = null; $('libPreviewWrap').hidden = true; return; }
+    libPendingImg = await loadImageFromFile(file);
+    $('libPreviewWrap').hidden = false;
+    libRenderPreview();
+  });
+  $('libRemoveBg').addEventListener('change', libRenderPreview);
+  $('libScaleRange').addEventListener('input', () => {
+    $('libScaleVal').textContent = $('libScaleRange').value;
+    libRenderPreview();
+  });
+  $('libAddBtn').addEventListener('click', async () => {
+    if(!libPendingImg){ toast('Choose an image first'); return; }
     const color = ($('libAddColor').value || '').trim();
     if(!color){ toast('Give it a colour tag'); return; }
     const fixed = $('libAddFixed').checked;
     const hue = Number($('libAddHue').value) || 0;
-    const dataUrl = await fileToDataURL(file, libTab);
+    const dataUrl = $('libPreviewCanvas').toDataURL('image/png');
     const entry = fixed ? { img: dataUrl, color, fixed: true } : { img: dataUrl, color, hue };
     await addAsset(libTab, entry);
+    libPendingImg = null;
     $('libAddFile').value = ''; $('libAddColor').value = ''; $('libAddHue').value = '';
+    $('libRemoveBg').checked = false; $('libScaleRange').value = 97; $('libScaleVal').textContent = '97';
+    $('libPreviewWrap').hidden = true;
     renderLibraryOverlay();
     sbRenderPicker();
     sfx('ui');
     toast('Added to library');
+  });
+  $('libExportBtn').addEventListener('click', async () => {
+    sfx('ui');
+    const ok = await copyToClipboard(JSON.stringify(getLibrary(), null, 2));
+    toast(ok ? 'Copied — hand it to tools/promote-library.mjs' : t('toast.copyfail'));
+  });
+  $('libResetBtn').addEventListener('click', async () => {
+    sfx('ui');
+    await resetLibrary();
+    renderLibraryOverlay();
+    sbRenderPicker();
+    toast('Library cleared');
   });
   $('adminLibraryBtn').addEventListener('click', () => { sfx('ui'); openLibrary(); });
 }
