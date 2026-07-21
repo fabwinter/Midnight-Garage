@@ -17,7 +17,7 @@ import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
-import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier } from './collection.js';
+import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -812,12 +812,26 @@ function refreshHintTokens(){
 }
 
 /* ================== LEVEL LOAD ================== */
+// Bounty jobs force their own fixed pacing (see loadBountyLevel) — this
+// remembers whatever the player actually had selected so it can be
+// restored the moment they leave the bounty for anything else, rather
+// than the override leaking into their next campaign/daily/impound
+// session. Null whenever no override is currently in effect.
+let preBountyMode = null;
+
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
       mode: mode.type, level: trackLevelId(),
       moves, time_s: Math.round((Date.now() - levelStart) / 1000),
     });
+  }
+  if(preBountyMode !== null){
+    save.settings.mode = preBountyMode;
+    setGameMode(preBountyMode);
+    updateModeSelectUI();
+    preBountyMode = null;
+    persist();
   }
 }
 
@@ -851,10 +865,22 @@ function loadBountyLevel(dateStr){
   abandonIfMidLevel();
   const lv = bountyFor(dateStr);
   if(!lv) return;
-  mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition };
+  // The mark decides the pacing same as it decides the car — "It is always
+  // in Heist or Pursuit mode depending on the job," never the player's own
+  // Settings choice. Remember that choice (preBountyMode) so
+  // abandonIfMidLevel can hand it back the moment this bounty is left.
+  const pacing = carById(carIdForBountyTier(lv.tier))?.pacing ?? 'heist';
+  if(save.settings.mode !== pacing){
+    preBountyMode = save.settings.mode;
+    save.settings.mode = pacing;
+    setGameMode(pacing);
+    updateModeSelectUI();
+  }
+  mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition, pacing };
   curLevel = lv;
+  persist();
   startBoard();
-  track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition });
+  track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition, pacing });
 }
 
 /* Impound Lot (N2, docs/NEXT-PLAN.md): endgame board list, unlocked once
@@ -1272,7 +1298,7 @@ function winSequence(){
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
   } else if(mode.type === 'bounty'){
-    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed, gameMode: save.settings.mode });
+    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed });
     const prev = save.bounties.done[mode.date];
     save.bounties.done[mode.date] = {
       moves: prev ? Math.min(prev.moves, moves) : moves,
@@ -1308,7 +1334,7 @@ function showWinSheet(stars){
   $('winTitle').textContent = mode.type === 'daily'
     ? t('win.daily', { n: mode.number })
     : mode.type === 'bounty'
-    ? t('win.bounty', { n: mode.number })
+    ? t('win.bounty')
     : mode.type === 'impound'
     ? t('win.impound', { n: curImpound + 1 })
     : mode.type === 'sandbox'
@@ -1316,6 +1342,10 @@ function showWinSheet(stars){
     : t('win.title', { n: cur + 1 });
   $('winMoves').textContent = moves;
   $('winPar').textContent = par;
+  // A job's briefing is the car and the nightly condition, never a level
+  // number or a par baseline (see the bounty sheet) — the win sheet stays
+  // consistent with that.
+  $('winParRow').hidden = mode.type === 'bounty';
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
     : mode.type === 'bounty'
@@ -1477,9 +1507,9 @@ function buildGarageList(){
     return h;
   };
 
-  const tile = (id, name, tier, skin, isOwned, hint) => {
+  const tile = (id, name, tier, skin, isOwned, hint, limited) => {
     const b = document.createElement('button');
-    b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '');
+    b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '') + (limited ? ' limited' : '');
     const art = document.createElement('div');
     art.className = 'car-tile-art';
     if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin, headlights: false });
@@ -1516,7 +1546,7 @@ function buildGarageList(){
   });
   holder.appendChild(groupHeader(t('garage.marks')));
   CARS.filter(c => c.bountyTier).forEach(car => {
-    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car)));
+    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car), true));
   });
 }
 
@@ -1827,11 +1857,13 @@ function renderBountySheet(){
   const lv = bountyFor(today);
   if(!lv){ return; }   // before BOUNTY_EPOCH — shouldn't happen once shipped
   const done = save.bounties.done[today];
+  const car = carById(carIdForBountyTier(lv.tier));
 
   $('bountyTierChip').textContent = t('tier.' + lv.tier);
   $('bountyTierChip').className = 'car-tier tier-' + lv.tier;
-  $('bountyPar').textContent = lv.m;
+  $('bountyPacingChip').textContent = t('mode.' + car.pacing);
   $('bountyCond').textContent = t('bounty.cond.' + lv.condition);
+  $('bountyNarrative').textContent = car.narrative;
   renderPeek(lv, $('bountyBoard'));
 
   if(done){
@@ -1940,7 +1972,6 @@ function applyStrings(){
   $('dailyNote').textContent = t('daily.backfill');
   $('bountyTitle').textContent = t('bounty.title');
   $('bountySub').textContent = t('bounty.sub');
-  $('labBountyPar').textContent = t('hud.par');
   $('settingsTitle').textContent = t('settings.title');
   $('labSfx').textContent = t('settings.sfx');
   $('labMusic').textContent = t('settings.music');
