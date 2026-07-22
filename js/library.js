@@ -193,6 +193,75 @@ function rotateCanvas(src, degrees){
   return canvas;
 }
 
+/* Brightness/contrast/saturation/hue-shift, done as manual per-pixel math
+   rather than canvas ctx.filter — canvas 2D `filter` turned out to be a
+   silent no-op on at least one real device/browser this shipped to (only
+   colorize, which uses globalCompositeOperation instead, actually showed
+   any change), so this reimplements the same four adjustments using only
+   plain getImageData/putImageData arithmetic — the same primitive
+   floodFillBackground already relies on successfully. Saturation and
+   hue-rotate are both linear 3x3 colour-matrix transforms — the exact
+   matrices below are the exact ones from the CSS Filter Effects spec
+   (equivalent to SVG's feColorMatrix type="saturate"/"hueRotate"), so the
+   result matches what ctx.filter was supposed to produce. */
+function saturateMatrix(sPct){
+  const s = sPct / 100;
+  return [
+    [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s],
+    [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s],
+    [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s],
+  ];
+}
+
+function hueRotateMatrix(deg){
+  const a = deg * Math.PI / 180, cosA = Math.cos(a), sinA = Math.sin(a);
+  return [
+    [0.213 + cosA * 0.787 - sinA * 0.213, 0.715 - cosA * 0.715 - sinA * 0.715, 0.072 - cosA * 0.072 + sinA * 0.928],
+    [0.213 - cosA * 0.213 + sinA * 0.143, 0.715 + cosA * 0.285 + sinA * 0.140, 0.072 - cosA * 0.072 - sinA * 0.283],
+    [0.213 - cosA * 0.213 - sinA * 0.787, 0.715 - cosA * 0.715 + sinA * 0.715, 0.072 + cosA * 0.928 + sinA * 0.072],
+  ];
+}
+
+function multiplyColorMatrices(a, b){
+  const r = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for(let i = 0; i < 3; i++) for(let j = 0; j < 3; j++){
+    let sum = 0;
+    for(let k = 0; k < 3; k++) sum += a[i][k] * b[k][j];
+    r[i][j] = sum;
+  }
+  return r;
+}
+
+// Applies brightness, then contrast, then the combined saturate+hue-rotate
+// matrix, in place — the same order the old ctx.filter string used, so
+// visual results stay consistent with what was intended.
+function applyColorAdjustments(imageData, { brightness, contrast, saturation, hue }){
+  const needsBrightness = brightness !== 100;
+  const needsContrast = contrast !== 100;
+  const needsMatrix = saturation !== 100 || hue !== 0;
+  if(!needsBrightness && !needsContrast && !needsMatrix) return;
+
+  const bFactor = brightness / 100;
+  const cFactor = contrast / 100;
+  const matrix = needsMatrix ? multiplyColorMatrices(hueRotateMatrix(hue), saturateMatrix(saturation)) : null;
+
+  const data = imageData.data;
+  for(let i = 0; i < data.length; i += 4){
+    let r = data[i], g = data[i + 1], b = data[i + 2];
+    if(needsBrightness){ r *= bFactor; g *= bFactor; b *= bFactor; }
+    if(needsContrast){ r = (r - 127.5) * cFactor + 127.5; g = (g - 127.5) * cFactor + 127.5; b = (b - 127.5) * cFactor + 127.5; }
+    if(matrix){
+      const nr = matrix[0][0] * r + matrix[0][1] * g + matrix[0][2] * b;
+      const ng = matrix[1][0] * r + matrix[1][1] * g + matrix[1][2] * b;
+      const nb = matrix[2][0] * r + matrix[2][1] * g + matrix[2][2] * b;
+      r = nr; g = ng; b = nb;
+    }
+    data[i] = Math.max(0, Math.min(255, r));
+    data[i + 1] = Math.max(0, Math.min(255, g));
+    data[i + 2] = Math.max(0, Math.min(255, b));
+  }
+}
+
 /* True "colorize" (as opposed to the hue-rotate filter, which just spins
    existing hues around and leaves multi-colored source art multi-colored):
    flattens every opaque pixel onto one target hue/chroma while keeping its
@@ -275,14 +344,12 @@ export function renderToCanvas(img, category, opts = {}, rectOut){
   const work = document.createElement('canvas');
   work.width = srcW; work.height = srcH;
   const wctx = work.getContext('2d');
-  const filterParts = [];
-  if(brightness !== 100) filterParts.push(`brightness(${brightness}%)`);
-  if(contrast !== 100) filterParts.push(`contrast(${contrast}%)`);
-  if(saturation !== 100) filterParts.push(`saturate(${saturation}%)`);
-  if(hue !== 0) filterParts.push(`hue-rotate(${hue}deg)`);
-  wctx.filter = filterParts.length ? filterParts.join(' ') : 'none';
   wctx.drawImage(img, 0, 0, srcW, srcH);
-  wctx.filter = 'none';
+  if(brightness !== 100 || contrast !== 100 || saturation !== 100 || hue !== 0){
+    const imageData = wctx.getImageData(0, 0, work.width, work.height);
+    applyColorAdjustments(imageData, { brightness, contrast, saturation, hue });
+    wctx.putImageData(imageData, 0, 0);
+  }
   applyColorize(wctx, work.width, work.height, colorizeHue, colorizeAmount);
 
   if(removeBackground){
