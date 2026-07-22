@@ -353,15 +353,30 @@
       done and deployed, Clear library so promoted assets don't show up
       twice.</p>
     <div id="libAddForm" class="lib-add">
+      <div class="lib-edit-banner" id="libEditBanner" hidden>
+        Editing <strong id="libEditBannerName"></strong>
+        <button class="btn" id="libEditCancelBtn" type="button">Cancel edit</button>
+      </div>
       <input id="libAddFile" type="file" accept="image/*">
       <div class="lib-preview-wrap" id="libPreviewWrap" hidden>
-        <canvas class="lib-preview" id="libPreviewCanvas"></canvas>
+        <div class="lib-preview-stage" id="libPreviewStage">
+          <canvas class="lib-preview" id="libPreviewCanvas"></canvas>
+          <div class="lib-xform-handle" data-handle="nw"></div>
+          <div class="lib-xform-handle" data-handle="n"></div>
+          <div class="lib-xform-handle" data-handle="ne"></div>
+          <div class="lib-xform-handle" data-handle="e"></div>
+          <div class="lib-xform-handle" data-handle="se"></div>
+          <div class="lib-xform-handle" data-handle="s"></div>
+          <div class="lib-xform-handle" data-handle="sw"></div>
+          <div class="lib-xform-handle" data-handle="w"></div>
+        </div>
+        <div class="lib-stretch-readout" id="libStretchReadout">Stretch 100% &times; 100%</div>
         <label class="lib-add-fixed"><input id="libRemoveBg" type="checkbox"> Remove background</label>
         <label class="lib-slider-lab" id="libToleranceLab" hidden>Tolerance <span id="libToleranceVal">32</span>
           <input id="libTolerance" type="range" min="4" max="100" value="32">
         </label>
         <label class="lib-slider-lab">Scale <span id="libScaleVal">97</span>%
-          <input id="libScaleRange" type="range" min="30" max="100" value="97">
+          <input id="libScaleRange" type="range" min="30" max="300" value="97">
         </label>
         <label class="lib-slider-lab">Rotate <span id="libRotateVal">0</span>&deg;
           <input id="libRotate" type="range" min="-180" max="180" value="0">

@@ -52,6 +52,18 @@ export async function updateAsset(category, index, patch){
   await persist();
 }
 
+// A full replace, not a merge — for when the whole entry (img/color/
+// fixed/hue) is being recomputed from scratch (the "Edit" flow re-running
+// the image pipeline). updateAsset's Object.assign is right for a partial
+// patch like Rename's {color}, but wrong here: toggling "Fixed" off during
+// an edit needs the old entry's stale `fixed: true` key gone, not merged
+// alongside a new `hue`, which Object.assign alone can't do.
+export async function replaceAsset(category, index, entry){
+  if(!LIB[category][index]) return;
+  LIB[category][index] = entry;
+  await persist();
+}
+
 export async function removeAsset(category, index){
   LIB[category].splice(index, 1);
   await persist();
@@ -95,6 +107,39 @@ export function loadImageFromFile(file){
     };
     reader.readAsDataURL(file);
   });
+}
+
+// Same as loadImageFromFile, but for an asset that's already in the library
+// (its img is a data: URL string already, not a File) — used by the "Edit"
+// flow on an existing card, which re-opens that asset in the same
+// add-form/preview pipeline as a fresh upload.
+export function loadImageFromDataUrl(dataUrl){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('Could not decode image'));
+    img.onload = () => resolve(img);
+    img.src = dataUrl;
+  });
+}
+
+/* A real phone photo can be 12+ megapixels; renderToCanvas's own
+   previewMaxDim guards each individual render call, but resampling from a
+   full-resolution source is itself the expensive part of drawImage (cost
+   scales with the SOURCE'S pixel count, not just the destination size) —
+   paid on every single slider tick/drag frame if the caller keeps handing
+   it the native image. Downscaling once, right after the file loads, and
+   reusing that small canvas as the live-preview source for every
+   subsequent render (only the final commit uses the true native-res
+   image) turns a resample-every-frame cost into a resample-once cost. */
+export function downscaleForPreview(img, maxDim = 1000){
+  if(Math.max(img.width, img.height) <= maxDim) return img;
+  const s = maxDim / Math.max(img.width, img.height);
+  const w = Math.max(1, Math.round(img.width * s));
+  const h = Math.max(1, Math.round(img.height * s));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return canvas;
 }
 
 /* Connected-region flood fill from every border pixel, same idea as the
@@ -170,19 +215,39 @@ function applyColorize(ctx, w, h, hueDeg, amount){
    at runtime instead of shipping at whatever resolution/fit the source
    photo happened to have — a real regression this app hit once already,
    see git history on the hero-* asset resize). scalePercent controls how
-   much of the canvas the car fills (the established convention is 97).
-   Returns a canvas, not a data URL yet, so the caller can re-render live
-   as the admin drags any slider, only encoding to PNG once they actually
-   commit it.
+   full the fit box is (100 = fills it, matching the old "fit" behaviour;
+   above 100 zooms in / crops, since the draw target is a fixed-size
+   canvas). stretchX/stretchY apply an independent, centered non-uniform
+   multiplier on top of that fit — the "transform handles" in the preview
+   drag these two directly instead of going through a slider. Returns a
+   canvas, not a data URL yet, so the caller can re-render live as the
+   admin drags any slider or handle, only encoding to PNG once they
+   actually commit it. If `rectOut` is passed, it's mutated with the final
+   {x,y,w,h} placement (in this canvas's own pixel space) so the caller can
+   position on-screen transform handles around it.
+
+   `previewMaxDim`, if set, downscales the source before running any of
+   the pipeline below — the live preview only ever displays at this
+   function's fixed target size (800x400/1200x400), so there's no benefit
+   to running a full-resolution flood-fill + canvas filter chain on every
+   slider drag tick against a source that might be a 12-megapixel phone
+   photo. That was the actual cause of "sliders do nothing": on a
+   memory/CPU-constrained mobile browser, repeatedly reprocessing a huge
+   image on every touch-drag 'input' event could silently fail partway
+   through (an exception the caller never saw), leaving the canvas stuck
+   on whatever last render happened to succeed while the slider labels
+   kept right on updating. The one-time "Add to library" commit still
+   renders at full native resolution (no previewMaxDim) for a crisp edge,
+   since that only happens once, not on every drag tick.
 
    Pipeline order matters: colour correction and colorize run first (so
    background-removal's corner-colour sample sees the corrected colours,
-   not the original ones), then background removal (at native resolution,
-   before any downscale, so the cutout edge stays crisp instead of picking
-   up a blurry half-transparent halo), then rotate (so a removed
-   background leaves the new corners cleanly transparent instead of
-   smearing solid backdrop colour into them), then the final fit/scale. */
-export function renderToCanvas(img, category, opts = {}){
+   not the original ones), then background removal (before any downscale,
+   so the cutout edge stays crisp instead of picking up a blurry
+   half-transparent halo), then rotate (so a removed background leaves the
+   new corners cleanly transparent instead of smearing solid backdrop
+   colour into them), then the final fit/scale/stretch. */
+export function renderToCanvas(img, category, opts = {}, rectOut){
   const {
     removeBackground = false,
     tolerance = 32,
@@ -194,11 +259,21 @@ export function renderToCanvas(img, category, opts = {}){
     hue = 0,
     colorizeHue = 0,
     colorizeAmount = 0,
+    stretchX = 100,
+    stretchY = 100,
+    previewMaxDim = 0,
   } = opts;
   const [W, H] = category === 'trucks' ? [1200, 400] : [800, 400];
 
+  let srcW = img.width, srcH = img.height;
+  if(previewMaxDim && Math.max(srcW, srcH) > previewMaxDim){
+    const s = previewMaxDim / Math.max(srcW, srcH);
+    srcW = Math.max(1, Math.round(srcW * s));
+    srcH = Math.max(1, Math.round(srcH * s));
+  }
+
   const work = document.createElement('canvas');
-  work.width = img.width; work.height = img.height;
+  work.width = srcW; work.height = srcH;
   const wctx = work.getContext('2d');
   const filterParts = [];
   if(brightness !== 100) filterParts.push(`brightness(${brightness}%)`);
@@ -206,7 +281,7 @@ export function renderToCanvas(img, category, opts = {}){
   if(saturation !== 100) filterParts.push(`saturate(${saturation}%)`);
   if(hue !== 0) filterParts.push(`hue-rotate(${hue}deg)`);
   wctx.filter = filterParts.length ? filterParts.join(' ') : 'none';
-  wctx.drawImage(img, 0, 0);
+  wctx.drawImage(img, 0, 0, srcW, srcH);
   wctx.filter = 'none';
   applyColorize(wctx, work.width, work.height, colorizeHue, colorizeAmount);
 
@@ -221,9 +296,13 @@ export function renderToCanvas(img, category, opts = {}){
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const frac = Math.max(10, Math.min(100, scalePercent)) / 100;
-  const scale = Math.min((W * frac) / rotated.width, (H * frac) / rotated.height);
-  const w = rotated.width * scale, h = rotated.height * scale;
-  ctx.drawImage(rotated, (W - w) / 2, (H - h) / 2, w, h);
+  const frac = Math.max(10, Math.min(400, scalePercent)) / 100;
+  const fitScale = Math.min((W * frac) / rotated.width, (H * frac) / rotated.height);
+  const sx = Math.max(10, Math.min(400, stretchX)) / 100;
+  const sy = Math.max(10, Math.min(400, stretchY)) / 100;
+  const w = rotated.width * fitScale * sx, h = rotated.height * fitScale * sy;
+  const x = (W - w) / 2, y = (H - h) / 2;
+  ctx.drawImage(rotated, x, y, w, h);
+  if(rectOut) Object.assign(rectOut, { x, y, w, h });
   return canvas;
 }
