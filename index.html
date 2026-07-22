@@ -114,12 +114,13 @@
 <!-- Win -->
 <div class="overlay" id="winOverlay">
   <div class="sheet win-sheet">
+    <button class="icon-btn close-x" id="winCloseBtn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="flag" id="winFlag">Traffic cleared</div>
     <h2 id="winTitle">Level 1 complete</h2>
     <div class="win-stars" id="winStars"></div>
-    <div class="win-stats">
+    <div class="win-stats" id="winStats">
       <div><span id="labWinMoves">Moves</span><b id="winMoves">0</b></div>
-      <div><span id="labWinPar">Par</span><b id="winPar">0</b></div>
+      <div id="winParRow"><span id="labWinPar">Par</span><b id="winPar">0</b></div>
       <div><span id="labWinBest">Best</span><b id="winBest">–</b></div>
     </div>
     <div class="clean-getaway" id="cleanGetaway" hidden>Clean getaway! ⚡</div>
@@ -131,9 +132,10 @@
     <pre class="share-pre" id="sharePre" hidden></pre>
     <button class="btn watch-sol" id="watchSolBtn" type="button">Watch the optimal solution</button>
     <div class="win-row">
-      <button class="btn" id="replayBtn">Replay</button>
-      <button class="btn primary" id="nextBtn"><span id="nextLabel">Next Level</span><span class="autobar" id="autobar"></span></button>
+      <button class="btn" id="tryAgainBtn">Try Again</button>
+      <button class="btn" id="moveReplayBtn">Replay</button>
     </div>
+    <button class="btn primary" id="nextBtn" style="width:100%;margin-top:10px"><span id="nextLabel">Next Level</span><span class="autobar" id="autobar"></span></button>
   </div>
 </div>
 
@@ -182,10 +184,11 @@
       <div class="peek-board" id="bountyBoard"></div>
       <div class="bounty-card-info">
         <span class="car-tier" id="bountyTierChip">Common</span>
-        <div class="bounty-par"><span id="labBountyPar">Par</span> <b id="bountyPar">–</b></div>
+        <span class="bounty-pacing" id="bountyPacingChip">Heist</span>
         <div class="bounty-cond" id="bountyCond"></div>
       </div>
     </div>
+    <p class="bounty-narrative" id="bountyNarrative"></p>
     <div class="bounty-status" id="bountyStatus" hidden></div>
     <button class="btn primary" id="bountyPlayBtn" style="width:100%"><span id="bountyPlayLabel">Take the job</span></button>
   </div>
@@ -206,7 +209,10 @@
     </div>
     <div class="set-row">
       <span class="lab" id="labTheme">Midnight Garage Theme</span>
-      <button class="btn" id="themePlayBtn" style="padding:8px 16px;font-size:14px">▶ Play</button>
+      <button class="icon-btn theme-play-btn" id="themePlayBtn" aria-label="Play">
+        <svg id="themePlayIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l12 7-12 7z"/></svg>
+        <svg id="themePauseIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none" hidden><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
     </div>
     <div class="set-row">
       <span class="lab" id="labHaptics">Haptics</span>
@@ -278,6 +284,7 @@
         <button class="btn" type="submit">Go</button>
       </form>
       <button class="btn" id="adminSandboxBtn" type="button">Sandbox editor</button>
+      <button class="btn" id="adminLibraryBtn" type="button">Asset library</button>
     </div>
   </div>
 </div>
@@ -287,7 +294,7 @@
   <div class="sheet sandbox-sheet">
     <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h2>Sandbox</h2>
-    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row.</p>
+    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid.</p>
     <div class="sb-tools" id="sbTools">
       <button class="btn sb-tool" data-tool="hero" type="button">Hero</button>
       <button class="btn sb-tool cur" data-tool="car" type="button">Car</button>
@@ -295,10 +302,12 @@
       <button class="btn sb-tool" data-tool="wall" type="button">Wall</button>
       <button class="btn sb-tool" data-tool="erase" type="button">Erase</button>
       <button class="btn" id="sbDirBtn" type="button" aria-label="Placement orientation">Dir: H</button>
+      <button class="btn" id="sbLibraryBtn" type="button">Library</button>
     </div>
     <div class="sb-board-wrap">
       <div class="sb-board" id="sbBoard"><span class="sb-exit">▶</span></div>
     </div>
+    <div class="sb-picker" id="sbPicker"></div>
     <div class="sb-status" id="sbStatus"></div>
     <div class="sb-actions">
       <button class="btn primary" id="sbTestBtn" type="button">Playtest</button>
@@ -316,6 +325,75 @@
     <p class="sb-export-note">Export copies level JSON to your clipboard.
       Hand it to <code>tools/promote-sandbox-levels.mjs</code> (or paste it
       into chat) to verify and add it to the shipped campaign.</p>
+  </div>
+</div>
+
+<!-- Admin asset library: add/edit/delete vehicle art and assign hero art
+     per job-car, persisted client-side (js/library.js) so the app
+     references it automatically on the very next render — no code change
+     or redeploy needed. -->
+<div class="overlay" id="libraryOverlay">
+  <div class="sheet sandbox-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2>Asset Library</h2>
+    <p class="sub">Add, edit, or delete traffic art, and assign hero art per job car. Changes apply immediately — no restart needed.</p>
+    <div class="tabs" id="libTabs">
+      <button class="tab cur" data-libtab="sedans" type="button">Sedans</button>
+      <button class="tab" data-libtab="trucks" type="button">Trucks</button>
+      <button class="tab" data-libtab="trailers" type="button">Trailers</button>
+      <button class="tab" data-libtab="hero" type="button">Hero Art</button>
+    </div>
+    <div class="lib-io-row">
+      <button class="btn" id="libExportBtn" type="button">Export library</button>
+      <button class="btn" id="libResetBtn" type="button">Clear library</button>
+    </div>
+    <p class="lib-io-note">Export copies the library JSON to your clipboard —
+      hand it to <code>tools/promote-library.mjs</code> (or paste it into
+      chat) to commit these assets into the codebase for real. Once that's
+      done and deployed, Clear library so promoted assets don't show up
+      twice.</p>
+    <div id="libAddForm" class="lib-add">
+      <input id="libAddFile" type="file" accept="image/*">
+      <div class="lib-preview-wrap" id="libPreviewWrap" hidden>
+        <canvas class="lib-preview" id="libPreviewCanvas"></canvas>
+        <label class="lib-add-fixed"><input id="libRemoveBg" type="checkbox"> Remove background</label>
+        <label class="lib-slider-lab" id="libToleranceLab" hidden>Tolerance <span id="libToleranceVal">32</span>
+          <input id="libTolerance" type="range" min="4" max="100" value="32">
+        </label>
+        <label class="lib-slider-lab">Scale <span id="libScaleVal">97</span>%
+          <input id="libScaleRange" type="range" min="30" max="100" value="97">
+        </label>
+        <label class="lib-slider-lab">Rotate <span id="libRotateVal">0</span>&deg;
+          <input id="libRotate" type="range" min="-180" max="180" value="0">
+        </label>
+        <div class="lib-adjust-grid">
+          <label class="lib-slider-lab">Brightness <span id="libBrightnessVal">100</span>%
+            <input id="libBrightness" type="range" min="30" max="200" value="100">
+          </label>
+          <label class="lib-slider-lab">Contrast <span id="libContrastVal">100</span>%
+            <input id="libContrast" type="range" min="30" max="200" value="100">
+          </label>
+          <label class="lib-slider-lab">Saturation <span id="libSaturationVal">100</span>%
+            <input id="libSaturation" type="range" min="0" max="200" value="100">
+          </label>
+          <label class="lib-slider-lab">Hue shift <span id="libHueVal">0</span>&deg;
+            <input id="libHue" type="range" min="-180" max="180" value="0">
+          </label>
+          <label class="lib-slider-lab">Colorize <span id="libColorizeAmountVal">0</span>%
+            <input id="libColorizeAmount" type="range" min="0" max="100" value="0">
+          </label>
+          <label class="lib-slider-lab">Colorize hue <span id="libColorizeHueVal">0</span>&deg;
+            <input id="libColorizeHue" type="range" min="0" max="360" value="0">
+          </label>
+        </div>
+        <button class="btn" id="libResetAdjustBtn" type="button">Reset adjustments</button>
+      </div>
+      <input id="libAddColor" type="text" placeholder="Colour tag (e.g. white-plain)" autocomplete="off">
+      <label class="lib-add-fixed"><input id="libAddFixed" type="checkbox" checked> Fixed livery (no recolor)</label>
+      <input id="libAddHue" type="number" placeholder="Hue (if recolorable)" min="0" max="360" hidden>
+      <button class="btn primary" id="libAddBtn" type="button">Add to library</button>
+    </div>
+    <div class="lib-grid" id="libGrid"></div>
   </div>
 </div>
 

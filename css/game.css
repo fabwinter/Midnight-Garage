@@ -489,9 +489,12 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 .bounty-card .peek-board{flex:none}
 .bounty-card-info{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
-.bounty-par{font-size:12px;color:var(--muted)}
-.bounty-par b{color:var(--ink);font-family:var(--disp)}
+.bounty-pacing{
+  font-family:var(--disp);font-weight:700;font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  padding:2px 8px;border-radius:8px;color:var(--muted);background:rgba(255,255,255,.06);
+}
 .bounty-cond{font-size:12px;color:var(--amber)}
+.bounty-narrative{font-size:13px;line-height:1.5;color:var(--muted);margin:0 0 12px}
 .bounty-status{font-size:12px;color:var(--muted);text-align:center;margin-bottom:10px}
 .bounty-result{
   font-family:var(--disp);font-weight:600;font-size:14px;margin:8px 0 10px;text-align:center;
@@ -540,6 +543,9 @@ input[type=range]::-moz-range-thumb{
 }
 .mode-btn.cur{border-color:var(--amber);color:var(--ink);box-shadow:0 0 12px -4px var(--amber)}
 .mode-desc{color:var(--muted);font-size:12px;margin:0 0 4px;padding:0 2px}
+/* Theme play/pause: a solid triangle/bars icon needs a fill, unlike the
+   stroke-only outline icons .icon-btn svg is styled for elsewhere. */
+.theme-play-btn svg{fill:currentColor;stroke:none}
 
 /* ---------- First-launch mode picker (intro sheet) ---------- */
 .intro-sheet{max-width:520px}
@@ -625,6 +631,12 @@ input[type=range]::-moz-range-thumb{
 .car-tile.owned:hover{border-color:var(--paint)}
 .car-tile.owned:active{transform:scale(.96)}
 .car-tile.equipped{border-color:var(--amber);box-shadow:0 0 0 1px rgba(255,180,84,.5),0 0 14px rgba(255,180,84,.18)}
+/* Bounty marks: one-per-tier, earned only through a job's own condition —
+   a dashed gold outline marks them as the collection's limited-edition
+   tier, distinct from the campaign chapters above. */
+.car-tile.limited{border-style:dashed;border-color:rgba(255,180,84,.45)}
+.car-tile.limited.owned{box-shadow:0 0 14px -4px rgba(255,180,84,.35)}
+.car-tile.limited.equipped{border-style:solid}
 .car-tile-art{width:100%;height:52px;display:flex;align-items:center;justify-content:center}
 .car-tile-art svg{width:88px;height:44px}
 .car-lock{font-size:22px;opacity:.5}
@@ -726,3 +738,67 @@ input[type=range]::-moz-range-thumb{
 .sb-saved-row .btn{padding:6px 10px;font-size:11px}
 .sb-export-note{margin:10px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
 .sb-export-note code{background:#0d1119;border-radius:5px;padding:1px 5px;font-size:10px}
+
+/* ---------- Sandbox car/truck picker (drag a specific asset onto the grid) ---------- */
+.sb-picker{
+  display:flex;gap:6px;overflow-x:auto;padding:8px 2px;margin:2px 0 4px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.sb-picker:empty{display:none;border:none;padding:0;margin:0}
+.sb-pick{
+  flex:none;width:64px;height:40px;border-radius:9px;border:1px solid var(--line);cursor:grab;
+  background:linear-gradient(180deg,#1c2331,#141a25);display:flex;align-items:center;justify-content:center;
+  touch-action:none;
+}
+.sb-pick svg{width:52px;height:26px}
+.sb-pick.dragging{opacity:.4}
+.sb-drag-ghost{
+  position:fixed;pointer-events:none;z-index:500;width:92px;height:46px;opacity:.9;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.6));
+}
+.sb-drag-ghost svg{width:100%;height:100%}
+
+/* ---------- Admin asset library ---------- */
+.lib-io-row{display:flex;gap:8px;margin-bottom:8px}
+.lib-io-row .btn{flex:1;padding:8px;font-size:12px}
+.lib-io-note{font-size:11px;line-height:1.5;color:var(--muted);margin:0 0 12px}
+.lib-io-note code{background:#0d1119;border-radius:5px;padding:1px 5px;font-size:10px}
+.lib-add{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px;border:1px dashed var(--line);border-radius:12px}
+.lib-add input[type=text],.lib-add input[type=number]{
+  background:#11151f;border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--ink);font-size:13px;
+}
+.lib-add-fixed{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.lib-preview-wrap{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:10px;background:#11151f}
+.lib-preview{width:100%;max-height:110px;object-fit:contain;border-radius:8px;background:
+  repeating-conic-gradient(#20242f 0% 25%, #181b24 0% 50%) 50%/16px 16px;
+}
+.lib-slider-lab{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.lib-slider-lab input[type=range]{flex:1}
+.lib-slider-lab span{color:var(--ink);font-family:var(--disp);min-width:28px;text-align:right}
+.lib-adjust-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
+.lib-adjust-grid .lib-slider-lab{flex-direction:column;align-items:stretch;gap:2px}
+.lib-adjust-grid .lib-slider-lab span{text-align:left;min-width:0}
+.lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.lib-card{
+  border-radius:14px;border:1px solid var(--line);padding:8px;background:linear-gradient(180deg,#1a2130,#131824);
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+}
+.lib-card.disabled{opacity:.4}
+.lib-card-art{width:100%;height:36px;display:flex;align-items:center;justify-content:center}
+.lib-card-art svg{width:72px;height:36px}
+.lib-card-tag{font-size:10px;color:var(--muted);text-align:center;line-height:1.3;word-break:break-word}
+.lib-card-row{display:flex;gap:4px;width:100%}
+.lib-card-row .btn{flex:1;padding:5px 4px;font-size:10px}
+.lib-card-rename{
+  width:100%;background:#11151f;border:1px solid var(--line);border-radius:8px;
+  padding:5px 6px;color:var(--ink);font-size:11px;text-align:center;
+}
+.lib-hero-row{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;
+  border:1px solid var(--line);background:linear-gradient(180deg,#1c2331,#141a25);margin-bottom:8px;
+}
+.lib-hero-art{width:64px;height:32px;flex:none;display:flex;align-items:center;justify-content:center}
+.lib-hero-art svg{width:100%;height:100%}
+.lib-hero-name{flex:1;min-width:0;font-size:13px}
+.lib-hero-row .btn{padding:6px 10px;font-size:11px}
+.lib-hero-file{display:none}

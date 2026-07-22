@@ -25,6 +25,7 @@
      H4's original design. */
 
 import { CHAPTER_SIZE } from './levels.data.js';
+import { getLibrary } from './library.js';
 
 export const DEFAULT_CAR = 'classic';
 export const POOL_SIZE = 5;
@@ -158,27 +159,45 @@ JOB_CARS.forEach((car, i) => {
 });
 
 /* Bounty marks (HEIST-PLAN.md §6, phase H4): earned by clearing a
-   "Tonight's Mark" under its reward condition (par/no-hints/alarm-intact —
-   see js/bounty.js). One per rarity tier; that tier's car is also the hero
-   shown while playing any bounty of that tier (see carIdForBountyTier). */
+   "Tonight's Mark" under its reward condition (par/no-hints — see
+   js/bounty.js). One per rarity tier; that tier's car is also the hero
+   shown while playing any bounty of that tier (see carIdForBountyTier).
+
+   `pacing` is the job's own fixed mode (heist or pursuit) — a bounty isn't
+   a pacing choice like campaign/Relaxed is; the mark dictates how tonight's
+   job runs, same as it dictates the car. js/game.js's loadBountyLevel()
+   forces save.settings.mode to this for the attempt's duration and
+   restores whatever the player had afterward. `narrative` is the short
+   pre-job briefing shown on the bounty sheet before "Take the job" —
+   deliberately not run through i18n (car names aren't either; see `name`
+   above), same "ship the flavor in English, mechanics stay translated"
+   split already used throughout this file. */
 const BOUNTY_CARS = [
   {
     id: 'small-fish', name: 'Small Fish', tier: 'common', bountyTier: 'common', photo: null,
+    pacing: 'heist',
+    narrative: "A nothing job — one guard, one alarm panel, in and out before he finishes his coffee. The garage owes you nothing more than gas money, but word is there's a spare set of keys to Small Fish sitting on the peg. Clear it under budget and it's yours.",
     skin: { base: '#8fbf6b', dark: '#4d7a34', glass: '#1c2b14', trim: 'none' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'common'),
   },
   {
     id: 'fence-favorite', name: "The Fence's Favorite", tier: 'uncommon', bountyTier: 'uncommon', photo: null,
+    pacing: 'pursuit',
+    narrative: "The fence wants his goods back before sunrise, and he's not the patient type. No time to case the place twice — you're already being watched. Stay ahead of the clock and The Fence's Favorite rides home with you tonight.",
     skin: { base: '#e0a840', dark: '#946a1c', glass: '#2c1e08', trim: 'none' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'uncommon'),
   },
   {
     id: 'high-value-mark', name: 'High-Value Mark', tier: 'rare', bountyTier: 'rare', photo: null,
+    pacing: 'heist',
+    narrative: "This one's got a name in the file for a reason — private security, a real vault, a client who'll pay double to keep his name out of it. Trip the alarm and it's over. Walk it clean and the High-Value Mark is yours.",
     skin: { base: '#d43f6a', dark: '#7a1f3a', glass: '#2b0e18', trim: 'chrome' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'rare'),
   },
   {
     id: 'the-big-score', name: 'The Big Score', tier: 'legendary', bountyTier: 'legendary', photo: null,
+    pacing: 'pursuit',
+    narrative: "Every crew talks about one job they never took. This is that job. It ends in a straight line at speed with everyone watching, and there's no version of tonight where you get a second run at it. Beat the clock — The Big Score doesn't wait twice.",
     skin: { base: '#f5d442', dark: '#a68c1f', glass: '#332b08', trim: 'plaque' },
     unlock: save => Object.values(save.bounties?.done || {}).some(d => d.met && d.tier === 'legendary'),
   },
@@ -226,7 +245,13 @@ export function carById(id){
   return CARS.find(c => c.id === id) || null;
 }
 
+/* An admin-assigned photo (Sandbox → Library → Hero Art) always wins over
+   whatever's hardcoded here, including replacing a bespoke skin.photo — so
+   reassigning a job car's art from the library takes effect immediately,
+   the same "no code change needed" promise the rest of the library makes. */
 export function skinFor(carId){
   const car = carById(carId);
-  return car ? car.skin : null;   // null → caller falls back to PALETTE[0] (classic)
+  if(!car) return null;   // null → caller falls back to PALETTE[0] (classic)
+  const override = getLibrary().heroPhotos[carId];
+  return override ? { ...car.skin, photo: override } : car.skin;
 }

@@ -7,7 +7,7 @@ import { N, EXIT_ROW, firstOptimalMove, solve } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -16,8 +16,9 @@ import { bountyFor, bountyConditionMet } from './bounty.js';
 import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG } from './art.js';
-import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier } from './collection.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
+import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
+import { loadLibrary, getLibrary, addAsset, updateAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, renderToCanvas } from './library.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -812,12 +813,26 @@ function refreshHintTokens(){
 }
 
 /* ================== LEVEL LOAD ================== */
+// Bounty jobs force their own fixed pacing (see loadBountyLevel) — this
+// remembers whatever the player actually had selected so it can be
+// restored the moment they leave the bounty for anything else, rather
+// than the override leaking into their next campaign/daily/impound
+// session. Null whenever no override is currently in effect.
+let preBountyMode = null;
+
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
       mode: mode.type, level: trackLevelId(),
       moves, time_s: Math.round((Date.now() - levelStart) / 1000),
     });
+  }
+  if(preBountyMode !== null){
+    save.settings.mode = preBountyMode;
+    setGameMode(preBountyMode);
+    updateModeSelectUI();
+    preBountyMode = null;
+    persist();
   }
 }
 
@@ -851,10 +866,22 @@ function loadBountyLevel(dateStr){
   abandonIfMidLevel();
   const lv = bountyFor(dateStr);
   if(!lv) return;
-  mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition };
+  // The mark decides the pacing same as it decides the car — "It is always
+  // in Heist or Pursuit mode depending on the job," never the player's own
+  // Settings choice. Remember that choice (preBountyMode) so
+  // abandonIfMidLevel can hand it back the moment this bounty is left.
+  const pacing = carById(carIdForBountyTier(lv.tier))?.pacing ?? 'heist';
+  if(save.settings.mode !== pacing){
+    preBountyMode = save.settings.mode;
+    save.settings.mode = pacing;
+    setGameMode(pacing);
+    updateModeSelectUI();
+  }
+  mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition, pacing };
   curLevel = lv;
+  persist();
   startBoard();
-  track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition });
+  track('bounty_start', { date: dateStr, number: mode.number, par: lv.m, tier: lv.tier, condition: lv.condition, pacing });
 }
 
 /* Impound Lot (N2, docs/NEXT-PLAN.md): endgame board list, unlocked once
@@ -885,7 +912,7 @@ function trackLevelId(){
 }
 
 function startBoard(){
-  stopSolutionReplay(false);   // a new attempt invalidates any in-flight replay
+  stopReplay(false);   // a new attempt invalidates any in-flight replay
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
@@ -1091,21 +1118,25 @@ function skipLevel(){
   advance();
 }
 
-/* ================== SOLUTION REPLAY (NEXT-PLAN N3e / v1.1) ==================
-   Offered on the win sheet only — the level is already cleared, so this
-   teaches par-matching for the 3-star retry without leaking solutions to
-   unsolved levels or undercutting the hint-token economy. Input stays
-   locked the whole time (solvedAnim is still true post-win); any tap
-   skips back to the win sheet. */
+/* ================== REPLAYS (win sheet only) ==================
+   Two distinct replays share this tap-to-skip / input-lock machinery — the
+   level is already cleared, so neither leaks anything to an unsolved level
+   or undercuts the hint-token economy:
+   - playSolutionReplay (NEXT-PLAN N3e / v1.1): the solver's own optimal
+     path — "here's the ideal way," for chasing the 3-star retry.
+   - playMoveReplay: the PLAYER's actual move sequence, sped up — "here's
+     what you just did," independent of whether it matched par.
+   Input stays locked the whole time (solvedAnim is still true post-win);
+   any tap skips back to the win sheet. */
 let replayToken = 0;
 
-function stopSolutionReplay(reshow){
+function stopReplay(reshow){
   replayToken++;
   document.removeEventListener('pointerdown', onReplaySkip);
   setNavLocked(false);
   if(reshow) showOverlay('winOverlay');
 }
-function onReplaySkip(){ sfx('ui'); stopSolutionReplay(true); }
+function onReplaySkip(){ sfx('ui'); stopReplay(true); }
 
 function playSolutionReplay(){
   cancelAuto();
@@ -1137,7 +1168,7 @@ function playSolutionReplay(){
       heroEl.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
       heroEl.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
       sfx('win');
-      setTimeout(() => { if(token === replayToken) stopSolutionReplay(true); }, 950);
+      setTimeout(() => { if(token === replayToken) stopReplay(true); }, 950);
       return;
     }
     const mv = sol.path[step++];
@@ -1157,6 +1188,61 @@ function playSolutionReplay(){
     updateGates();
     $('hudMoves').textContent = step;
     setTimeout(tick, 480);
+  };
+  setTimeout(tick, 500);
+}
+
+/* "Replay" on the win sheet — the player's own moves, sped up. `history`
+   holds a full board snapshot from before each non-merged move this
+   attempt (see pushHistory/undo); nothing touches it between the win and
+   this being clicked (input stays locked), so history[k] is exactly the
+   state after move k for k>0, and the last move's result is just whatever
+   `pieces`/decoupledHitches currently are — the win animation only sets an
+   inline transform on the hero element, it never mutates `pieces` itself. */
+function playMoveReplay(){
+  cancelAuto();
+  hideOverlay('winOverlay');
+  const token = ++replayToken;
+
+  const finalFrame = { pieces: pieces.map(p => ({ r: p.r, c: p.c })), decoupled: new Set(decoupledHitches) };
+  const frames = [...history.slice(1), finalFrame];
+
+  pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  decoupledHitches = new Set();
+  buildPieces();
+
+  if(!frames.length){ showOverlay('winOverlay'); return; }   // shouldn't happen — a win needs ≥1 move
+
+  setNavLocked(true);
+  $('hudMoves').textContent = 0;
+  track('move_replay', { mode: mode.type, level: trackLevelId(), moves: frames.length });
+  setTimeout(() => { if(token === replayToken) document.addEventListener('pointerdown', onReplaySkip); }, 80);
+
+  // Sped up relative to the optimal-solution replay's fixed 480ms/step, and
+  // scaled down further for long solves (Gridlock levels run up to 60
+  // moves) so watching your own clear back never takes longer than ~5s.
+  const stepMs = Math.max(90, Math.min(260, 4800 / frames.length));
+
+  let step = 0;
+  const tick = () => {
+    if(token !== replayToken) return;
+    const decoupledBefore = decoupledHitches.size;
+    const frame = frames[step++];
+    pieces.forEach((p, i) => { p.r = frame.pieces[i].r; p.c = frame.pieces[i].c; });
+    decoupledHitches = new Set(frame.decoupled);
+    sfx(decoupledHitches.size > decoupledBefore ? 'decouple' : 'snap');
+    renderPositions(true);
+    updateGates();
+    $('hudMoves').textContent = step;
+    if(step >= frames.length){
+      const heroEl = board.querySelector('.piece[data-idx="0"]');
+      heroEl.style.transition = 'transform .9s cubic-bezier(.5,0,.9,.4)';
+      heroEl.style.transform = `translate(${(N + 2.6) * CELL}px, ${pieces[0].r * CELL}px)`;
+      sfx('win');
+      setTimeout(() => { if(token === replayToken) stopReplay(true); }, 950);
+      return;
+    }
+    setTimeout(tick, stepMs);
   };
   setTimeout(tick, 500);
 }
@@ -1213,7 +1299,7 @@ function winSequence(){
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
   } else if(mode.type === 'bounty'){
-    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed, gameMode: save.settings.mode });
+    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed });
     const prev = save.bounties.done[mode.date];
     save.bounties.done[mode.date] = {
       moves: prev ? Math.min(prev.moves, moves) : moves,
@@ -1249,7 +1335,7 @@ function showWinSheet(stars){
   $('winTitle').textContent = mode.type === 'daily'
     ? t('win.daily', { n: mode.number })
     : mode.type === 'bounty'
-    ? t('win.bounty', { n: mode.number })
+    ? t('win.bounty')
     : mode.type === 'impound'
     ? t('win.impound', { n: curImpound + 1 })
     : mode.type === 'sandbox'
@@ -1257,6 +1343,10 @@ function showWinSheet(stars){
     : t('win.title', { n: cur + 1 });
   $('winMoves').textContent = moves;
   $('winPar').textContent = par;
+  // A job's briefing is the car and the nightly condition, never a level
+  // number or a par baseline (see the bounty sheet) — the win sheet stays
+  // consistent with that.
+  $('winParRow').hidden = mode.type === 'bounty';
   $('winBest').textContent = mode.type === 'daily'
     ? (daily().done[mode.date]?.moves ?? moves)
     : mode.type === 'bounty'
@@ -1418,9 +1508,9 @@ function buildGarageList(){
     return h;
   };
 
-  const tile = (id, name, tier, skin, isOwned, hint) => {
+  const tile = (id, name, tier, skin, isOwned, hint, limited) => {
     const b = document.createElement('button');
-    b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '');
+    b.className = 'car-tile' + (isOwned ? ' owned' : ' locked') + (save.equippedCar === id ? ' equipped' : '') + (limited ? ' limited' : '');
     const art = document.createElement('div');
     art.className = 'car-tile-art';
     if(isOwned) art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin, headlights: false });
@@ -1457,7 +1547,7 @@ function buildGarageList(){
   });
   holder.appendChild(groupHeader(t('garage.marks')));
   CARS.filter(c => c.bountyTier).forEach(car => {
-    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car)));
+    holder.appendChild(tile(car.id, car.name, car.tier, car.skin, owned.has(car.id), lockedHintFor(car), true));
   });
 }
 
@@ -1768,11 +1858,13 @@ function renderBountySheet(){
   const lv = bountyFor(today);
   if(!lv){ return; }   // before BOUNTY_EPOCH — shouldn't happen once shipped
   const done = save.bounties.done[today];
+  const car = carById(carIdForBountyTier(lv.tier));
 
   $('bountyTierChip').textContent = t('tier.' + lv.tier);
   $('bountyTierChip').className = 'car-tier tier-' + lv.tier;
-  $('bountyPar').textContent = lv.m;
+  $('bountyPacingChip').textContent = t('mode.' + car.pacing);
   $('bountyCond').textContent = t('bounty.cond.' + lv.condition);
+  $('bountyNarrative').textContent = car.narrative;
   renderPeek(lv, $('bountyBoard'));
 
   if(done){
@@ -1871,7 +1963,8 @@ function applyStrings(){
   $('labWinMoves').textContent = t('win.moves');
   $('labWinPar').textContent = t('win.par');
   $('labWinBest').textContent = t('win.best');
-  $('replayBtn').textContent = t('btn.replay');
+  $('tryAgainBtn').textContent = t('btn.tryagain');
+  $('moveReplayBtn').textContent = t('btn.replay');
   $('watchSolBtn').textContent = t('win.watch');
   $('dailyTitle').textContent = t('daily.title');
   $('dailySub').textContent = t('daily.sub');
@@ -1880,7 +1973,6 @@ function applyStrings(){
   $('dailyNote').textContent = t('daily.backfill');
   $('bountyTitle').textContent = t('bounty.title');
   $('bountySub').textContent = t('bounty.sub');
-  $('labBountyPar').textContent = t('hud.par');
   $('settingsTitle').textContent = t('settings.title');
   $('labSfx').textContent = t('settings.sfx');
   $('labMusic').textContent = t('settings.music');
@@ -1894,7 +1986,7 @@ function applyStrings(){
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
   $('labTheme').textContent = t('theme.label');
-  $('themePlayBtn').textContent = t('theme.play');
+  updateThemeButtonUI();
   $('labRestore').textContent = t('btn.restore');
   $('proTitle').textContent = t('pro.title');
   $('proPitch').textContent = t('pro.pitch');
@@ -1923,13 +2015,16 @@ function applyStrings(){
   $('introPlayLabel').textContent = t('intro.play');
 }
 
-function updateThemeButtonText(){
-  const isPlaying = menuAudio && !menuAudio.paused;
-  $('themePlayBtn').textContent = isPlaying ? t('theme.pause') : t('theme.play');
+function updateThemeButtonUI(){
+  const isPlaying = isThemePlaying();
+  $('themePlayIcon').hidden = isPlaying;
+  $('themePauseIcon').hidden = !isPlaying;
+  $('themePlayBtn').setAttribute('aria-label', t(isPlaying ? 'theme.pause' : 'theme.play'));
 }
 
 /* ================== GLOBAL WIRING ================== */
 function wire(){
+  setThemeStateListener(updateThemeButtonUI);
   $('levelsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic();
     tabChapter = mode.type === 'impound' ? IMPOUND_TAB : chapterOf(cur);
@@ -1937,8 +2032,11 @@ function wire(){
   });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
   $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
-  $('settingsBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay'); });
-  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); updateThemeButtonText(); });
+  $('settingsBtn').addEventListener('click', () => {
+    sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay');
+    updateThemeButtonUI();   // re-sync in case the theme ended/kept playing while Settings was closed
+  });
+  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     e.target.closest('.overlay').classList.remove('show'); sfx('ui');
     if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
@@ -1970,11 +2068,13 @@ function wire(){
   $('boardResumeBtn').addEventListener('click', togglePursuitPause);
   $('hintBtn').addEventListener('click', showHint);
   $('skipBtn').addEventListener('click', skipLevel);
-  $('replayBtn').addEventListener('click', () => {
+  $('tryAgainBtn').addEventListener('click', () => {
     cancelAuto(); sfx('ui');
     proceedOrReveal(() => { hideOverlay('winOverlay'); startBoard(); });
   });
+  $('moveReplayBtn').addEventListener('click', () => { sfx('ui'); playMoveReplay(); });
   $('watchSolBtn').addEventListener('click', () => { sfx('ui'); playSolutionReplay(); });
+  $('winCloseBtn').addEventListener('click', () => { sfx('ui'); cancelAuto(); hideOverlay('winOverlay'); });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);
@@ -2146,7 +2246,7 @@ function wireAdmin(){
 const SB_KEY = 'sandbox_levels_v1';
 const SB_CELL = 46;                     // must match --sbc in css
 let sbTool = 'car', sbDir = 'h';
-let sbState = { pieces: [], walls: [] };   // pieces: {r,c,len,dir,hero?}
+let sbState = { pieces: [], walls: [] };   // pieces: {r,c,len,dir,hero?,photo?}
 let sbSaved = [];
 
 function openSandbox(){
@@ -2154,6 +2254,68 @@ function openSandbox(){
   showOverlay('sandboxOverlay');
   sbRender();
   sbRenderSaved();
+  sbRenderPicker();
+}
+
+/* Car/truck picker: drag a specific asset from the library straight onto
+   the grid, instead of only getting whatever the generic Car/Truck tool's
+   round-robin would pick. Shown only while one of those two tools is
+   active — Hero/Wall/Erase have nothing to pick from. */
+function sbRenderPicker(){
+  const holder = $('sbPicker');
+  holder.innerHTML = '';
+  if(sbTool !== 'car' && sbTool !== 'truck') return;
+  const category = sbTool === 'car' ? 'sedans' : 'trucks';
+  const len = sbTool === 'car' ? 2 : 3;
+  combinedPhotos(category).forEach(entry => {
+    const b = document.createElement('div');
+    b.className = 'sb-pick';
+    b.innerHTML = vehicleSVG(0, len, 'h', false, { photoOverride: entry.img });
+    b.addEventListener('pointerdown', e => sbStartPickerDrag(e, entry.img, len));
+    holder.appendChild(b);
+  });
+}
+
+/* Pointer-tracked drag from a picker thumbnail to a board cell — a ghost
+   element follows the pointer (position:fixed, viewport coordinates) the
+   same way sbAttachBoard's in-board piece drag does, just starting from
+   outside the board instead of an existing piece. */
+function sbStartPickerDrag(e, img, len){
+  e.preventDefault();
+  const pickEl = e.currentTarget;
+  pickEl.classList.add('dragging');
+  const ghost = document.createElement('div');
+  ghost.className = 'sb-drag-ghost';
+  ghost.innerHTML = vehicleSVG(0, len, sbDir, false, { photoOverride: img });
+  document.body.appendChild(ghost);
+  const move = ev => {
+    ghost.style.left = (ev.clientX - 46) + 'px';
+    ghost.style.top = (ev.clientY - 23) + 'px';
+  };
+  move(e);
+  const up = ev => {
+    document.removeEventListener('pointermove', move);
+    pickEl.classList.remove('dragging');
+    ghost.remove();
+    const rect = $('sbBoard').getBoundingClientRect();
+    if(ev.clientX >= rect.left && ev.clientX <= rect.right && ev.clientY >= rect.top && ev.clientY <= rect.bottom){
+      const cell = sbCellFromEvent(ev);
+      sbPlaceFromPicker(cell.r, cell.c, img, len);
+    }
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', up, { once: true });
+}
+
+function sbPlaceFromPicker(r, c, img, len){
+  const p = {
+    r: Math.min(Math.max(0, r), N - (sbDir === 'v' ? len : 1)),
+    c: Math.min(Math.max(0, c), N - (sbDir === 'h' ? len : 1)),
+    len, dir: sbDir, photo: img,
+  };
+  if(!sbFits(p)){ sfx('deny'); return; }
+  sbState.pieces.push(p);
+  sbRender();
 }
 
 function sbGrid(){
@@ -2221,7 +2383,7 @@ function sbRender(){
     el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
     el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
     const photoOrd = p.hero ? 0 : (p.len >= 3 ? truckOrd++ : sedanOrd++);
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd });
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo });
     b.appendChild(el);
   });
   sbStatus();
@@ -2437,6 +2599,7 @@ function wireSandbox(){
   document.querySelectorAll('.sb-tool').forEach(btn => btn.addEventListener('click', () => {
     sbTool = btn.dataset.tool;
     document.querySelectorAll('.sb-tool').forEach(x => x.classList.toggle('cur', x === btn));
+    sbRenderPicker();
   }));
   $('sbDirBtn').addEventListener('click', () => {
     sbDir = sbDir === 'h' ? 'v' : 'h';
@@ -2465,7 +2628,330 @@ function wireSandbox(){
     const ok = await copyToClipboard(JSON.stringify(sbSaved.map(sbLevelExportObj), null, 2));
     toast(ok ? `Copied ${sbSaved.length} level(s)` : t('toast.copyfail'));
   });
+  $('sbLibraryBtn').addEventListener('click', () => { sfx('ui'); openLibrary(); });
   sbAttachBoard();
+}
+
+/* ================== ADMIN ASSET LIBRARY ================== */
+let libTab = 'sedans';
+// Index within lib[libTab] currently showing its inline rename input
+// instead of its normal tag+buttons — cleared on tab switch and after
+// commit/cancel. Only 'lib'-origin entries are renamable: base entries are
+// hardcoded array constants with no per-instance name to persist (that's
+// what Duplicate is for — it copies a base entry into the editable layer,
+// where it then CAN be renamed).
+let libRenamingIndex = null;
+
+function openLibrary(){
+  showOverlay('libraryOverlay');
+  renderLibraryOverlay();
+}
+
+// Copies any entry (base or lib-origin) into the library's editable layer
+// under a "-copy" tag, then drops the new card straight into rename mode —
+// this is the "duplicate and save as" flow: one action, immediately
+// followed by naming the result. Duplicating a base entry is how an admin
+// gets an editable variant of a hardcoded asset (same image, independently
+// recolorable/renamable) without touching source.
+async function duplicateAsset(entry){
+  sfx('ui');
+  const copy = Object.assign({}, entry, { color: `${entry.color || 'asset'}-copy` });
+  await addAsset(libTab, copy);
+  libRenamingIndex = (getLibrary()[libTab] || []).length - 1;
+  renderLibraryOverlay();
+  sbRenderPicker();
+  toast('Duplicated — rename it below');
+}
+
+function libCard(entry, len, meta){
+  const card = document.createElement('div');
+  card.className = 'lib-card' + (meta.isDisabled ? ' disabled' : '');
+  const art = document.createElement('div');
+  art.className = 'lib-card-art';
+  art.innerHTML = vehicleSVG(0, len, 'h', false, { photoOverride: entry.img });
+  card.appendChild(art);
+
+  if(meta.isRenaming){
+    const input = document.createElement('input');
+    input.type = 'text'; input.className = 'lib-card-rename'; input.autocomplete = 'off';
+    input.value = entry.color || '';
+    card.appendChild(input);
+    const commit = async () => {
+      const val = input.value.trim();
+      if(val) await updateAsset(libTab, meta.index, { color: val });
+      libRenamingIndex = null;
+      renderLibraryOverlay();
+      sbRenderPicker();
+    };
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){ e.preventDefault(); sfx('ui'); commit(); }
+      if(e.key === 'Escape'){ sfx('ui'); libRenamingIndex = null; renderLibraryOverlay(); }
+    });
+    const row = document.createElement('div');
+    row.className = 'lib-card-row';
+    const save = document.createElement('button');
+    save.className = 'btn primary'; save.type = 'button'; save.textContent = 'Save';
+    save.addEventListener('click', () => { sfx('ui'); commit(); });
+    row.appendChild(save);
+    const cancel = document.createElement('button');
+    cancel.className = 'btn'; cancel.type = 'button'; cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => { sfx('ui'); libRenamingIndex = null; renderLibraryOverlay(); });
+    row.appendChild(cancel);
+    card.appendChild(row);
+    return card;
+  }
+
+  const tag = document.createElement('div');
+  tag.className = 'lib-card-tag';
+  tag.textContent = entry.color || (entry.fixed ? 'fixed' : `hue ${entry.hue ?? 0}`);
+  card.appendChild(tag);
+
+  const row = document.createElement('div');
+  row.className = 'lib-card-row';
+  const dup = document.createElement('button');
+  dup.className = 'btn'; dup.type = 'button'; dup.textContent = 'Duplicate';
+  dup.addEventListener('click', () => duplicateAsset(entry));
+  row.appendChild(dup);
+
+  if(meta.origin === 'base'){
+    const btn = document.createElement('button');
+    btn.className = 'btn'; btn.type = 'button';
+    btn.textContent = meta.isDisabled ? 'Enable' : 'Disable';
+    btn.addEventListener('click', async () => {
+      sfx('ui');
+      await setBaseDisabled(entry.img, !meta.isDisabled);
+      renderLibraryOverlay();
+      sbRenderPicker();
+    });
+    row.appendChild(btn);
+    card.appendChild(row);
+  } else {
+    const ren = document.createElement('button');
+    ren.className = 'btn'; ren.type = 'button'; ren.textContent = 'Rename';
+    ren.addEventListener('click', () => {
+      sfx('ui');
+      libRenamingIndex = meta.index;
+      renderLibraryOverlay();
+    });
+    row.appendChild(ren);
+    card.appendChild(row);
+
+    const row2 = document.createElement('div');
+    row2.className = 'lib-card-row';
+    const del = document.createElement('button');
+    del.className = 'btn'; del.type = 'button'; del.textContent = 'Delete';
+    del.addEventListener('click', async () => {
+      sfx('ui');
+      await removeAsset(libTab, meta.index);
+      renderLibraryOverlay();
+      sbRenderPicker();
+    });
+    row2.appendChild(del);
+    card.appendChild(row2);
+  }
+  return card;
+}
+
+function renderLibraryHeroTab(){
+  const grid = $('libGrid');
+  grid.innerHTML = '';
+  const lib = getLibrary();
+  CARS.forEach(car => {
+    const row = document.createElement('div');
+    row.className = 'lib-hero-row';
+    const art = document.createElement('div');
+    art.className = 'lib-hero-art';
+    art.innerHTML = vehicleSVG(0, 2, 'h', true, { skin: skinFor(car.id), headlights: false });
+    row.appendChild(art);
+    const name = document.createElement('div');
+    name.className = 'lib-hero-name';
+    name.textContent = car.name;
+    row.appendChild(name);
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.className = 'lib-hero-file';
+    const photo = lib.heroPhotos[car.id];
+    const uploadBtn = document.createElement('button');
+    uploadBtn.className = 'btn'; uploadBtn.type = 'button';
+    uploadBtn.textContent = photo ? 'Replace' : 'Assign';
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if(!file) return;
+      // Hero uploads skip the interactive preview (scale/background-removal
+      // controls) the main library add-form has — a fixed 97% centered fit
+      // is a reasonable default per-car, and building a 24-row-deep preview
+      // panel for a much less frequent action wasn't worth the UI weight.
+      const img = await loadImageFromFile(file);
+      const canvas = renderToCanvas(img, 'sedans', { scalePercent: 97 });
+      await setHeroPhoto(car.id, canvas.toDataURL('image/png'));
+      renderLibraryOverlay();
+      sfx('ui');
+      toast(`Assigned ${car.name}`);
+    });
+    row.appendChild(fileInput);
+    row.appendChild(uploadBtn);
+    if(photo){
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'btn'; clearBtn.type = 'button'; clearBtn.textContent = 'Clear';
+      clearBtn.addEventListener('click', async () => {
+        sfx('ui');
+        await clearHeroPhoto(car.id);
+        renderLibraryOverlay();
+      });
+      row.appendChild(clearBtn);
+    }
+    grid.appendChild(row);
+  });
+}
+
+function renderLibraryOverlay(){
+  $('libAddForm').hidden = libTab === 'hero';
+  if(libTab === 'hero'){ renderLibraryHeroTab(); return; }
+
+  const grid = $('libGrid');
+  grid.innerHTML = '';
+  const lib = getLibrary();
+  const disabled = new Set(lib.disabledBase);
+  const len = libTab === 'trucks' ? 3 : 2;
+
+  basePhotos(libTab).forEach(entry => {
+    grid.appendChild(libCard(entry, len, { origin: 'base', isDisabled: disabled.has(entry.img) }));
+  });
+  let renamingCard = null;
+  (lib[libTab] || []).forEach((entry, i) => {
+    const card = libCard(entry, len, { origin: 'lib', index: i, isRenaming: i === libRenamingIndex });
+    if(i === libRenamingIndex) renamingCard = card;
+    grid.appendChild(card);
+  });
+  if(renamingCard){
+    const input = renamingCard.querySelector('input');
+    if(input){ input.focus(); input.select(); }
+    renamingCard.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+
+// The currently-loaded source image for the add-form's live preview — kept
+// in memory (not re-read from the file input) so toggling "remove
+// background" or dragging any slider can re-render instantly without
+// re-decoding the file each time.
+let libPendingImg = null;
+
+// [rangeId, valueLabelId, default] for every preview-adjustment slider —
+// one list drives both the 'input' wiring and the two reset paths (the
+// explicit Reset-adjustments button, and clearing the form after Add/on
+// tab switch) so the defaults only live in one place.
+const LIB_SLIDERS = [
+  ['libTolerance', 'libToleranceVal', 32],
+  ['libScaleRange', 'libScaleVal', 97],
+  ['libRotate', 'libRotateVal', 0],
+  ['libBrightness', 'libBrightnessVal', 100],
+  ['libContrast', 'libContrastVal', 100],
+  ['libSaturation', 'libSaturationVal', 100],
+  ['libHue', 'libHueVal', 0],
+  ['libColorizeAmount', 'libColorizeAmountVal', 0],
+  ['libColorizeHue', 'libColorizeHueVal', 0],
+];
+
+function libResetSliders(){
+  LIB_SLIDERS.forEach(([id, labelId, def]) => {
+    $(id).value = def;
+    $(labelId).textContent = def;
+  });
+  $('libToleranceLab').hidden = !$('libRemoveBg').checked;
+}
+
+function libRenderPreview(){
+  if(!libPendingImg) return;
+  const canvas = renderToCanvas(libPendingImg, libTab, {
+    removeBackground: $('libRemoveBg').checked,
+    tolerance: Number($('libTolerance').value),
+    scalePercent: Number($('libScaleRange').value),
+    rotate: Number($('libRotate').value),
+    brightness: Number($('libBrightness').value),
+    contrast: Number($('libContrast').value),
+    saturation: Number($('libSaturation').value),
+    hue: Number($('libHue').value),
+    colorizeHue: Number($('libColorizeHue').value),
+    colorizeAmount: Number($('libColorizeAmount').value),
+  });
+  const preview = $('libPreviewCanvas');
+  preview.width = canvas.width; preview.height = canvas.height;
+  preview.getContext('2d').drawImage(canvas, 0, 0);
+}
+
+function wireLibrary(){
+  document.querySelectorAll('#libTabs .tab').forEach(btn => btn.addEventListener('click', () => {
+    sfx('ui');
+    libTab = btn.dataset.libtab;
+    // Switching category mid-upload: base canvas size (sedans/trucks) may
+    // differ, and Hero Art has no add-form at all — clear the pending
+    // preview rather than carry a stale one across tabs.
+    libPendingImg = null;
+    libRenamingIndex = null;
+    $('libAddFile').value = '';
+    $('libRemoveBg').checked = false;
+    libResetSliders();
+    $('libPreviewWrap').hidden = true;
+    document.querySelectorAll('#libTabs .tab').forEach(x => x.classList.toggle('cur', x === btn));
+    renderLibraryOverlay();
+  }));
+  $('libAddFixed').addEventListener('change', () => {
+    $('libAddHue').hidden = $('libAddFixed').checked;
+  });
+  $('libAddFile').addEventListener('change', async () => {
+    const file = $('libAddFile').files[0];
+    if(!file){ libPendingImg = null; $('libPreviewWrap').hidden = true; return; }
+    libPendingImg = await loadImageFromFile(file);
+    $('libPreviewWrap').hidden = false;
+    libRenderPreview();
+  });
+  $('libRemoveBg').addEventListener('change', () => {
+    $('libToleranceLab').hidden = !$('libRemoveBg').checked;
+    libRenderPreview();
+  });
+  LIB_SLIDERS.forEach(([id, labelId]) => {
+    $(id).addEventListener('input', () => {
+      $(labelId).textContent = $(id).value;
+      libRenderPreview();
+    });
+  });
+  $('libResetAdjustBtn').addEventListener('click', () => {
+    sfx('ui');
+    libResetSliders();
+    libRenderPreview();
+  });
+  $('libAddBtn').addEventListener('click', async () => {
+    if(!libPendingImg){ toast('Choose an image first'); return; }
+    const color = ($('libAddColor').value || '').trim();
+    if(!color){ toast('Give it a colour tag'); return; }
+    const fixed = $('libAddFixed').checked;
+    const hue = Number($('libAddHue').value) || 0;
+    const dataUrl = $('libPreviewCanvas').toDataURL('image/png');
+    const entry = fixed ? { img: dataUrl, color, fixed: true } : { img: dataUrl, color, hue };
+    await addAsset(libTab, entry);
+    libPendingImg = null;
+    $('libAddFile').value = ''; $('libAddColor').value = ''; $('libAddHue').value = '';
+    $('libRemoveBg').checked = false;
+    libResetSliders();
+    $('libPreviewWrap').hidden = true;
+    renderLibraryOverlay();
+    sbRenderPicker();
+    sfx('ui');
+    toast('Added to library');
+  });
+  $('libExportBtn').addEventListener('click', async () => {
+    sfx('ui');
+    const ok = await copyToClipboard(JSON.stringify(getLibrary(), null, 2));
+    toast(ok ? 'Copied — hand it to tools/promote-library.mjs' : t('toast.copyfail'));
+  });
+  $('libResetBtn').addEventListener('click', async () => {
+    sfx('ui');
+    await resetLibrary();
+    renderLibraryOverlay();
+    sbRenderPicker();
+    toast('Library cleared');
+  });
+  $('adminLibraryBtn').addEventListener('click', () => { sfx('ui'); openLibrary(); });
 }
 
 /* Browsers block audio.play() until a user gesture; retry menu music
@@ -2478,6 +2964,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
 (async function boot(){
   initI18n();
   applyStrings();
+  await loadLibrary();
   const loaded = await load('save_v1');
   if(loaded){
     save = Object.assign(save, loaded);
@@ -2513,12 +3000,19 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   wirePro();
   wireAdmin();
   wireSandbox();
+  wireLibrary();
   await sbLoadSaved();
   applyAdminUI();
   layout();
   const startAt = Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound()));
   loadLevel(startAt);
   startMenuMusic();
+  // Deferred so it never competes with this first level's own images —
+  // idle time on the start screen (before a mode's even picked) is enough
+  // to warm most of the library before it's actually needed.
+  const warmLater = () => warmVehiclePhotos();
+  if('requestIdleCallback' in window) requestIdleCallback(warmLater, { timeout: 4000 });
+  else setTimeout(warmLater, 1500);
   // Poster start screen already has the `show` class in the static HTML
   // (no flash-of-bare-board while this async boot sequence runs) and
   // shows on every launch; the how-to-play/mode-picker popup that follows
