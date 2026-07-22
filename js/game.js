@@ -18,7 +18,7 @@ import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
-import { loadLibrary, getLibrary, addAsset, updateAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, renderToCanvas } from './library.js';
+import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -2726,6 +2726,18 @@ function libCard(entry, len, meta){
     row.appendChild(btn);
     card.appendChild(row);
   } else {
+    // Edit only applies to lib-origin entries: it re-opens the asset's own
+    // img in the add-form's full pipeline and saves back via replaceAsset
+    // (in place), which needs a real persisted entry at a real index —
+    // a base entry has neither.
+    const edit = document.createElement('button');
+    edit.className = 'btn'; edit.type = 'button'; edit.textContent = 'Edit';
+    edit.addEventListener('click', () => libEditAsset(entry, meta.index));
+    row.appendChild(edit);
+    card.appendChild(row);
+
+    const row2 = document.createElement('div');
+    row2.className = 'lib-card-row';
     const ren = document.createElement('button');
     ren.className = 'btn'; ren.type = 'button'; ren.textContent = 'Rename';
     ren.addEventListener('click', () => {
@@ -2733,11 +2745,7 @@ function libCard(entry, len, meta){
       libRenamingIndex = meta.index;
       renderLibraryOverlay();
     });
-    row.appendChild(ren);
-    card.appendChild(row);
-
-    const row2 = document.createElement('div');
-    row2.className = 'lib-card-row';
+    row2.appendChild(ren);
     const del = document.createElement('button');
     del.className = 'btn'; del.type = 'button'; del.textContent = 'Delete';
     del.addEventListener('click', async () => {
@@ -2830,11 +2838,32 @@ function renderLibraryOverlay(){
   }
 }
 
-// The currently-loaded source image for the add-form's live preview — kept
-// in memory (not re-read from the file input) so toggling "remove
-// background" or dragging any slider can re-render instantly without
-// re-decoding the file each time.
+// The currently-loaded NATIVE-resolution source image — kept in memory
+// (not re-read from the file input) so the final "Add"/"Save" commit can
+// bake the asset at full quality. Live preview re-renders use
+// libPreviewSrc instead (a downscaled copy made once, right after
+// loading) — reusing the native image for every drag-tick render would
+// pay a full-resolution resample cost on every single frame, which is
+// what actually made the sliders feel broken on a real 12-megapixel
+// phone photo.
 let libPendingImg = null;
+let libPreviewSrc = null;
+
+// Index within lib[libTab] currently being re-edited (null = plain "Add"
+// mode). Set by libEditAsset(), cleared by libCancelEdit()/a successful
+// save/switching tabs.
+let libEditingIndex = null;
+
+// Independent, centered non-uniform stretch multipliers (%) driven by the
+// preview's drag handles — not a pair of range inputs, since dragging a
+// handle is the whole point of "transform points" rather than a slider.
+let libStretchX = 100, libStretchY = 100;
+
+// The last render's placement rect (in the preview canvas's own pixel
+// space, from renderToCanvas's rectOut) — used to position the transform
+// handles and to give handle-dragging a stable, stretch-independent base
+// size to compute percentages against.
+let libPreviewRect = null;
 
 // [rangeId, valueLabelId, default] for every preview-adjustment slider —
 // one list drives both the 'input' wiring and the two reset paths (the
@@ -2858,11 +2887,19 @@ function libResetSliders(){
     $(labelId).textContent = def;
   });
   $('libToleranceLab').hidden = !$('libRemoveBg').checked;
+  libStretchX = 100; libStretchY = 100;
+  $('libStretchReadout').textContent = 'Stretch 100% × 100%';
 }
 
-function libRenderPreview(){
-  if(!libPendingImg) return;
-  const canvas = renderToCanvas(libPendingImg, libTab, {
+// Everything renderToCanvas needs, read fresh off the form each call.
+// `preview=true` adds previewMaxDim so live re-renders (fired on every
+// slider tick / handle-drag frame) work off a downscaled copy instead of
+// the source photo's full resolution — see renderToCanvas's own comment
+// for why that matters (this was the actual cause of "sliders do
+// nothing" on a real phone photo). The one-time commit (Add/Save) calls
+// this with preview=false to bake the final asset at full resolution.
+function libGatherOpts(preview){
+  const opts = {
     removeBackground: $('libRemoveBg').checked,
     tolerance: Number($('libTolerance').value),
     scalePercent: Number($('libScaleRange').value),
@@ -2873,25 +2910,176 @@ function libRenderPreview(){
     hue: Number($('libHue').value),
     colorizeHue: Number($('libColorizeHue').value),
     colorizeAmount: Number($('libColorizeAmount').value),
+    stretchX: libStretchX,
+    stretchY: libStretchY,
+  };
+  if(preview) opts.previewMaxDim = 1000;
+  return opts;
+}
+
+let libPreviewErrorShown = false;
+
+function libRenderPreview(){
+  if(!libPreviewSrc) return;
+  try{
+    const rect = {};
+    const canvas = renderToCanvas(libPreviewSrc, libTab, libGatherOpts(true), rect);
+    const preview = $('libPreviewCanvas');
+    preview.width = canvas.width; preview.height = canvas.height;
+    preview.getContext('2d').drawImage(canvas, 0, 0);
+    libPreviewRect = rect;
+    libPositionHandles();
+    libPreviewErrorShown = false;
+  }catch(err){
+    console.error('Library preview render failed:', err);
+    if(!libPreviewErrorShown){
+      libPreviewErrorShown = true;
+      toast('Preview failed — try a smaller image or fewer adjustments');
+    }
+  }
+}
+
+// Coalesces bursts of slider-drag/handle-drag 'input'/'pointermove' events
+// (a real touch drag can fire dozens per second) down to at most one
+// re-render per animation frame, so a rapid drag can't pile up many
+// overlapping full pipeline runs.
+let libPreviewRAF = null;
+function scheduleLibPreview(){
+  if(libPreviewRAF) return;
+  libPreviewRAF = requestAnimationFrame(() => {
+    libPreviewRAF = null;
+    libRenderPreview();
   });
-  const preview = $('libPreviewCanvas');
-  preview.width = canvas.width; preview.height = canvas.height;
-  preview.getContext('2d').drawImage(canvas, 0, 0);
+}
+
+// Places the 8 transform handles around the last render's rect, mapping
+// from the canvas's internal pixel space to on-screen CSS pixels via
+// getBoundingClientRect (robust regardless of how object-fit/max-height
+// actually resolved the canvas's displayed size).
+function libPositionHandles(){
+  if(!libPreviewRect) return;
+  const canvas = $('libPreviewCanvas');
+  const stage = $('libPreviewStage');
+  const canvasRect = canvas.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  if(!canvasRect.width || !canvasRect.height) return;
+  const sx = canvasRect.width / canvas.width;
+  const sy = canvasRect.height / canvas.height;
+  const offX = canvasRect.left - stageRect.left;
+  const offY = canvasRect.top - stageRect.top;
+  const { x, y, w, h } = libPreviewRect;
+  const pts = {
+    nw: [x, y], n: [x + w / 2, y], ne: [x + w, y],
+    e: [x + w, y + h / 2], se: [x + w, y + h], s: [x + w / 2, y + h],
+    sw: [x, y + h], w: [x, y + h / 2],
+  };
+  document.querySelectorAll('#libPreviewStage .lib-xform-handle').forEach(el => {
+    const [px, py] = pts[el.dataset.handle];
+    el.style.left = `${offX + px * sx}px`;
+    el.style.top = `${offY + py * sy}px`;
+  });
+  $('libStretchReadout').textContent = `Stretch ${Math.round(libStretchX)}% × ${Math.round(libStretchY)}%`;
+}
+
+// Drag-to-stretch: each handle nudges libStretchX and/or libStretchY based
+// on which cardinal letters its name contains ('nw' touches both the
+// n-branch and w-branch, 'e' touches only the e-branch, etc). Stretch is
+// always centered (matching how every render here centers the car in the
+// canvas), so growing one edge by `d` grows the total dimension by `2d`.
+function libWireHandles(){
+  document.querySelectorAll('#libPreviewStage .lib-xform-handle').forEach(el => {
+    el.addEventListener('pointerdown', e => {
+      if(!libPreviewRect) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const handle = el.dataset.handle;
+      const startX = e.clientX, startY = e.clientY;
+      const startStretchX = libStretchX, startStretchY = libStretchY;
+      const canvas = $('libPreviewCanvas');
+      const canvasRect = canvas.getBoundingClientRect();
+      const pxToCanvasX = canvas.width / canvasRect.width;
+      const pxToCanvasY = canvas.height / canvasRect.height;
+      // Un-stretch the current rect back to its 100%/100% size so drag
+      // sensitivity (% per pixel) stays constant regardless of the
+      // stretch level already dialed in when the drag starts.
+      const baseW = libPreviewRect.w / (startStretchX / 100);
+      const baseH = libPreviewRect.h / (startStretchY / 100);
+
+      const onMove = ev => {
+        const dxCanvas = (ev.clientX - startX) * pxToCanvasX;
+        const dyCanvas = (ev.clientY - startY) * pxToCanvasY;
+        if(handle.includes('e')) libStretchX = startStretchX + (dxCanvas * 2 / baseW) * 100;
+        if(handle.includes('w')) libStretchX = startStretchX - (dxCanvas * 2 / baseW) * 100;
+        if(handle.includes('s')) libStretchY = startStretchY + (dyCanvas * 2 / baseH) * 100;
+        if(handle.includes('n')) libStretchY = startStretchY - (dyCanvas * 2 / baseH) * 100;
+        libStretchX = Math.max(20, Math.min(400, libStretchX));
+        libStretchY = Math.max(20, Math.min(400, libStretchY));
+        scheduleLibPreview();
+      };
+      const onUp = () => {
+        el.releasePointerCapture(e.pointerId);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  });
+}
+
+// Resets the add-form back to a blank "Add" state — shared by tab
+// switches, a successful Add/Save, and explicit Cancel-edit.
+function libCancelEdit(){
+  libEditingIndex = null;
+  libPendingImg = null;
+  libPreviewSrc = null;
+  $('libEditBanner').hidden = true;
+  $('libAddBtn').textContent = 'Add to library';
+  $('libAddFile').value = '';
+  $('libAddColor').value = ''; $('libAddHue').value = '';
+  $('libAddFixed').checked = true; $('libAddHue').hidden = true;
+  $('libRemoveBg').checked = false;
+  libResetSliders();
+  $('libPreviewWrap').hidden = true;
+}
+
+// Re-opens an existing lib-origin entry in the add-form's full image
+// pipeline (all sliders + transform handles) plus its name/tag fields, so
+// an admin can touch up an asset already in the library instead of only
+// being able to re-upload from scratch. Saves back via replaceAsset at
+// the same index rather than creating a new entry (that's what Duplicate
+// is for).
+async function libEditAsset(entry, index){
+  sfx('ui');
+  libEditingIndex = index;
+  libPendingImg = await loadImageFromDataUrl(entry.img);
+  libPreviewSrc = downscaleForPreview(libPendingImg);
+  $('libAddColor').value = entry.color || '';
+  const fixed = !!entry.fixed;
+  $('libAddFixed').checked = fixed;
+  $('libAddHue').hidden = fixed;
+  $('libAddHue').value = entry.hue ?? 0;
+  $('libRemoveBg').checked = false;
+  libResetSliders();
+  $('libEditBanner').hidden = false;
+  $('libEditBannerName').textContent = entry.color || 'asset';
+  $('libAddBtn').textContent = 'Save changes';
+  $('libPreviewWrap').hidden = false;
+  libRenderPreview();
+  $('libAddForm').scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 function wireLibrary(){
+  libWireHandles();
+  $('libEditCancelBtn').addEventListener('click', () => { sfx('ui'); libCancelEdit(); });
   document.querySelectorAll('#libTabs .tab').forEach(btn => btn.addEventListener('click', () => {
     sfx('ui');
     libTab = btn.dataset.libtab;
     // Switching category mid-upload: base canvas size (sedans/trucks) may
     // differ, and Hero Art has no add-form at all — clear the pending
     // preview rather than carry a stale one across tabs.
-    libPendingImg = null;
+    libCancelEdit();
     libRenamingIndex = null;
-    $('libAddFile').value = '';
-    $('libRemoveBg').checked = false;
-    libResetSliders();
-    $('libPreviewWrap').hidden = true;
     document.querySelectorAll('#libTabs .tab').forEach(x => x.classList.toggle('cur', x === btn));
     renderLibraryOverlay();
   }));
@@ -2900,8 +3088,14 @@ function wireLibrary(){
   });
   $('libAddFile').addEventListener('change', async () => {
     const file = $('libAddFile').files[0];
-    if(!file){ libPendingImg = null; $('libPreviewWrap').hidden = true; return; }
+    if(!file){ libPendingImg = null; libPreviewSrc = null; $('libPreviewWrap').hidden = true; return; }
+    // A fresh upload always means "Add", even if a previous Edit was left
+    // open — swap back to add-mode's labelling/state, then load the file.
+    libEditingIndex = null;
+    $('libEditBanner').hidden = true;
+    $('libAddBtn').textContent = 'Add to library';
     libPendingImg = await loadImageFromFile(file);
+    libPreviewSrc = downscaleForPreview(libPendingImg);
     $('libPreviewWrap').hidden = false;
     libRenderPreview();
   });
@@ -2912,7 +3106,7 @@ function wireLibrary(){
   LIB_SLIDERS.forEach(([id, labelId]) => {
     $(id).addEventListener('input', () => {
       $(labelId).textContent = $(id).value;
-      libRenderPreview();
+      scheduleLibPreview();
     });
   });
   $('libResetAdjustBtn').addEventListener('click', () => {
@@ -2926,18 +3120,31 @@ function wireLibrary(){
     if(!color){ toast('Give it a colour tag'); return; }
     const fixed = $('libAddFixed').checked;
     const hue = Number($('libAddHue').value) || 0;
-    const dataUrl = $('libPreviewCanvas').toDataURL('image/png');
+    let dataUrl;
+    try{
+      // Re-render at full native resolution for the actual committed
+      // asset — the live preview canvas this reads from during dragging
+      // is deliberately downscaled for performance (see libGatherOpts),
+      // so grabbing its pixels directly would ship a lower-quality PNG.
+      const finalCanvas = renderToCanvas(libPendingImg, libTab, libGatherOpts(false));
+      dataUrl = finalCanvas.toDataURL('image/png');
+    }catch(err){
+      console.error('Library commit render failed:', err);
+      toast('Could not process this image — try different settings');
+      return;
+    }
     const entry = fixed ? { img: dataUrl, color, fixed: true } : { img: dataUrl, color, hue };
-    await addAsset(libTab, entry);
-    libPendingImg = null;
-    $('libAddFile').value = ''; $('libAddColor').value = ''; $('libAddHue').value = '';
-    $('libRemoveBg').checked = false;
-    libResetSliders();
-    $('libPreviewWrap').hidden = true;
+    if(libEditingIndex != null){
+      await replaceAsset(libTab, libEditingIndex, entry);
+      toast('Saved changes');
+    } else {
+      await addAsset(libTab, entry);
+      toast('Added to library');
+    }
+    libCancelEdit();
     renderLibraryOverlay();
     sbRenderPicker();
     sfx('ui');
-    toast('Added to library');
   });
   $('libExportBtn').addEventListener('click', async () => {
     sfx('ui');
