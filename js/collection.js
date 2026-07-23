@@ -151,6 +151,132 @@ const JOB_CARS = [
     id: 'midnight-runner', name: 'Midnight Runner', tier: 'rare', photo: null,
     skin: { base: '#465b7a', dark: '#26374f', glass: '#101825', trim: 'plaque' },
   },
+  // --- Overpass (ch. 5) — rare leaning legendary, continuing Gridlock's climb
+  {
+    id: 'overpass-shadow', name: 'Overpass Shadow', tier: 'rare', photo: null,
+    skin: { base: '#33414f', dark: '#161d24', glass: '#0b1116', trim: 'plaque' },
+  },
+  {
+    id: 'toll-runner', name: 'Toll Runner', tier: 'rare', photo: null,
+    skin: { base: '#c99a2e', dark: '#8a6912', glass: '#2c2107', trim: 'plaque' },
+  },
+  {
+    id: 'high-lane', name: 'High Lane', tier: 'rare', photo: null,
+    skin: { base: '#2f7fbf', dark: '#164a72', glass: '#0c1f2e', trim: 'plaque' },
+  },
+  {
+    id: 'concrete-ghost', name: 'Concrete Ghost', tier: 'legendary', photo: null,
+    skin: { base: '#8f96a3', dark: '#4d525c', glass: '#1c1f24', trim: 'chrome' },
+  },
+  {
+    id: 'merge-artist', name: 'The Merge Artist', tier: 'rare', photo: null,
+    skin: { base: '#b04a2e', dark: '#6e2c1a', glass: '#25100a', trim: 'plaque' },
+  },
+  // --- Freight Yard (ch. 6) — hitch country, rare leaning legendary -----
+  {
+    id: 'yardmaster', name: 'The Yardmaster', tier: 'legendary', photo: null,
+    skin: { base: '#4a3520', dark: '#241a10', glass: '#120d08', trim: 'chrome' },
+  },
+  {
+    id: 'coupling-run', name: 'Coupling Run', tier: 'rare', photo: null,
+    skin: { base: '#d1782e', dark: '#8a4a18', glass: '#2c1a09', trim: 'chrome' },
+  },
+  {
+    id: 'switchyard', name: 'Switchyard', tier: 'rare', photo: null,
+    skin: { base: '#2e6b5c', dark: '#163b32', glass: '#0a1c17', trim: 'plaque' },
+  },
+  {
+    id: 'container-king', name: 'Container King', tier: 'legendary', photo: null,
+    skin: { base: '#c23838', dark: '#701f1f', glass: '#2b0f0f', trim: 'plaque' },
+  },
+  {
+    id: 'last-hitch', name: 'The Last Hitch', tier: 'rare', photo: null,
+    skin: { base: '#5c4a8f', dark: '#332757', glass: '#160f2b', trim: 'plaque' },
+  },
+  // --- Customs (ch. 7) — mostly legendary ------------------------------
+  {
+    id: 'contraband', name: 'Contraband', tier: 'legendary', photo: null,
+    skin: { base: '#1f2933', dark: '#0d1318', glass: '#3a2f08', trim: 'plaque' },
+  },
+  {
+    id: 'inspection-lane', name: 'Inspection Lane', tier: 'rare', photo: null,
+    skin: { base: '#e0c23a', dark: '#a3891c', glass: '#2f290a', trim: 'chrome' },
+  },
+  {
+    id: 'clearance-run', name: 'Clearance Run', tier: 'legendary', photo: null,
+    skin: { base: '#2e7d5c', dark: '#154532', glass: '#0a1f17', trim: 'plaque' },
+  },
+  {
+    id: 'red-stamp', name: 'Red Stamp', tier: 'legendary', photo: null,
+    skin: { base: '#a8283a', dark: '#5c141f', glass: '#240a0f', trim: 'chrome' },
+  },
+  {
+    id: 'sealed-manifest', name: 'Sealed Manifest', tier: 'rare', photo: null,
+    skin: { base: '#4a5568', dark: '#252c38', glass: '#0e1218', trim: 'plaque' },
+  },
+  // --- Rush Hour (ch. 8) — dense traffic, legendary --------------------
+  {
+    id: 'gridlocked', name: 'Gridlocked', tier: 'legendary', photo: null,
+    skin: { base: '#d4471f', dark: '#82290f', glass: '#2b1006', trim: 'plaque' },
+  },
+  {
+    id: 'lane-splitter', name: 'Lane Splitter', tier: 'legendary', photo: null,
+    skin: { base: '#e0e5ea', dark: '#9aa2ad', glass: '#20242b', trim: 'chrome' },
+  },
+  {
+    id: 'peak-hour', name: 'Peak Hour', tier: 'rare', photo: null,
+    skin: { base: '#f0a83a', dark: '#a86e17', glass: '#2e2107', trim: 'chrome' },
+  },
+  {
+    id: 'rat-run', name: 'The Rat Run', tier: 'legendary', photo: null,
+    skin: { base: '#3a4a2e', dark: '#1c2716', glass: '#0e1409', trim: 'plaque' },
+  },
+  {
+    id: 'clean-getaway', name: 'Clean Getaway', tier: 'legendary', photo: null,
+    skin: { base: '#2e3a5c', dark: '#151d33', glass: '#0a0f1c', trim: 'plaque' },
+  },
+  // --- The Syndicate (ch. 9) — imported hard boards become the norm ----
+  {
+    id: 'made-man', name: 'Made Man', tier: 'legendary', photo: null,
+    skin: { base: '#1a1a1e', dark: '#0a0a0c', glass: '#241f08', trim: 'plaque' },
+  },
+  {
+    id: 'front-company', name: 'Front Company', tier: 'legendary', photo: null,
+    skin: { base: '#5c5248', dark: '#302a24', glass: '#141210', trim: 'chrome' },
+  },
+  {
+    id: 'silent-partner', name: 'Silent Partner', tier: 'legendary', photo: null,
+    skin: { base: '#2e4a5c', dark: '#152633', glass: '#0a1319', trim: 'plaque' },
+  },
+  {
+    id: 'ledger-clean', name: 'Ledger Clean', tier: 'rare', photo: null,
+    skin: { base: '#c9c2b0', dark: '#8f8875', glass: '#28251e', trim: 'chrome' },
+  },
+  {
+    id: 'the-fixer', name: 'The Fixer', tier: 'legendary', photo: null,
+    skin: { base: '#7a1f2e', dark: '#420f18', glass: '#1c0709', trim: 'plaque' },
+  },
+  // --- Vault Row (ch. 10) — the campaign's true endgame, all legendary -
+  {
+    id: 'vault-runner', name: 'Vault Runner', tier: 'legendary', photo: null,
+    skin: { base: '#0e0e10', dark: '#050506', glass: '#3a2f08', trim: 'plaque' },
+  },
+  {
+    id: 'last-take', name: 'The Last Take', tier: 'legendary', photo: null,
+    skin: { base: '#8f0e1f', dark: '#4a070f', glass: '#1f0306', trim: 'plaque' },
+  },
+  {
+    id: 'final-count', name: 'Final Count', tier: 'legendary', photo: null,
+    skin: { base: '#d4af37', dark: '#8a6f1e', glass: '#2e2308', trim: 'chrome' },
+  },
+  {
+    id: 'no-witnesses', name: 'No Witnesses', tier: 'legendary', photo: null,
+    skin: { base: '#1f2e3a', dark: '#0d161c', glass: '#050a0e', trim: 'plaque' },
+  },
+  {
+    id: 'one-way-out', name: 'One Way Out', tier: 'legendary', photo: null,
+    skin: { base: '#3a0e5c', dark: '#1f0733', glass: '#0c0319', trim: 'plaque' },
+  },
 ];
 JOB_CARS.forEach((car, i) => {
   car.chapter = Math.floor(i / POOL_SIZE);

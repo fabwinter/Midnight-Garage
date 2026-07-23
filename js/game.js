@@ -3,8 +3,9 @@
    (weight/flick/dust), onboarding, session flow, accessibility, analytics,
    daily puzzle + share card, Pro Garage gating. */
 
-import { N, EXIT_ROW, firstOptimalMove, solve } from './solver.js';
+import { N, EXIT_ROW, firstOptimalMove, solve, levelKey } from './solver.js';
 import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
+import { LEGACY_CAMPAIGN_KEYS_V1 } from './legacy-campaign-keys-v1.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
 import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener } from './audio.js';
@@ -689,14 +690,28 @@ function starCountFor(par, usedMoves){
   if(usedMoves <= par + Math.max(3, Math.ceil(par * 0.35))) return 2;
   return 1;
 }
+/* Per-chapter budget tapers (LEVELS-500-PLAN.md §2): only meaningful for
+   an actual campaign attempt — cur is "campaign level index" and stays
+   stale/irrelevant during bounty/daily/impound (mode.type something
+   else), which forced-pace into heist/pursuit too but aren't indexed
+   into CHAPTERS at all, so this must not be read there. Falls back to
+   the original flat constants (25% slack, 0 think bonus) whenever
+   there's no chapter context, or a chapter doesn't define its own. */
+function currentChapter(){
+  return mode.type === 'campaign' ? CHAPTERS[chapterOf(cur)] : null;
+}
 function alarmBudgetFor(par){
-  return par + Math.max(2, Math.ceil(par * 0.25));
+  const slack = currentChapter()?.heistSlack ?? 0.25;
+  return par + Math.max(2, Math.ceil(par * slack));
 }
 /* Pursuit's real-time budget — v1 formula: 1 second per optimal move
-   (par = 10 → 10s). Tight on purpose; loosen from funnel data once
-   Pursuit has live completion rates, same as alarmBudgetFor. */
+   (par = 10 → 10s), plus a per-chapter think-time bonus for the harder
+   late-campaign boards, where 1s/move alone leaves no room to actually
+   plan a move once par gets into the 40s-50s. Tight on purpose otherwise;
+   loosen from funnel data once Pursuit has live completion rates. */
 function pursuitTimeFor(par){
-  return par;
+  const think = currentChapter()?.pursuitThink ?? 0;
+  return par + think;
 }
 function formatTime(totalSeconds){
   const s = Math.max(0, Math.round(totalSeconds));
@@ -3161,6 +3176,51 @@ function wireLibrary(){
   $('adminLibraryBtn').addEventListener('click', () => { sfx('ui'); openLibrary(); });
 }
 
+/* The 200->500 campaign expansion (LEVELS-500-PLAN.md) reordered every
+   board by difficulty score to smooth the curve out over 500 levels
+   instead of 200 — save.stars/best/jobClears/modeLevel were all keyed by
+   the OLD array index, so a board a player 3-starred at old index 87
+   might now sit at new index 214. Remap by board IDENTITY (levelKey)
+   instead of position, same trick js/collection.js's Impound Lot already
+   uses for the same reason. Runs once per save (migratedCampaign500
+   guards it) — safe to no-op on a save that's already past it, and safe
+   on a brand-new save (nothing to remap, guard just gets set). */
+function migrateCampaignReorder(){
+  if(save.migratedCampaign500) return;
+  const keyToNewIndex = new Map();
+  LEVELS.forEach((lv, i) => {
+    const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+    keyToNewIndex.set(levelKey(pieces, lv.w || []), i);
+  });
+  const remapByKey = src => {
+    const out = {};
+    Object.keys(src || {}).forEach(oldIdxStr => {
+      const key = LEGACY_CAMPAIGN_KEYS_V1[Number(oldIdxStr)];
+      const newIdx = key !== undefined ? keyToNewIndex.get(key) : undefined;
+      if(newIdx !== undefined) out[newIdx] = src[oldIdxStr];
+    });
+    return out;
+  };
+  // save.unlocked was a simple "cleared sequentially up through here"
+  // gate; after a full reorder the boards a player had cleared are
+  // scattered across new positions, not a contiguous prefix, so there's
+  // no exact new equivalent. Unlock at least as many new levels as they
+  // had cleared before (plus the usual +2 runway) — erring toward
+  // unlocking a little extra rather than ever locking out earned
+  // progress is the only safe direction to round in.
+  const clearedCount = Object.keys(save.jobClears || save.stars || {}).length;
+  save.stars = remapByKey(save.stars);
+  save.best = remapByKey(save.best);
+  save.jobClears = remapByKey(save.jobClears);
+  save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, clearedCount + 2));
+  Object.keys(save.modeLevel || {}).forEach(m => {
+    const key = LEGACY_CAMPAIGN_KEYS_V1[save.modeLevel[m]];
+    const newIdx = key !== undefined ? keyToNewIndex.get(key) : undefined;
+    save.modeLevel[m] = newIdx !== undefined ? newIdx : Math.min(save.modeLevel[m], LEVELS.length - 1);
+  });
+  save.migratedCampaign500 = true;
+}
+
 /* Browsers block audio.play() until a user gesture; retry menu music
    on the first tap/click/key anywhere so Velvet Glove starts the
    moment the player touches the screen, not just on the Play button. */
@@ -3198,6 +3258,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     // a returning player already earned under the old rule. Only clears
     // from here on actually require a car-earning pacing.
     if(!loaded.jobClears) save.jobClears = Object.assign({}, loaded.stars);
+    migrateCampaignReorder();
   }
   await loadDaily();
   await initAnalytics();

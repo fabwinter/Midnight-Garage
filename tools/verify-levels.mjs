@@ -67,9 +67,19 @@ LEVELS.forEach((lv, i) => {
   }
 });
 
-// chapter par floors must strictly increase so each stage is genuinely harder
+// Chapter score floors must strictly increase so each stage is genuinely
+// harder — checked on the difficulty MODEL score (d), not raw par (m).
+// The two aren't interchangeable: d also folds in branching/uniqueness/
+// counterintuitive-move factors (see js/solver.js rate()), so a lower-par
+// board can legitimately outscore a higher-par one, and a curve selected
+// by score (the 200->500 expansion's tools/extend-to-500.mjs) can have
+// chapters with overlapping par ranges while still strictly escalating in
+// real difficulty. Requiring par itself to be strictly increasing here
+// would reject correct, harder-by-the-model-that-actually-matters output.
 for(let c = 1; c < CHAPTERS.length; c++){
-  if(CHAPTERS[c].minM <= CHAPTERS[c - 1].minM) bad(`chapter ${c + 1}: par floor ${CHAPTERS[c].minM} does not exceed chapter ${c}'s ${CHAPTERS[c - 1].minM}`);
+  const prevMin = Math.min(...LEVELS.slice((c - 1) * CHAPTER_SIZE, c * CHAPTER_SIZE).map(l => l.d));
+  const curMin = Math.min(...LEVELS.slice(c * CHAPTER_SIZE, (c + 1) * CHAPTER_SIZE).map(l => l.d));
+  if(curMin <= prevMin) bad(`chapter ${c + 1}: score floor ${curMin} does not exceed chapter ${c}'s ${prevMin}`);
 }
 
 // difficulty must never regress across chapter boundaries' scores
@@ -127,6 +137,31 @@ IMPOUND_LOT.forEach((lv, i) => {
   if(lv.key !== actualKey) bad(`impound slot ${i}: stored key doesn't match the board (stored "${lv.key}", computed "${actualKey}")`);
   if(impoundKeys.has(lv.key)) bad(`impound slot ${i}: duplicate key "${lv.key}"`);
   impoundKeys.add(lv.key);
+});
+
+// No board may appear in more than one of campaign/bounty/impound — the
+// same puzzle showing up in two different contexts would be a curation
+// bug (tools/gen-bounty-pool.mjs, tools/gen-impound-pool.mjs, and the
+// 200->500 expansion's tools/extend-to-500.mjs all draw from the same
+// Fogleman reserve and must stay mutually exclusive).
+const campaignKeys = new Set();
+LEVELS.forEach((lv, i) => {
+  const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  const key = levelKey(pieces, lv.w);
+  if(campaignKeys.has(key)) bad(`level ${i + 1}: duplicate board within the campaign (key "${key}")`);
+  campaignKeys.add(key);
+});
+const bountyKeys = new Set();
+BOUNTY_ROTATION.forEach((lv, i) => {
+  const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  const key = levelKey(pieces, lv.w);
+  if(bountyKeys.has(key)) bad(`bounty rotation slot ${i}: duplicate board within bounty (key "${key}")`);
+  bountyKeys.add(key);
+  if(campaignKeys.has(key)) bad(`bounty rotation slot ${i}: board also appears in the campaign (key "${key}")`);
+});
+impoundKeys.forEach(key => {
+  if(campaignKeys.has(key)) bad(`impound board also appears in the campaign (key "${key}")`);
+  if(bountyKeys.has(key)) bad(`impound board also appears in bounty rotation (key "${key}")`);
 });
 
 if(fail){ console.error(`${fail} check(s) failed`); process.exit(1); }
