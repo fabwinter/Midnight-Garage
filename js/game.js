@@ -2252,6 +2252,84 @@ function wireAdmin(){
     $('adminInput').value = '';
   });
   $('adminSandboxBtn').addEventListener('click', () => { sfx('ui'); openSandbox(); });
+  $('adminLevelInspectorBtn').addEventListener('click', () => { sfx('ui'); openLevelInspector(); });
+  $('liSearch').addEventListener('input', renderLevelInspector);
+  $('liHitchOnly').addEventListener('change', renderLevelInspector);
+  $('liGateOnly').addEventListener('change', renderLevelInspector);
+}
+
+/* ---------- admin level inspector ----------
+   Browse/search all campaign levels for par + special-feature lookup
+   (hitches, gates) — built for "does level 214 have a hitch?" style
+   questions that used to mean guessing-and-checking in play. Read-only:
+   nothing here mutates LEVELS, it's a lens onto the shipped data. */
+function openLevelInspector(){
+  showOverlay('levelInspectorOverlay');
+  $('liSearch').value = '';
+  $('liHitchOnly').checked = false;
+  $('liGateOnly').checked = false;
+  renderLevelInspector();
+}
+
+function renderLevelInspector(){
+  const q = ($('liSearch').value || '').trim().toLowerCase();
+  const hitchOnly = $('liHitchOnly').checked;
+  const gateOnly = $('liGateOnly').checked;
+  const list = $('liList');
+  list.innerHTML = '';
+  let shown = 0;
+  LEVELS.forEach((lv, i) => {
+    const hitchCount = lv.h?.length || 0;
+    const gateCount = lv.g?.length || 0;
+    if(hitchOnly && !hitchCount) return;
+    if(gateOnly && !gateCount) return;
+    const chapter = CHAPTERS[chapterOf(i)];
+    if(q){
+      const numMatch = String(i + 1).startsWith(q);
+      const nameMatch = chapter.name.toLowerCase().includes(q);
+      if(!numMatch && !nameMatch) return;
+    }
+    shown++;
+    if(shown > 300) return;   // plenty for a lookup tool; narrow the search instead of scrolling forever
+
+    const row = document.createElement('div');
+    row.className = 'li-row';
+    const num = document.createElement('span');
+    num.className = 'li-num'; num.textContent = '#' + (i + 1);
+    row.appendChild(num);
+    const chLab = document.createElement('span');
+    chLab.className = 'li-chapter'; chLab.textContent = chapter.name;
+    row.appendChild(chLab);
+    const par = document.createElement('span');
+    par.className = 'li-par'; par.textContent = 'par ' + lv.m;
+    row.appendChild(par);
+    if(hitchCount){
+      const badge = document.createElement('span');
+      badge.className = 'li-badge li-hitch'; badge.textContent = `Hitch ×${hitchCount}`;
+      row.appendChild(badge);
+    }
+    if(gateCount){
+      const badge = document.createElement('span');
+      badge.className = 'li-badge li-gate'; badge.textContent = `Gate ×${gateCount}`;
+      row.appendChild(badge);
+    }
+    const go = document.createElement('button');
+    go.className = 'btn'; go.type = 'button'; go.textContent = 'Go';
+    go.addEventListener('click', () => {
+      sfx('ui');
+      hideOverlay('levelInspectorOverlay');
+      hideOverlay('startOverlay');
+      loadLevel(i);   // admin jump ignores unlock/Pro gating on purpose, same as runAdminCommand's
+      toast(`Level ${i + 1} · ${save.settings.mode}`);
+    });
+    row.appendChild(go);
+    list.appendChild(row);
+  });
+  const total = LEVELS.length;
+  const filtered = q || hitchOnly || gateOnly;
+  $('liSummary').textContent = shown > 300
+    ? `showing first 300 matches of ${total} — narrow your search for the rest`
+    : `${shown} of ${total} levels` + (filtered ? ' (filtered)' : '');
 }
 
 /* ---------- sandbox level designer ----------
@@ -2678,6 +2756,24 @@ async function duplicateAsset(entry){
   toast('Duplicated — rename it below');
 }
 
+// Editing a base (hardcoded) entry directly used to require Duplicate
+// first, then hunting down the new copy to actually edit it — two
+// separate actions for what's conceptually one. This does both in one
+// tap: disables the original in rotation (an "edit" should replace it,
+// not sit alongside it — Duplicate above is still there for when an
+// admin explicitly wants both) and copies it into the editable layer
+// under its OWN name (no "-copy" suffix, since it's meant to replace,
+// not fork), then drops straight into the same full image-edit pipeline
+// libEditAsset already gives lib-origin entries.
+async function editBaseAsset(entry){
+  await setBaseDisabled(entry.img, true);
+  const copy = Object.assign({}, entry);
+  await addAsset(libTab, copy);
+  const idx = (getLibrary()[libTab] || []).length - 1;
+  await libEditAsset(copy, idx);
+  sbRenderPicker();
+}
+
 function libCard(entry, len, meta){
   const card = document.createElement('div');
   card.className = 'lib-card' + (meta.isDisabled ? ' disabled' : '');
@@ -2729,6 +2825,18 @@ function libCard(entry, len, meta){
   row.appendChild(dup);
 
   if(meta.origin === 'base'){
+    // Edit here goes through editBaseAsset (disable original + copy into
+    // the editable layer + open the edit form) rather than libEditAsset
+    // directly — a base entry has no persisted lib slot of its own to
+    // save changes back to, so "edit" has to create one first.
+    const edit = document.createElement('button');
+    edit.className = 'btn'; edit.type = 'button'; edit.textContent = 'Edit';
+    edit.addEventListener('click', () => editBaseAsset(entry));
+    row.appendChild(edit);
+    card.appendChild(row);
+
+    const row2 = document.createElement('div');
+    row2.className = 'lib-card-row';
     const btn = document.createElement('button');
     btn.className = 'btn'; btn.type = 'button';
     btn.textContent = meta.isDisabled ? 'Enable' : 'Disable';
@@ -2738,13 +2846,14 @@ function libCard(entry, len, meta){
       renderLibraryOverlay();
       sbRenderPicker();
     });
-    row.appendChild(btn);
-    card.appendChild(row);
+    row2.appendChild(btn);
+    card.appendChild(row2);
   } else {
-    // Edit only applies to lib-origin entries: it re-opens the asset's own
+    // Edit only applies to lib-origin entries directly (base entries route
+    // through editBaseAsset above instead): it re-opens the asset's own
     // img in the add-form's full pipeline and saves back via replaceAsset
     // (in place), which needs a real persisted entry at a real index —
-    // a base entry has neither.
+    // a base entry has neither, until editBaseAsset creates one.
     const edit = document.createElement('button');
     edit.className = 'btn'; edit.type = 'button'; edit.textContent = 'Edit';
     edit.addEventListener('click', () => libEditAsset(entry, meta.index));

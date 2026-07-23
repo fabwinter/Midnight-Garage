@@ -285,7 +285,26 @@
       </form>
       <button class="btn" id="adminSandboxBtn" type="button">Sandbox editor</button>
       <button class="btn" id="adminLibraryBtn" type="button">Asset library</button>
+      <button class="btn" id="adminLevelInspectorBtn" type="button">Level inspector</button>
     </div>
+  </div>
+</div>
+
+<!-- Admin level inspector: look up par + hitch/gate features for any
+     campaign level and jump straight to it, without needing to already
+     know a level number offhand. -->
+<div class="overlay" id="levelInspectorOverlay">
+  <div class="sheet sandbox-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2>Level Inspector</h2>
+    <p class="sub">Look up par and special features (hitches, gates) for any campaign level, and jump straight to it.</p>
+    <div class="li-filters">
+      <input id="liSearch" type="text" placeholder="Level # or chapter name" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label class="lib-add-fixed"><input id="liHitchOnly" type="checkbox"> Hitch only</label>
+      <label class="lib-add-fixed"><input id="liGateOnly" type="checkbox"> Gate only</label>
+    </div>
+    <div class="li-summary" id="liSummary"></div>
+    <div class="li-list" id="liList"></div>
   </div>
 </div>
 
