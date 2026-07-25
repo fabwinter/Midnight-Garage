@@ -83,7 +83,7 @@ LEVELS.forEach((lv, i) => {
     });
   });
   // Gate levels must exercise the gate: solution without gates must be longer
-  if(lv.g){
+  if(lv.g && lv.g.length > 0){
     const solWithGate = sol;
     const solWithoutGate = solve(pieces, { walls: lv.w });
     if(solWithoutGate.solvable && solWithGate.optimal <= solWithoutGate.optimal){

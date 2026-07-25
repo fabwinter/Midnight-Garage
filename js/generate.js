@@ -332,6 +332,9 @@ export function tryGenerateGate(rng, opts = {}){
 
 export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
   let best = level;
+  const hitches = level.h;
+  const gates = level.g;
+
   for(let s = 0; s < steps; s++){
     const pieces = best.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
     const walls = (best.w ?? []).map(a => [a[0], a[1]]);
@@ -342,32 +345,40 @@ export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
       }
     });
     for(const [wr, wc] of walls) grid[wr][wc] = -2;
+
+    // Mark gate cells as off-limits for piece placement / wall placement
+    const gateCells = new Set();
+    if(gates){
+      gates.forEach(gt => {
+        gateCells.add(gt.gate[0] * N + gt.gate[1]);
+        (gt.sensors ?? []).forEach(s => gateCells.add(s[0] * N + s[1]));
+      });
+    }
+
     let op = rng();
     if(wallMax > 0 && op < 0.2){
       // mutate roadworks: add / remove / relocate one wall cell
       const wop = rng();
       if(wop < 0.5 && walls.length < wallMax){
         const r = rngInt(rng, 0, N - 1), c = rngInt(rng, 0, N - 1);
-        if(r === EXIT_ROW || grid[r][c] !== -1) continue;
+        if(r === EXIT_ROW || grid[r][c] !== -1 || gateCells.has(r * N + c)) continue;
         walls.push([r, c]);
       } else if(wop < 0.75 && walls.length > 0){
         walls.splice(rngInt(rng, 0, walls.length - 1), 1);
       } else if(walls.length > 0){
         const wi = rngInt(rng, 0, walls.length - 1);
         const r = rngInt(rng, 0, N - 1), c = rngInt(rng, 0, N - 1);
-        if(r === EXIT_ROW || grid[r][c] !== -1) continue;
+        if(r === EXIT_ROW || grid[r][c] !== -1 || gateCells.has(r * N + c)) continue;
         walls[wi] = [r, c];
       } else continue;
-      op = 1;   // wall op done — skip the piece ops below
+      op = 1;
     } else if(wallMax > 0){
-      op = (op - 0.2) / 0.8;   // rescale so piece-op odds match the wall-free path
+      op = (op - 0.2) / 0.8;
     }
     if(op === 1){
       // fall through to solve
     } else if((op < 0.55 && pieces.length < 16) || pieces.length <= 4){
-      // add a piece (capped — unbounded growth over long climbs measurably
-      // makes boards EASIER again past ~16, not harder, and every solve()
-      // call inside this loop gets slower as the piece count grows)
+      // add a piece, never on gate/sensor cells
       const len = rng() < 0.3 ? 3 : 2;
       const dir = rng() < 0.5 ? 'h' : 'v';
       let p;
@@ -380,17 +391,27 @@ export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
       }
       let ok = true;
       for(let k = 0; k < p.len; k++){
-        if(grid[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] !== -1) ok = false;
+        const r = p.r + (p.dir === 'v' ? k : 0), c = p.c + (p.dir === 'h' ? k : 0);
+        if(grid[r][c] !== -1 || gateCells.has(r * N + c)) ok = false;
       }
       if(!ok) continue;
       pieces.push(p);
     } else if(op < 0.8 && pieces.length > 5){
-      // remove a random non-hero piece
-      pieces.splice(rngInt(rng, 1, pieces.length - 1), 1);
+      // remove a random non-hero, non-hitch piece
+      let i = rngInt(rng, 1, pieces.length - 1);
+      // Skip tow/trailer pieces
+      if(hitches && hitches.some(h => h.tow === i || h.trailer === i)){
+        continue;
+      }
+      pieces.splice(i, 1);
     } else {
-      // slide a random non-hero piece to a new offset on its own axis
+      // slide a random non-hero, non-hitch piece on its own axis
       if(pieces.length < 2) continue;
-      const i = rngInt(rng, 1, pieces.length - 1);
+      let i = rngInt(rng, 1, pieces.length - 1);
+      // Skip tow/trailer pieces
+      if(hitches && hitches.some(h => h.tow === i || h.trailer === i)){
+        continue;
+      }
       const p = pieces[i];
       const off = rngInt(rng, 0, N - p.len);
       const q = p.dir === 'h' ? { ...p, c: off } : { ...p, r: off };
@@ -398,28 +419,56 @@ export function harden(level, rng, steps = 120, collect = null, wallMax = 0){
       for(let k = 0; k < q.len; k++){
         const r = q.r + (q.dir === 'v' ? k : 0), c = q.c + (q.dir === 'h' ? k : 0);
         const occ = grid[r][c];
-        if(occ !== -1 && occ !== i) ok = false;
+        if((occ !== -1 && occ !== i) || gateCells.has(r * N + c)) ok = false;
       }
       if(!ok) continue;
       pieces[i] = q;
     }
 
-    const sol = solve(pieces, { maxStates: 250000, walls });
+    const sol = solve(pieces, { maxStates: 250000, walls, gates, hitches });
     if(!sol.solvable || sol.optimal < 2) continue;
     if(sol.optimal < best.m) continue;
-    const stats = rate(pieces, sol, walls);
+    const stats = rate(pieces, sol, walls, gates, hitches);
     if(sol.optimal > best.m || stats.score > best.d){
       best = {
         p: pieces.map(q => [q.r, q.c, q.len, q.dir]),
         ...(walls.length ? { w: walls.map(w => [w[0], w[1]]) } : {}),
+        ...(hitches ? { h: hitches } : {}),
+        ...(gates ? { g: gates } : {}),
         m: sol.optimal,
         d: stats.score,
         stats,
-        key: levelKey(pieces, walls),
+        key: levelKey(pieces, walls) + (hitches ? '|H' + hitches.map(h => h.tow + '-' + h.trailer).join(',') : '') + (gates ? '|G' + gates.map(gt => gt.gate[0] + ',' + gt.gate[1]).join(',') : ''),
       };
-      if(collect) collect.push(best);   // intermediates feed the mid-difficulty bands
+      if(collect) collect.push(best);
     }
   }
+
+  // Final check: if the level has features, re-verify they're still exercised
+  if(hitches){
+    const pieces = best.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+    const solWithHitch = solve(pieces, { walls: best.w, hitches });
+    const solWithoutHitch = solve(pieces, { walls: best.w });
+    const usesHitch = solWithHitch.path.some(mv => mv.decouple !== undefined || mv.i2 !== undefined);
+    if(!usesHitch || solWithHitch.optimal <= solWithoutHitch.optimal) return level;   // reverted
+  }
+  if(gates){
+    const pieces = best.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+    const solWithGate = solve(pieces, { walls: best.w, gates });
+    const solWithoutGate = solve(pieces, { walls: best.w });
+    const usesGate = solWithGate.path.some(mv => {
+      if(mv.decouple !== undefined || mv.couple !== undefined) return false;
+      const cells = [];
+      for(let k = 0; k < pieces[mv.i].len; k++){
+        const r = pieces[mv.i].dir === 'h' ? pieces[mv.i].r : mv.o + k;
+        const c = pieces[mv.i].dir === 'h' ? mv.o + k : pieces[mv.i].c;
+        cells.push([r, c]);
+      }
+      return cells.some(([r, c]) => gates.some(gt => gt.gate[0] === r && gt.gate[1] === c));
+    });
+    if(!usesGate || solWithGate.optimal <= solWithoutGate.optimal) return level;   // reverted
+  }
+
   return best;
 }
 
