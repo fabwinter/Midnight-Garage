@@ -79,6 +79,15 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
 
    The olive G-wagon (sedan-9) stays dropped: too stubby (~1.7:1) for the
    shared 97%-of-length norm. Same call as the shadowed Countach cutout. */
+/* The one and only broken-down-car asset (see vehicleSVG's brokenDown
+   branch): a len-2 hitch trailer is always this specific rust-weathered
+   sedan, never a random pick off the rotation — "needs a tow" should read
+   as a recognizable, consistent car, not just "whichever traffic sedan
+   this piece's ordinal happened to land on, but dimmer." Still listed as a
+   normal SEDAN_PHOTOS entry too, so it stays in ordinary traffic rotation
+   and remains disable-able from the admin library like any other asset. */
+const BROKEN_DOWN_SEDAN_PHOTO = { img: 'assets/cars/traffic-sedan-28.png', fixed: true, color: 'rust-weathered' };
+
 const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-6.png', hue: 29, color: 'recolor' },              // skin body, recolors
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true, color: 'white-plain' },
@@ -107,7 +116,7 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-fluro-pink.png', fixed: true, color: 'pink-fluro' },
   { img: 'assets/cars/hero-classic-cream.png', fixed: true, color: 'cream-coupe' },
   { img: 'assets/cars/hero-muscle.png', fixed: true, color: 'grey-muscle' },
-  { img: 'assets/cars/traffic-sedan-28.png', fixed: true, color: 'rust-weathered' },
+  BROKEN_DOWN_SEDAN_PHOTO,
   { img: 'assets/cars/hero-pagani-nobadge.png', fixed: true, color: 'teal' },
   { img: 'assets/cars/hero-miura-nobadge.png', fixed: true, color: 'blue-classic' },
   { img: 'assets/cars/hero-muscle-sage.png', fixed: true, color: 'green-sage' },
@@ -130,6 +139,14 @@ const SEDAN_PHOTOS = [
    campaign levels). School bus stays fixed: hue-rotating its big unshaded
    roof panel turns it into a flat featureless block, and a non-yellow
    school bus reads wrong anyway. */
+// The dedicated tow-truck asset (see vehicleSVG's towCar branch): only a
+// piece hitched to tow a broken-down car (not a genuine trailer) renders
+// with this, regardless of that piece's own len/dir — "only tow trucks can
+// tow cars" needs one recognizable truck body, not whatever the ordinary
+// truck rotation would have picked. Still a normal TRUCK_PHOTOS entry too,
+// so it stays in ordinary traffic rotation same as any other truck.
+const TOW_TRUCK_PHOTO = { img: 'assets/cars/traffic-truck-4.png', hue: 358, color: 'recolor' };
+
 const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-3.png', fixed: true, color: 'silver-tanker' },
   { img: 'assets/cars/traffic-truck-new.png', fixed: true, color: 'blue-pickup' },
@@ -138,7 +155,7 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-5.png', fixed: true, color: 'chrome-tanker' },
   { img: 'assets/cars/traffic-truck-new-rusty.png', fixed: true, color: 'rust-flatbed' },
   { img: 'assets/cars/traffic-truck-new-white.png', fixed: true, color: 'white-box' },
-  { img: 'assets/cars/traffic-truck-4.png', hue: 358, color: 'recolor' },   // tow truck
+  TOW_TRUCK_PHOTO,
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a
@@ -338,8 +355,13 @@ function decal(idx, cx, cy){
    different colour. Both default to 0 for callers that don't pass them.
    opts.trailer — this piece is a hitch trailer: len-3 draws from
    TRAILER_PHOTOS (caravan / utility trailer / boat); a len-2 trailer is a
-   broken-down car and renders desaturated + dimmed so "needs a tow" reads
-   at a glance. */
+   broken-down car, always the same BROKEN_DOWN_SEDAN_PHOTO (never the
+   rotation), and renders desaturated + dimmed so "needs a tow" reads at a
+   glance. opts.towCar — this piece is the tow half of a hitch pulling a
+   broken-down car (as opposed to a genuine trailer): only a tow truck may
+   do that, so it always renders as TOW_TRUCK_PHOTO regardless of its own
+   len — a car may hitch a genuine trailer freely, but towing another CAR
+   takes a tow truck. */
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
   const base = skin ? skin.base : (isHero ? PALETTE[0][0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)][0]);
@@ -349,6 +371,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const seed = opts.seed ?? 0;
   const photoOrd = opts.photoOrd ?? 0;
   const isTrailer = !!opts.trailer && !isHero;
+  const towCar = !!opts.towCar && !isHero;
   // Computed unconditionally (cheap — memoized per seed) even though heroes
   // don't use them, so the unused branch below never indexes into null.
   const sedanSeq = bucketSequence('sedan', seed);
@@ -357,11 +380,11 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   // to one piece instead of letting the colour-safe rotation pick — used
   // nowhere else (real levels always want the rotation's variety).
   const override = opts.photoOverride ? { img: opts.photoOverride, fixed: true } : null;
-  const sedanPhoto = override ?? (isHero ? SEDAN_PHOTOS[0] : sedanSeq[photoOrd % sedanSeq.length]);
+  const brokenDown = isTrailer && len < 3;
+  const sedanPhoto = override ?? (isHero ? SEDAN_PHOTOS[0] : (brokenDown ? BROKEN_DOWN_SEDAN_PHOTO : sedanSeq[photoOrd % sedanSeq.length]));
   const truckPhoto = override ?? (isTrailer
     ? combinedTrailerPhotos()[photoOrd % combinedTrailerPhotos().length]
-    : truckSeq[photoOrd % truckSeq.length]);
-  const brokenDown = isTrailer && len < 3;
+    : (towCar ? TOW_TRUCK_PHOTO : truckSeq[photoOrd % truckSeq.length]));
   const hueAttr = brokenDown ? ` filter="url(#${gid}broke)"` : (sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`);
   const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
 
@@ -451,7 +474,7 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     // the glass instead of following a body line. Skipping trim here;
     // paint color alone still distinguishes every unlocked skin.
     body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${photoHeroExtra}`;
-  } else if(len >= 3){
+  } else if(len >= 3 || towCar){
     body = `<image href="${truckPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr2}/>${cb ? decal(idx, L * 0.5, 50) : ''}`;
   } else {
     body = `<image href="${sedanPhoto.img}" x="0" y="0" width="${L}" height="${H}" preserveAspectRatio="none"${hueAttr}/>${cb ? decal(idx, L * 0.5, 50) : ''}`;

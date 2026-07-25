@@ -340,12 +340,13 @@
   <div class="sheet sandbox-sheet">
     <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h2>Sandbox</h2>
-    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid.</p>
+    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid. Hitch: tap the tow, then tap the trailer it pulls — they must be touching, end to end, on the same line; tap either half of an existing hitch to undo it.</p>
     <div class="sb-tools" id="sbTools">
       <button class="btn sb-tool" data-tool="hero" type="button">Hero</button>
       <button class="btn sb-tool cur" data-tool="car" type="button">Car</button>
       <button class="btn sb-tool" data-tool="truck" type="button">Truck</button>
       <button class="btn sb-tool" data-tool="wall" type="button">Wall</button>
+      <button class="btn sb-tool" data-tool="hitch" type="button">Hitch</button>
       <button class="btn sb-tool" data-tool="erase" type="button">Erase</button>
       <button class="btn" id="sbDirBtn" type="button" aria-label="Placement orientation">Dir: H</button>
       <button class="btn" id="sbLibraryBtn" type="button">Library</button>
@@ -427,6 +428,9 @@
         </label>
         <label class="lib-slider-lab">Rotate <span id="libRotateVal">0</span>&deg;
           <input id="libRotate" type="range" min="-180" max="180" value="0">
+        </label>
+        <label class="lib-slider-lab">Position <span id="libPositionXVal">0</span>
+          <input id="libPositionX" type="range" min="-100" max="100" value="0">
         </label>
         <div class="lib-adjust-grid">
           <label class="lib-slider-lab">Brightness <span id="libBrightnessVal">100</span>%

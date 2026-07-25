@@ -330,6 +330,7 @@ export function renderToCanvas(img, category, opts = {}, rectOut){
     colorizeAmount = 0,
     stretchX = 100,
     stretchY = 100,
+    offsetX = 0,
     previewMaxDim = 0,
   } = opts;
   const [W, H] = category === 'trucks' ? [1200, 400] : [800, 400];
@@ -368,7 +369,14 @@ export function renderToCanvas(img, category, opts = {}, rectOut){
   const sx = Math.max(10, Math.min(400, stretchX)) / 100;
   const sy = Math.max(10, Math.min(400, stretchY)) / 100;
   const w = rotated.width * fitScale * sx, h = rotated.height * fitScale * sy;
-  const x = (W - w) / 2, y = (H - h) / 2;
+  // offsetX in [-100,100]: 0 keeps the old centered behavior, -100/+100
+  // push the asset fully flush against the canvas's left/right edge —
+  // scaled by the available slack ((W-w)/2) so it always stays in bounds
+  // regardless of how wide the fitted asset itself is. Lets a trailer/
+  // caravan meant to occupy only one end of a 2-3 cell canvas (e.g. a
+  // hitch coupling point) sit there instead of being forced to the middle.
+  const ox = Math.max(-100, Math.min(100, offsetX)) / 100;
+  const x = (W - w) / 2 + ox * ((W - w) / 2), y = (H - h) / 2;
   ctx.drawImage(rotated, x, y, w, h);
   if(rectOut) Object.assign(rectOut, { x, y, w, h });
   return canvas;

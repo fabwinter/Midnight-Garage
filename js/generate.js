@@ -120,7 +120,12 @@ export function tryGenerateHitch(rng, opts = {}){
   // (which slides both by an identical delta) keeps them touching for
   // every step of every drag, automatically, with no extra bookkeeping.
   const trailerLen = rng() < 0.5 ? 2 : 3;
-  const towLen = rng() < 0.35 ? 3 : 2;
+  // A len-2 trailer renders as a broken-down car (see js/art.js): only a
+  // tow truck may pull one of those, so the tow is always forced to len 3
+  // (the tow-truck body's own natural size). A len-3 trailer is a genuine
+  // trailer/caravan — any car (or truck) may hitch that, so its tow keeps
+  // the old mixed-length odds.
+  const towLen = trailerLen < 3 ? 3 : (rng() < 0.35 ? 3 : 2);
   let trailer = null, tow = null;
   for(let t = 0; t < 60 && !trailer; t++){
     const c = rngInt(rng, hero.c + hero.len, N - 1);
