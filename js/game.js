@@ -2597,41 +2597,48 @@ function sbHitchTapPiece(i){
   sbRender();
 }
 
-/* Gate tool: tap to place gate cell, then tap up to 2 sensor cells, then
-   toggle polarity with an extra tap. Tapping an existing gate un-places it. */
+/* Gate tool: tap a cell to place the gate, then tap up to 2 more cells for
+   sensors (tapping a placed sensor again removes it). Polarity, commit, and
+   cancel are all handled by #sbGateConfig's buttons, not more taps — an
+   earlier version tried to overload "tap the gate cell again" for both
+   toggling polarity and cancelling, which made the two indistinguishable
+   and left sbCommitGate() unreachable from the UI entirely. */
 function sbGateTapCell(r, c){
   if(sbGatePending === null){
-    // Start a new gate at this cell
     sbGatePending = { gate: [r, c], sensors: [], polarity: false };
-    toast('Gate placed. Tap 1–2 sensor cells');
+    toast('Gate placed. Tap 1–2 sensor cells, then use the buttons below');
     sbRender();
     return;
   }
-  // Check if tapping the gate cell again (cancel)
   if(sbGatePending.gate[0] === r && sbGatePending.gate[1] === c){
-    sbGatePending = null;
-    toast('Gate cancelled');
-    sbRender();
+    toast('That’s the gate cell — tap a different cell for a sensor, or use Cancel below');
     return;
   }
-  // Check if already a sensor at this cell (remove it)
   const sensorIdx = sbGatePending.sensors.findIndex(s => s[0] === r && s[1] === c);
   if(sensorIdx !== -1){
     sbGatePending.sensors.splice(sensorIdx, 1);
-    if(sbGatePending.sensors.length === 0) toast('Sensors cleared');
     sbRender();
     return;
   }
-  // Add sensor if we have room (max 2)
   if(sbGatePending.sensors.length < 2){
     sbGatePending.sensors.push([r, c]);
-    if(sbGatePending.sensors.length === 1) toast('Sensor 1 placed. Tap another (or same cell again to finish)');
-    else toast('Sensor 2 placed. Tap the gate to toggle polarity, or finish elsewhere');
+    if(sbGatePending.sensors.length === 1) toast('Sensor placed. Tap another, or Commit below');
+    else toast('2 sensors placed — set polarity and Commit below');
     sbRender();
     return;
   }
-  // Max sensors reached; user should tap gate cell to commit/toggle polarity
-  toast('Max 2 sensors — tap the gate cell to finish or adjust');
+  toast('Max 2 sensors — tap a sensor cell again to remove it, or Commit below');
+}
+
+function sbTogglePolarity(){
+  if(!sbGatePending) return;
+  sbGatePending.polarity = !sbGatePending.polarity;
+  sbRender();
+}
+
+function sbCancelGate(){
+  sbGatePending = null;
+  sbRender();
 }
 
 function sbCommitGate(){
@@ -2639,29 +2646,37 @@ function sbCommitGate(){
     toast('Add at least 1 sensor to the gate');
     return;
   }
-  const g = sbGate();
-  // Verify gate cell is not under a piece
+  const [gr, gc] = sbGatePending.gate;
+  // Gate cell must not sit on a wall.
+  if(sbState.walls.some(w => w[0] === gr && w[1] === gc)){
+    toast('Gate cell is on a wall — move it first');
+    return;
+  }
+  // Gate cell must not be under a starting piece (sensors under a piece are fine).
   for(const p of sbState.pieces){
     for(let k = 0; k < p.len; k++){
       const pr = p.r + (p.dir === 'v' ? k : 0);
       const pc = p.c + (p.dir === 'h' ? k : 0);
-      if(pr === sbGatePending.gate[0] && pc === sbGatePending.gate[1]){
+      if(pr === gr && pc === gc){
         toast('Gate cell cannot be under a piece');
         return;
       }
     }
   }
-  // Verify sensors are not under pieces
+  // Gate cell must not collide with another committed gate's cell or sensors.
+  const existingCells = new Set();
+  sbState.gates.forEach(gt => {
+    existingCells.add(gt.gate[0] * N + gt.gate[1]);
+    gt.sensors.forEach(s => existingCells.add(s[0] * N + s[1]));
+  });
+  if(existingCells.has(gr * N + gc)){
+    toast('Another gate already uses that cell');
+    return;
+  }
   for(const [sr, sc] of sbGatePending.sensors){
-    for(const p of sbState.pieces){
-      for(let k = 0; k < p.len; k++){
-        const pr = p.r + (p.dir === 'v' ? k : 0);
-        const pc = p.c + (p.dir === 'h' ? k : 0);
-        if(pr === sr && pc === sc){
-          toast('Sensor cannot be under a piece');
-          return;
-        }
-      }
+    if(existingCells.has(sr * N + sc)){
+      toast('Another gate already uses a sensor cell there');
+      return;
     }
   }
   sbState.gates.push({
@@ -2672,6 +2687,17 @@ function sbCommitGate(){
   sbGatePending = null;
   toast('Gate committed');
   sbRender();
+}
+
+// Removes a committed gate if r,c matches its gate cell or any of its
+// sensors — mirrors sbHitchTapPiece's "tap either half to undo" pattern.
+function sbRemoveGateAt(r, c){
+  const idx = sbState.gates.findIndex(gt =>
+    (gt.gate[0] === r && gt.gate[1] === c) || gt.sensors.some(s => s[0] === r && s[1] === c));
+  if(idx === -1) return false;
+  sbState.gates.splice(idx, 1);
+  toast('Gate removed');
+  return true;
 }
 
 // Build a grid marking occupied cells by gates (gate cell + sensor cells)
@@ -2731,7 +2757,7 @@ function sbStatus(){
     return null;
   }
   const sol = solve(sbState.pieces.map(q => ({ r: q.r, c: q.c, len: q.len, dir: q.dir })),
-                    { walls: sbState.walls, hitches: sbState.hitches });
+                    { walls: sbState.walls, hitches: sbState.hitches, gates: sbState.gates });
   const parts = [];
   if(sol.solvable){
     parts.push(`Solvable · par ${sol.optimal}`);
@@ -2819,7 +2845,20 @@ function sbRender(){
     renderGateCell(gr, gc, 'sb-gate-pending');
     sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
   }
+  sbRenderGateConfig();
   sbStatus();
+}
+
+// Shows/hides the polarity+commit+cancel bar and keeps its label in sync
+// with sbGatePending — the bar is the only way to set polarity or commit a
+// gate, since overloading board taps for that was ambiguous (see
+// sbGateTapCell). Commit is disabled until at least one sensor is placed.
+function sbRenderGateConfig(){
+  const bar = $('sbGateConfig');
+  bar.hidden = !sbGatePending;
+  if(!sbGatePending) return;
+  $('sbGatePolarityLabel').textContent = sbGatePending.polarity ? 'Tripwire' : 'Pressure Plate';
+  $('sbGateCommitBtn').disabled = sbGatePending.sensors.length === 0;
 }
 
 function sbCellFromEvent(e){
@@ -2834,6 +2873,7 @@ function sbPlace(r, c){
   if(r < 0 || c < 0 || r >= N || c >= N) return;
   const g = sbGrid();
   if(sbTool === 'erase'){
+    if(sbRemoveGateAt(r, c)){ sbRender(); return; }
     if(g[r][c] === 'w') sbState.walls = sbState.walls.filter(w => !(w[0] === r && w[1] === c));
     else if(g[r][c] !== -1) sbRemovePiece(g[r][c]);
     sbRender();
@@ -3051,6 +3091,7 @@ function wireSandbox(){
   document.querySelectorAll('.sb-tool').forEach(btn => btn.addEventListener('click', () => {
     sbTool = btn.dataset.tool;
     sbHitchPending = null;
+    sbGatePending = null;
     document.querySelectorAll('.sb-tool').forEach(x => x.classList.toggle('cur', x === btn));
     sbRenderPicker();
     sbRender();
@@ -3059,6 +3100,9 @@ function wireSandbox(){
     sbDir = sbDir === 'h' ? 'v' : 'h';
     $('sbDirBtn').textContent = 'Dir: ' + sbDir.toUpperCase();
   });
+  $('sbGatePolarityBtn').addEventListener('click', () => { sfx('ui'); sbTogglePolarity(); });
+  $('sbGateCommitBtn').addEventListener('click', () => { sfx('ui'); sbCommitGate(); });
+  $('sbGateCancelBtn').addEventListener('click', () => { sfx('ui'); sbCancelGate(); });
   $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });
   $('sbClearBtn').addEventListener('click', () => {
     sfx('ui');

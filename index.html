@@ -357,7 +357,7 @@
   <div class="sheet sandbox-sheet">
     <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h2>Sandbox</h2>
-    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid. Hitch: tap the tow, then tap the trailer it pulls — they must be touching, end to end, on the same line; tap either half of an existing hitch to undo it.</p>
+    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid. Hitch: tap the tow, then tap the trailer it pulls — they must be touching, end to end, on the same line; tap either half of an existing hitch to undo it. Gate: tap a cell to place the gate, then tap 1–2 more cells for sensors, then use the buttons below to set polarity and commit; Erase removes a committed gate.</p>
     <div class="sb-tools" id="sbTools">
       <button class="btn sb-tool" data-tool="hero" type="button">Hero</button>
       <button class="btn sb-tool cur" data-tool="car" type="button">Car</button>
@@ -368,6 +368,12 @@
       <button class="btn sb-tool" data-tool="erase" type="button">Erase</button>
       <button class="btn" id="sbDirBtn" type="button" aria-label="Placement orientation">Dir: H</button>
       <button class="btn" id="sbLibraryBtn" type="button">Library</button>
+    </div>
+    <div class="sb-gate-config" id="sbGateConfig" hidden>
+      <span class="sb-gate-config-lab">Gate: <span id="sbGatePolarityLabel">Pressure Plate</span></span>
+      <button class="btn" id="sbGatePolarityBtn" type="button">Toggle Polarity</button>
+      <button class="btn primary" id="sbGateCommitBtn" type="button">Commit Gate</button>
+      <button class="btn" id="sbGateCancelBtn" type="button">Cancel</button>
     </div>
     <div class="sb-board-wrap">
       <div class="sb-board" id="sbBoard"><span class="sb-exit">▶</span></div>
