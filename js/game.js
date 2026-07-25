@@ -248,8 +248,12 @@ function buildPieces(){
   let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
-    const isTow = hitches.some(h => h.tow === i);
+    const towHitch = hitches.find(h => h.tow === i);
+    const isTow = !!towHitch;
     const isTrailer = hitches.some(h => h.trailer === i);
+    // Only a tow truck may pull a broken-down car (trailer len < 3); a
+    // genuine trailer (len 3) can be hitched by any car, no art constraint.
+    const towCar = isTow && pieces[towHitch.trailer].len < 3;
     el.className = 'piece' + (i === 0 ? ' hero' : '') + (isTow ? ' tow' : '');
     el.dataset.idx = i;
     el.setAttribute('tabindex', '0');
@@ -263,6 +267,7 @@ function buildPieces(){
       seed,
       photoOrd,
       trailer: isTrailer,
+      towCar,
     });
     el.classList.add('enter');
     el.style.animationDelay = (i * 0.028) + 's';
@@ -3010,6 +3015,7 @@ const LIB_SLIDERS = [
   ['libHue', 'libHueVal', 0],
   ['libColorizeAmount', 'libColorizeAmountVal', 0],
   ['libColorizeHue', 'libColorizeHueVal', 0],
+  ['libPositionX', 'libPositionXVal', 0],
 ];
 
 function libResetSliders(){
@@ -3043,6 +3049,7 @@ function libGatherOpts(preview){
     colorizeAmount: Number($('libColorizeAmount').value),
     stretchX: libStretchX,
     stretchY: libStretchY,
+    offsetX: Number($('libPositionX').value),
   };
   if(preview) opts.previewMaxDim = 1000;
   return opts;
