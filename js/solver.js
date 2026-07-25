@@ -51,11 +51,14 @@ function occupy(len, dir, fixed, offs, wm){
    (anySensorOccupied) XOR polarity.
 
    Optional hitches: [{ tow, trailer }, …] plus a parallel `coupled` array
-   (1 per hitch: 0 = coupled, 1 = decoupled — matches the runtime's
-   one-way decouple). Three move shapes come out of here, matching what
-   the board UI can actually do to a hitched pair:
-     { i, o }              — plain slide (untethered piece, or a decoupled
-                              tow/trailer moving independently)
+   (1 per hitch: 0 = coupled, 1 = decoupled — a two-way toggle, matching
+   the runtime's double-tap on either half of the pair). Four move shapes
+   come out of here, matching what the board UI can actually do to a
+   hitched pair:
+     { i, o }              — plain slide of an untethered piece, or a
+                              decoupled TOW moving independently (a
+                              decoupled TRAILER never gets this shape —
+                              see below)
      { i, o, i2, o2 }      — coupled tow move: tow slides i→o, its trailer
                               slides i2→o2 by the identical delta, both
                               legs checked simultaneously at every step of
@@ -66,22 +69,32 @@ function occupy(len, dir, fixed, offs, wm){
                               safe: the trailer's full path is validated
                               here, before either side of the pair moves)
      { decouple: hitchIdx } — detach a still-coupled hitch; no piece moves,
-                              costs one move same as decoupleTow() in
+                              costs one move same as decoupleHitch() in
                               game.js (moves++)
-   A trailer stays fully inert (no independent slide, not even a wall — it
-   simply contributes no moves) for as long as its hitch is coupled; once
-   decoupled it's an ordinary piece, same as its tow. */
+     { couple: hitchIdx }   — reattach a decoupled hitch; only legal when
+                              the tow and trailer are CURRENTLY physically
+                              adjacent again (same lane, touching, same
+                              orientation — the same test the tow/trailer
+                              were placed under originally), also costs one
+                              move, same as coupleHitch() in game.js
+   A trailer never gets an independent slide — not while coupled (it's
+   fully inert, "not even a wall" in the sense that its own cells simply
+   contribute no moves) and not once decoupled either: a broken-down car or
+   trailer can't drive itself, full stop. Once decoupled it just sits where
+   it was left, an ordinary occupied cell for everything else's clearance
+   checks, until something re-couples it — only the TOW becomes a freely
+   slideable piece on its own after decoupling. */
 export function legalMoves(len, dir, fixed, offs, wm, gates, hitches, coupled){
   const g = occupy(len, dir, fixed, offs, wm);
   const out = [];
 
   const isCoupled = hi => !coupled || coupled[hi] !== 1;
-  const hitchByTow = new Map();      // towIdx -> hitchIdx, only while coupled
+  const hitchByTow = new Map();      // towIdx -> hitchIdx, always (coupled or not)
   const hitchByTrailer = new Map();  // trailerIdx -> hitchIdx, always
   if(hitches){
     hitches.forEach((h, hi) => {
+      hitchByTow.set(h.tow, hi);
       hitchByTrailer.set(h.trailer, hi);
-      if(isCoupled(hi)) hitchByTow.set(h.tow, hi);
     });
   }
 
@@ -102,11 +115,18 @@ export function legalMoves(len, dir, fixed, offs, wm, gates, hitches, coupled){
     const anySensorOccupied = gate.sensors.some(([sr, sc]) => g[sr * N + sc] !== -1);
     return anySensorOccupied === gate.polarity;   // blocked iff NOT open
   };
+  // Same physical test js/generate.js's tryGenerateHitch places a pair
+  // under and the Sandbox's sbHitchable enforces: same lane, touching
+  // end-to-end with no gap, same orientation.
+  const adjacentNow = (a, b) => {
+    if(dir[a] !== dir[b] || fixed[a] !== fixed[b]) return false;
+    return offs[a] + len[a] === offs[b] || offs[b] + len[b] === offs[a];
+  };
 
   for(let i = 0; i < offs.length; i++){
-    if(hitchByTrailer.has(i) && isCoupled(hitchByTrailer.get(i))) continue;   // inert while coupled
+    if(hitchByTrailer.has(i)) continue;   // a hitch trailer never gets a solo move, coupled or not
 
-    if(hitchByTow.has(i)){
+    if(hitchByTow.has(i) && isCoupled(hitchByTow.get(i))){
       const h = hitches[hitchByTow.get(i)];
       const trailerI = h.trailer;
       if(dir[trailerI] !== dir[i]) continue;   // auto-couple only fires on matching orientation (game.js parity)
@@ -141,7 +161,10 @@ export function legalMoves(len, dir, fixed, offs, wm, gates, hitches, coupled){
     }
   }
 
-  if(hitches) hitches.forEach((h, hi) => { if(isCoupled(hi)) out.push({ decouple: hi }); });
+  if(hitches) hitches.forEach((h, hi) => {
+    if(isCoupled(hi)) out.push({ decouple: hi });
+    else if(adjacentNow(h.tow, h.trailer)) out.push({ couple: hi });
+  });
 
   return out;
 }
@@ -159,8 +182,8 @@ function heroDistance(len, dir, fixed, offs, wm){
 }
 
 /* Extended BFS state: piece offsets, plus one trailing slot per hitch
-   (0 = coupled, 1 = decoupled — a one-way flag, same as the runtime's
-   decoupleTow). Splitting a state array back into its two halves is just
+   (0 = coupled, 1 = decoupled — a two-way toggle, same as the runtime's
+   double-tap). Splitting a state array back into its two halves is just
    slicing at numPieces; kept as tiny local helpers rather than a class
    since every consumer already treats state as a plain number array. */
 function splitState(s, numPieces){
@@ -169,6 +192,7 @@ function splitState(s, numPieces){
 function applyMove(s, numPieces, mv){
   const ns = s.slice();
   if(mv.decouple !== undefined){ ns[numPieces + mv.decouple] = 1; return ns; }
+  if(mv.couple !== undefined){ ns[numPieces + mv.couple] = 0; return ns; }
   ns[mv.i] = mv.o;
   if(mv.i2 !== undefined) ns[mv.i2] = mv.o2;
   return ns;
@@ -257,7 +281,7 @@ export function solve(pieces, opts = {}){
   // annotate pre-move offsets by replaying
   let s = start.slice();
   for(const mv of path){
-    if(mv.decouple === undefined){
+    if(mv.decouple === undefined && mv.couple === undefined){
       mv.from = s[mv.i];
       if(mv.i2 !== undefined) mv.from2 = s[mv.i2];
     }
@@ -268,18 +292,19 @@ export function solve(pieces, opts = {}){
 }
 
 /* First move of an optimal solution — the hint. Null if unsolvable.
-   Returns either { idx, r, c } (drag piece `idx` to row/col r,c — for a
-   coupled tow move this is the TOW's target; the board auto-drags its
-   trailer along, same as a real drag) or { decouple: idx } (the hint is
-   to unhitch piece `idx`, which has no destination to point at). */
+   Returns { idx, r, c } (drag piece `idx` to row/col r,c — for a coupled
+   tow move this is the TOW's target; the board auto-drags its trailer
+   along, same as a real drag), { decouple: idx } (the hint is to unhitch
+   tow piece `idx`, which has no destination to point at), or
+   { couple: idx } (the hint is to re-hitch tow piece `idx` — only offered
+   when it's already sitting adjacent to its trailer again). */
 export function firstOptimalMove(pieces, opts){
   const sol = solve(pieces, opts);
   if(!sol.solvable || sol.optimal === 0) return null;
   const mv = sol.path[0];
-  if(mv.decouple !== undefined){
-    const hitches = opts?.hitches;
-    return { decouple: hitches[mv.decouple].tow };
-  }
+  const hitches = opts?.hitches;
+  if(mv.decouple !== undefined) return { decouple: hitches[mv.decouple].tow };
+  if(mv.couple !== undefined) return { couple: hitches[mv.couple].tow };
   const p = pieces[mv.i];
   return {
     idx: mv.i,
