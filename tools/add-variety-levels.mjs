@@ -14,7 +14,7 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { solve } from '../js/solver.js';
+import { solve, levelKey } from '../js/solver.js';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -61,6 +61,14 @@ const chapterFloors = CHAPTERS.map((ch, chIdx) => {
   return Math.min(...LEVELS.slice(start, end).map(l => l.d));
 });
 
+// Build set of existing campaign board keys to prevent duplicates
+const campaignKeys = new Set();
+LEVELS.forEach(lv => {
+  const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+  const key = levelKey(pieces, lv.w || []);
+  campaignKeys.add(key);
+});
+
 CHAPTERS.forEach((ch, chIdx) => {
   const targets = TARGETS[chIdx] ?? { h: 0, g: 0 };
   const start = chIdx * CHAPTER_SIZE;
@@ -101,9 +109,15 @@ CHAPTERS.forEach((ch, chIdx) => {
       skipped.push(`${ch.name} slot ${t.idx + 1}: no ${t.type} boards in pool`);
       return;
     }
-    // Find best par/difficulty match in this chapter's range + above floor
+    // Find best par/difficulty match in this chapter's range + above floor, excluding dups
     const floor = chapterFloors[chIdx];
-    const candidates = pool.filter(b => b.m >= ch.minM && b.m <= ch.maxM && b.d >= floor);
+    const candidates = pool.filter(b => {
+      if(b.m < ch.minM || b.m > ch.maxM || b.d < floor) return false;
+      // Check if this board already exists in the campaign
+      const pieces = b.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+      const key = levelKey(pieces, b.w || []);
+      return !campaignKeys.has(key);
+    });
     if(!candidates.length){
       skipped.push(`${ch.name} slot ${t.idx + 1}: no ${t.type} boards match par ${ch.minM}–${ch.maxM} and d >= ${floor}`);
       return;
@@ -122,6 +136,9 @@ CHAPTERS.forEach((ch, chIdx) => {
     }
 
     replacements[t.idx] = picked;
+    // Mark this board as used in this run to prevent duplicate picks
+    const pickedKey = levelKey(pieces, picked.w || []);
+    campaignKeys.add(pickedKey);
     console.log(`✓ slot ${t.idx + 1} (${ch.name}): ${t.type} par ${lv.m} → ${picked.m}, d ${lv.d} → ${picked.d}`);
   });
 });
