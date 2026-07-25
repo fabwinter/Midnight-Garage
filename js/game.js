@@ -975,7 +975,7 @@ function startBoard(){
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
     persist();
-    setTimeout(() => toast(t('toast.hitch')), 700);
+    setTimeout(() => showOverlay('hitchTutorialOverlay'), 700);
   }
 }
 
@@ -1964,6 +1964,13 @@ function wirePro(){
 /* ================== STATIC STRINGS ================== */
 function applyStrings(){
   $('brandSub').textContent = t('sub');
+  $('htTitle').textContent = t('hitch.tutorial.title');
+  $('htTowLabel').textContent = t('hitch.tutorial.tow');
+  $('htTrailerLabel').textContent = t('hitch.tutorial.trailer');
+  $('htLine1').textContent = t('hitch.tutorial.line1');
+  $('htLine2').textContent = t('hitch.tutorial.line2');
+  $('htLine3').textContent = t('hitch.tutorial.line3');
+  $('hitchTutorialGotIt').textContent = t('hitch.tutorial.gotit');
   $('labLevel').textContent = t('hud.level');
   $('labMoves').textContent = t('hud.moves');
   $('labPar').textContent = t('hud.par');

@@ -308,6 +308,33 @@
   </div>
 </div>
 
+<!-- First-time hitch mechanic explainer — shown once (save.hitchSeen)
+     the first time a hitched trailer appears, replacing what used to be
+     toast-only text with an actual diagram of the coupling plus an
+     animated double-tap gesture. -->
+<div class="overlay" id="hitchTutorialOverlay">
+  <div class="sheet ht-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="htTitle">Hitched Trailer</h2>
+    <div class="ht-diagram">
+      <div class="ht-pair">
+        <div class="ht-car ht-tow" id="htTowLabel">TOW</div>
+        <div class="ht-coupling"></div>
+        <div class="ht-car ht-trailer" id="htTrailerLabel">TRAILER</div>
+      </div>
+      <div class="ht-tap-anim" aria-hidden="true">
+        <span class="ht-ripple"></span>
+        <span class="ht-ripple ht-ripple2"></span>
+        <span class="ht-hand">👆</span>
+      </div>
+    </div>
+    <p class="ht-line" id="htLine1"></p>
+    <p class="ht-line" id="htLine2"></p>
+    <p class="ht-line ht-muted" id="htLine3"></p>
+    <button class="btn primary" id="hitchTutorialGotIt" type="button" data-close>Got it</button>
+  </div>
+</div>
+
 <!-- Admin sandbox level designer -->
 <div class="overlay" id="sandboxOverlay">
   <div class="sheet sandbox-sheet">
