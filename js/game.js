@@ -14,6 +14,7 @@ import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
 import { loadDaily, daily, isDone, recordDailyWin, isPlayable } from './daily.js';
 import { bountyFor, bountyConditionMet } from './bounty.js';
+import { BOUNTY_ROTATION } from './bounty-rotation.data.js';
 import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
@@ -2351,8 +2352,11 @@ function renderLevelInspector(){
 const SB_KEY = 'sandbox_levels_v1';
 const SB_CELL = 46;                     // must match --sbc in css
 let sbTool = 'car', sbDir = 'h';
-let sbState = { pieces: [], walls: [] };   // pieces: {r,c,len,dir,hero?,photo?}
+let sbState = { pieces: [], walls: [], hitches: [] };   // pieces: {r,c,len,dir,hero?,photo?}; hitches: {tow,trailer} piece indices
 let sbSaved = [];
+// Index of the piece tapped with the Hitch tool, awaiting its pair (tow
+// tapped first, trailer second) — null when nothing's mid-selection.
+let sbHitchPending = null;
 
 function openSandbox(){
   hideOverlay('startOverlay');
@@ -2447,6 +2451,123 @@ function sbFits(p, ignoreIdx = -1){
   return true;
 }
 
+/* Same physical-hitch rule js/generate.js's tryGenerateHitch places by
+   construction and tools/fix-hitch-levels.mjs asserts after the fact: same
+   orientation, same lane, touching end-to-end with no gap (a real bumper-
+   to-bumper coupling, not two pieces linked by an invisible tether). */
+function sbHitchable(a, b){
+  if(!a || !b || a.dir !== b.dir) return false;
+  if(a.dir === 'v'){
+    if(a.c !== b.c) return false;
+    return a.r + a.len === b.r || b.r + b.len === a.r;
+  }
+  if(a.r !== b.r) return false;
+  return a.c + a.len === b.c || b.c + b.len === a.c;
+}
+
+// Deletes a piece and keeps every hitch's indices consistent: drops any
+// hitch that referenced it (its pair is now meaningless — nothing to
+// couple to), and shifts every other hitch's indices down past the gap,
+// exactly like sbState.pieces.splice(idx,1) already does to piece order.
+function sbRemovePiece(idx){
+  sbState.pieces.splice(idx, 1);
+  sbState.hitches = sbState.hitches
+    .filter(h => h.tow !== idx && h.trailer !== idx)
+    .map(h => ({
+      tow: h.tow > idx ? h.tow - 1 : h.tow,
+      trailer: h.trailer > idx ? h.trailer - 1 : h.trailer,
+    }));
+  if(sbHitchPending === idx) sbHitchPending = null;
+  else if(sbHitchPending !== null && sbHitchPending > idx) sbHitchPending--;
+}
+
+// After a piece the admin just dragged or rotated changes shape, any hitch
+// it's part of might no longer be physically adjacent — drop it rather
+// than silently export/playtest a coupling that doesn't visually touch.
+function sbValidateHitches(){
+  const before = sbState.hitches.length;
+  sbState.hitches = sbState.hitches.filter(h => sbHitchable(sbState.pieces[h.tow], sbState.pieces[h.trailer]));
+  if(sbState.hitches.length < before) toast('Hitch broken — pieces no longer touching');
+}
+
+/* Hitch tool: tap the tow, then tap the trailer it pulls. Tapping either
+   half of an existing hitch un-hitches it instead (a quick way to undo
+   without switching to Erase and deleting the piece outright). The hero
+   can never be hitched — it's the one piece that must stay freely
+   draggable by the player. */
+function sbHitchTapPiece(i){
+  const p = sbState.pieces[i];
+  if(!p) return;
+  if(p.hero){ toast("The hero can't be hitched"); return; }
+
+  const existing = sbState.hitches.findIndex(h => h.tow === i || h.trailer === i);
+  if(existing !== -1){
+    sbState.hitches.splice(existing, 1);
+    sbHitchPending = null;
+    toast('Unhitched');
+    sbRender();
+    return;
+  }
+
+  if(sbHitchPending === null){
+    sbHitchPending = i;
+    toast('Now tap the trailer it pulls');
+    sbRender();
+    return;
+  }
+  if(sbHitchPending === i){
+    sbHitchPending = null;
+    sbRender();
+    return;
+  }
+  const tow = sbState.pieces[sbHitchPending];
+  if(!sbHitchable(tow, p)){
+    toast("Those two aren't touching end-to-end on the same line — pick adjacent pieces");
+    sbHitchPending = null;
+    sbRender();
+    return;
+  }
+  sbState.hitches.push({ tow: sbHitchPending, trailer: i });
+  sbHitchPending = null;
+  toast('Hitched');
+  sbRender();
+}
+
+/* Every shipped board's identity (levelKey ignores hitches/order/index —
+   same board-equality notion tools/verify-levels.mjs's cross-pool dedup
+   check uses), memoized on first use since it's ~660 boards' worth of
+   string-building nobody needs to pay for outside the Sandbox. Keyed to a
+   label so sbFindDuplicate can name what it collided with. */
+let shippedBoardIndex = null;
+function shippedBoards(){
+  if(shippedBoardIndex) return shippedBoardIndex;
+  shippedBoardIndex = new Map();
+  const index = (pools) => pools.forEach(([list, label]) => list.forEach((lv, i) => {
+    const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+    shippedBoardIndex.set(levelKey(pieces, lv.w || []), `${label} ${i + 1}`);
+  }));
+  index([[LEVELS, 'Campaign level'], [BOUNTY_ROTATION, 'Bounty board'], [IMPOUND_LOT, 'Impound lot']]);
+  return shippedBoardIndex;
+}
+
+// Does the current sandbox board's exact piece/wall layout already exist
+// somewhere? Checks the shipped pools first, then the admin's own other
+// saved sandbox designs (excluded: whichever saved entry currently shares
+// the name in the Save field — that's the one about to be overwritten by
+// Save, i.e. "this board", not a real collision with itself).
+function sbFindDuplicate(){
+  const key = levelKey(sbState.pieces.map(p => ({ r: p.r, c: p.c, len: p.len, dir: p.dir })), sbState.walls);
+  const shipped = shippedBoards().get(key);
+  if(shipped) return shipped;
+  const curName = ($('sbName').value || '').trim();
+  const savedMatch = sbSaved.find(lv => {
+    if(lv.name === curName) return false;
+    const pieces = lv.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
+    return levelKey(pieces, lv.w || []) === key;
+  });
+  return savedMatch ? `your saved “${savedMatch.name}”` : null;
+}
+
 function sbStatus(){
   const el = $('sbStatus');
   el.className = 'sb-status';
@@ -2455,20 +2576,27 @@ function sbStatus(){
     return null;
   }
   const sol = solve(sbState.pieces.map(q => ({ r: q.r, c: q.c, len: q.len, dir: q.dir })),
-                    { walls: sbState.walls });
+                    { walls: sbState.walls, hitches: sbState.hitches });
+  const parts = [];
   if(sol.solvable){
-    el.textContent = `Solvable · par ${sol.optimal}`;
+    parts.push(`Solvable · par ${sol.optimal}`);
     el.classList.add('ok');
   } else {
-    el.textContent = 'Not solvable from this layout.';
+    parts.push('Not solvable from this layout.');
     el.classList.add('bad');
   }
+  const dupe = sbFindDuplicate();
+  if(dupe){
+    parts.push(`⚠ Already in use — matches ${dupe}`);
+    el.classList.add('dupe');
+  }
+  el.textContent = parts.join('  ·  ');
   return sol;
 }
 
 function sbRender(){
   const b = $('sbBoard');
-  b.querySelectorAll('.sb-piece, .sb-wall').forEach(e => e.remove());
+  b.querySelectorAll('.sb-piece, .sb-wall, .sb-hitch').forEach(e => e.remove());
   sbState.walls.forEach(([r, c], wi) => {
     const el = document.createElement('div');
     el.className = 'sb-wall';
@@ -2479,16 +2607,39 @@ function sbRender(){
     b.appendChild(el);
   });
   const seed = hashStr(JSON.stringify(sbState.pieces));
-  let sedanOrd = 0, truckOrd = 0;
+  let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   sbState.pieces.forEach((p, i) => {
     const el = document.createElement('div');
-    el.className = 'sb-piece' + (p.hero ? ' hero' : '');
+    const towHitch = sbState.hitches.find(h => h.tow === i);
+    const isTrailer = sbState.hitches.some(h => h.trailer === i);
+    // Same rule as the real board: only a tow truck may pull a broken-down
+    // car (trailer len < 3) — a genuine trailer (len 3) can be hitched by
+    // any car, no art constraint.
+    const towCar = !!towHitch && sbState.pieces[towHitch.trailer].len < 3;
+    el.className = 'sb-piece' + (p.hero ? ' hero' : '') + (i === sbHitchPending ? ' hitch-pick' : '');
     el.dataset.i = i;
     el.style.width = (p.dir === 'h' ? p.len : 1) * SB_CELL + 'px';
     el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
     el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
-    const photoOrd = p.hero ? 0 : (p.len >= 3 ? truckOrd++ : sedanOrd++);
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo });
+    const photoOrd = p.hero ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo, trailer: isTrailer, towCar });
+    b.appendChild(el);
+  });
+  sbState.hitches.forEach(h => {
+    const tow = sbState.pieces[h.tow], trailer = sbState.pieces[h.trailer];
+    if(!tow || !trailer) return;
+    const el = document.createElement('div');
+    el.className = 'sb-hitch';
+    el.style.position = 'absolute';
+    el.style.top = '0'; el.style.left = '0';
+    el.style.width = (SB_CELL * 6) + 'px';
+    el.style.height = (SB_CELL * 6) + 'px';
+    el.style.pointerEvents = 'none';
+    const towCx = (tow.c + (tow.dir === 'h' ? tow.len / 2 : 0.5)) * SB_CELL;
+    const towCy = (tow.r + (tow.dir === 'v' ? tow.len / 2 : 0.5)) * SB_CELL;
+    const trailerCx = (trailer.c + (trailer.dir === 'h' ? trailer.len / 2 : 0.5)) * SB_CELL;
+    const trailerCy = (trailer.r + (trailer.dir === 'v' ? trailer.len / 2 : 0.5)) * SB_CELL;
+    el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, SB_CELL * 0.08);
     b.appendChild(el);
   });
   sbStatus();
@@ -2507,7 +2658,7 @@ function sbPlace(r, c){
   const g = sbGrid();
   if(sbTool === 'erase'){
     if(g[r][c] === 'w') sbState.walls = sbState.walls.filter(w => !(w[0] === r && w[1] === c));
-    else if(g[r][c] !== -1) sbState.pieces.splice(g[r][c], 1);
+    else if(g[r][c] !== -1) sbRemovePiece(g[r][c]);
     sbRender();
     return;
   }
@@ -2516,6 +2667,13 @@ function sbPlace(r, c){
     else if(g[r][c] === -1 && !(r === EXIT_ROW)) sbState.walls.push([r, c]);
     else if(g[r][c] === -1) toast('No walls on the exit row');
     sbRender();
+    return;
+  }
+  if(sbTool === 'hitch'){
+    // Reaching here means the tap missed every piece (sbAttachBoard routes
+    // an actual piece tap to sbHitchTapPiece before sbPlace is ever
+    // called) — nothing to hitch to empty space or a wall.
+    toast('Tap a piece to hitch it — tap the tow, then its trailer');
     return;
   }
   if(sbTool === 'hero'){
@@ -2549,7 +2707,8 @@ function sbAttachBoard(){
     const cell = sbCellFromEvent(e);
     if(pieceEl){
       const i = +pieceEl.dataset.i;
-      if(sbTool === 'erase'){ sbState.pieces.splice(i, 1); sbRender(); return; }
+      if(sbTool === 'erase'){ sbRemovePiece(i); sbRender(); return; }
+      if(sbTool === 'hitch'){ sbHitchTapPiece(i); return; }
       dragIdx = i; dragEl = pieceEl; moved = false; startCell = cell;
       const p = sbState.pieces[i];
       grabOff = { r: cell.r - p.r, c: cell.c - p.c };
@@ -2596,6 +2755,7 @@ function sbAttachBoard(){
       else sfx('deny');
     }
     dragIdx = -1; dragEl = null;
+    sbValidateHitches();
     sbRender();
   };
   b.addEventListener('pointerup', drop);
@@ -2608,6 +2768,7 @@ function sbLevelObj(){
     m: sol && sol.solvable ? sol.optimal : 99,
     p: sbState.pieces.map(q => [q.r, q.c, q.len, q.dir]),
     w: sbState.walls.map(w => [w[0], w[1]]),
+    ...(sbState.hitches.length ? { h: sbState.hitches.map(h => ({ tow: h.tow, trailer: h.trailer })) } : {}),
   };
 }
 
@@ -2636,12 +2797,12 @@ async function sbPersistSaved(){
 }
 
 /* Exported shape matches exactly what tools/promote-sandbox-levels.mjs and
-   the LEVELS array both expect: {name, m, p, w?}. m===99 means "not yet
+   the LEVELS array both expect: {name, m, p, w?, h?}. m===99 means "not yet
    verified solvable" (sbLevelObj()'s placeholder) — the promote script
    recomputes par itself regardless, so an unsolved-looking export is still
    safe to hand off, just not guaranteed to go anywhere. */
 function sbLevelExportObj(lv){
-  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}) };
+  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}), ...(lv.h?.length ? { h: lv.h } : {}) };
 }
 
 /* Plain clipboard copy, deliberately skipping shareText()'s navigator.share
@@ -2675,14 +2836,16 @@ function sbRenderSaved(){
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = lv.name;
     const par = document.createElement('span'); par.className = 'par'; par.textContent = lv.m === 99 ? 'par ?' : 'par ' + lv.m;
     const play = document.createElement('button'); play.className = 'btn'; play.textContent = 'Play';
-    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w }); });
+    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w, h: lv.h }); });
     const edit = document.createElement('button'); edit.className = 'btn'; edit.textContent = 'Edit';
     edit.addEventListener('click', () => {
       sfx('ui');
       sbState = {
         pieces: lv.p.map((a, j) => ({ r: a[0], c: a[1], len: a[2], dir: a[3], hero: j === 0 })),
         walls: (lv.w || []).map(w => [w[0], w[1]]),
+        hitches: (lv.h || []).map(h => ({ tow: h.tow, trailer: h.trailer })),
       };
+      sbHitchPending = null;
       $('sbName').value = lv.name;
       sbRender();
     });
@@ -2703,8 +2866,10 @@ function sbRenderSaved(){
 function wireSandbox(){
   document.querySelectorAll('.sb-tool').forEach(btn => btn.addEventListener('click', () => {
     sbTool = btn.dataset.tool;
+    sbHitchPending = null;
     document.querySelectorAll('.sb-tool').forEach(x => x.classList.toggle('cur', x === btn));
     sbRenderPicker();
+    sbRender();
   }));
   $('sbDirBtn').addEventListener('click', () => {
     sbDir = sbDir === 'h' ? 'v' : 'h';
@@ -2713,7 +2878,8 @@ function wireSandbox(){
   $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });
   $('sbClearBtn').addEventListener('click', () => {
     sfx('ui');
-    sbState = { pieces: [], walls: [] };
+    sbState = { pieces: [], walls: [], hitches: [] };
+    sbHitchPending = null;
     sbRender();
   });
   $('sbSaveBtn').addEventListener('click', async () => {

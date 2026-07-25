@@ -719,9 +719,11 @@ input[type=range]::-moz-range-thumb{
 .sb-piece svg,.sb-wall svg{width:100%;height:100%;display:block;overflow:visible}
 .sb-piece.drag{opacity:.85;cursor:grabbing;z-index:3}
 .sb-piece.bad{filter:saturate(.4) brightness(.7)}
+.sb-piece.hitch-pick{outline:3px solid #6ecbff;outline-offset:-2px;z-index:4}
 .sb-status{margin:10px 0 2px;font-size:12px;color:var(--muted);min-height:16px}
 .sb-status.ok{color:#7ed957}
 .sb-status.bad{color:#ff7a6e}
+.sb-status.dupe{color:#ffb84d}
 .sb-actions{display:flex;gap:8px;margin:8px 0}
 .sb-actions .btn{flex:1}
 .sb-save-row{display:flex;gap:8px;margin-bottom:10px}
