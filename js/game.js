@@ -72,6 +72,7 @@ let save = {
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   hitchSeen: false,
+  gateSeen: false,
   admin: false,
   bounties: { done: {} },   // 'YYYY-MM-DD' -> {moves, par, met, tier, condition}
   impound: { stars: {}, best: {} },   // keyed by board `key` (levelKey), not array index
@@ -984,6 +985,11 @@ function startBoard(){
     save.hitchSeen = true;
     persist();
     setTimeout(() => showOverlay('hitchTutorialOverlay'), 700);
+  }
+  if(gates && gates.length && !save.gateSeen){
+    save.gateSeen = true;
+    persist();
+    setTimeout(() => showOverlay('gateTutorialOverlay'), 700);
   }
 }
 
@@ -2025,6 +2031,13 @@ function applyStrings(){
   $('htLine2').textContent = t('hitch.tutorial.line2');
   $('htLine3').textContent = t('hitch.tutorial.line3');
   $('hitchTutorialGotIt').textContent = t('hitch.tutorial.gotit');
+  $('gtTitle').textContent = t('gate.tutorial.title');
+  $('gtSensorLabel').textContent = t('gate.tutorial.sensor');
+  $('gtGateLabel').textContent = t('gate.tutorial.gate');
+  $('gtLine1').textContent = t('gate.tutorial.line1');
+  $('gtLine2').textContent = t('gate.tutorial.line2');
+  $('gtLine3').textContent = t('gate.tutorial.line3');
+  $('gateTutorialGotIt').textContent = t('gate.tutorial.gotit');
   $('labLevel').textContent = t('hud.level');
   $('labMoves').textContent = t('hud.moves');
   $('labPar').textContent = t('hud.par');
