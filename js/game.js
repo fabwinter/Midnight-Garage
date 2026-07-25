@@ -2413,11 +2413,14 @@ function renderLevelInspector(){
 const SB_KEY = 'sandbox_levels_v1';
 const SB_CELL = 46;                     // must match --sbc in css
 let sbTool = 'car', sbDir = 'h';
-let sbState = { pieces: [], walls: [], hitches: [] };   // pieces: {r,c,len,dir,hero?,photo?}; hitches: {tow,trailer} piece indices
+let sbState = { pieces: [], walls: [], hitches: [], gates: [] };   // pieces: {r,c,len,dir,hero?,photo?}; hitches: {tow,trailer} piece indices; gates: {gate:[r,c], sensors:[[r,c],...], polarity:bool}
 let sbSaved = [];
 // Index of the piece tapped with the Hitch tool, awaiting its pair (tow
 // tapped first, trailer second) — null when nothing's mid-selection.
 let sbHitchPending = null;
+// Gate being configured: {gate:[r,c], sensors:[], polarity:bool} during creation,
+// null when not mid-configuration. Tracks gate cell and collected sensors.
+let sbGatePending = null;
 
 function openSandbox(){
   hideOverlay('startOverlay');
@@ -2594,6 +2597,97 @@ function sbHitchTapPiece(i){
   sbRender();
 }
 
+/* Gate tool: tap to place gate cell, then tap up to 2 sensor cells, then
+   toggle polarity with an extra tap. Tapping an existing gate un-places it. */
+function sbGateTapCell(r, c){
+  if(sbGatePending === null){
+    // Start a new gate at this cell
+    sbGatePending = { gate: [r, c], sensors: [], polarity: false };
+    toast('Gate placed. Tap 1–2 sensor cells');
+    sbRender();
+    return;
+  }
+  // Check if tapping the gate cell again (cancel)
+  if(sbGatePending.gate[0] === r && sbGatePending.gate[1] === c){
+    sbGatePending = null;
+    toast('Gate cancelled');
+    sbRender();
+    return;
+  }
+  // Check if already a sensor at this cell (remove it)
+  const sensorIdx = sbGatePending.sensors.findIndex(s => s[0] === r && s[1] === c);
+  if(sensorIdx !== -1){
+    sbGatePending.sensors.splice(sensorIdx, 1);
+    if(sbGatePending.sensors.length === 0) toast('Sensors cleared');
+    sbRender();
+    return;
+  }
+  // Add sensor if we have room (max 2)
+  if(sbGatePending.sensors.length < 2){
+    sbGatePending.sensors.push([r, c]);
+    if(sbGatePending.sensors.length === 1) toast('Sensor 1 placed. Tap another (or same cell again to finish)');
+    else toast('Sensor 2 placed. Tap the gate to toggle polarity, or finish elsewhere');
+    sbRender();
+    return;
+  }
+  // Max sensors reached; user should tap gate cell to commit/toggle polarity
+  toast('Max 2 sensors — tap the gate cell to finish or adjust');
+}
+
+function sbCommitGate(){
+  if(!sbGatePending || !sbGatePending.sensors.length){
+    toast('Add at least 1 sensor to the gate');
+    return;
+  }
+  const g = sbGate();
+  // Verify gate cell is not under a piece
+  for(const p of sbState.pieces){
+    for(let k = 0; k < p.len; k++){
+      const pr = p.r + (p.dir === 'v' ? k : 0);
+      const pc = p.c + (p.dir === 'h' ? k : 0);
+      if(pr === sbGatePending.gate[0] && pc === sbGatePending.gate[1]){
+        toast('Gate cell cannot be under a piece');
+        return;
+      }
+    }
+  }
+  // Verify sensors are not under pieces
+  for(const [sr, sc] of sbGatePending.sensors){
+    for(const p of sbState.pieces){
+      for(let k = 0; k < p.len; k++){
+        const pr = p.r + (p.dir === 'v' ? k : 0);
+        const pc = p.c + (p.dir === 'h' ? k : 0);
+        if(pr === sr && pc === sc){
+          toast('Sensor cannot be under a piece');
+          return;
+        }
+      }
+    }
+  }
+  sbState.gates.push({
+    gate: sbGatePending.gate,
+    sensors: sbGatePending.sensors,
+    polarity: sbGatePending.polarity,
+  });
+  sbGatePending = null;
+  toast('Gate committed');
+  sbRender();
+}
+
+// Build a grid marking occupied cells by gates (gate cell + sensor cells)
+function sbGate(){
+  const g = new Set();
+  sbState.gates.forEach(gt => {
+    g.add(gt.gate[0] * N + gt.gate[1]);
+    gt.sensors.forEach(s => g.add(s[0] * N + s[1]));
+  });
+  if(sbGatePending){
+    g.add(sbGatePending.gate[0] * N + sbGatePending.gate[1]);
+    sbGatePending.sensors.forEach(s => g.add(s[0] * N + s[1]));
+  }
+  return g;
+}
+
 /* Every shipped board's identity (levelKey ignores hitches/order/index —
    same board-equality notion tools/verify-levels.mjs's cross-pool dedup
    check uses), memoized on first use since it's ~660 boards' worth of
@@ -2657,7 +2751,7 @@ function sbStatus(){
 
 function sbRender(){
   const b = $('sbBoard');
-  b.querySelectorAll('.sb-piece, .sb-wall, .sb-hitch').forEach(e => e.remove());
+  b.querySelectorAll('.sb-piece, .sb-wall, .sb-hitch, .sb-gate, .sb-sensor, .sb-gate-pending').forEach(e => e.remove());
   sbState.walls.forEach(([r, c], wi) => {
     const el = document.createElement('div');
     el.className = 'sb-wall';
@@ -2703,6 +2797,28 @@ function sbRender(){
     el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, SB_CELL * 0.08);
     b.appendChild(el);
   });
+  // Render gates and sensors
+  const renderGateCell = (r, c, classes) => {
+    const el = document.createElement('div');
+    el.className = classes;
+    el.style.width = el.style.height = SB_CELL + 'px';
+    el.style.transform = `translate(${c * SB_CELL}px, ${r * SB_CELL}px)`;
+    el.style.position = 'absolute';
+    el.style.pointerEvents = 'none';
+    el.innerHTML = gateSVG(SB_CELL / 2, SB_CELL / 2, SB_CELL * 0.4);
+    b.appendChild(el);
+  };
+  sbState.gates.forEach((gt, gi) => {
+    const [gr, gc] = gt.gate;
+    renderGateCell(gr, gc, 'sb-gate');
+    gt.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
+  });
+  // Render pending gate being configured
+  if(sbGatePending){
+    const [gr, gc] = sbGatePending.gate;
+    renderGateCell(gr, gc, 'sb-gate-pending');
+    sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
+  }
   sbStatus();
 }
 
@@ -2735,6 +2851,10 @@ function sbPlace(r, c){
     // an actual piece tap to sbHitchTapPiece before sbPlace is ever
     // called) — nothing to hitch to empty space or a wall.
     toast('Tap a piece to hitch it — tap the tow, then its trailer');
+    return;
+  }
+  if(sbTool === 'gate'){
+    sbGateTapCell(r, c);
     return;
   }
   if(sbTool === 'hero'){
@@ -2830,6 +2950,7 @@ function sbLevelObj(){
     p: sbState.pieces.map(q => [q.r, q.c, q.len, q.dir]),
     w: sbState.walls.map(w => [w[0], w[1]]),
     ...(sbState.hitches.length ? { h: sbState.hitches.map(h => ({ tow: h.tow, trailer: h.trailer })) } : {}),
+    ...(sbState.gates.length ? { g: sbState.gates.map(gt => ({ gate: gt.gate, sensors: gt.sensors, polarity: gt.polarity })) } : {}),
   };
 }
 
@@ -2858,12 +2979,12 @@ async function sbPersistSaved(){
 }
 
 /* Exported shape matches exactly what tools/promote-sandbox-levels.mjs and
-   the LEVELS array both expect: {name, m, p, w?, h?}. m===99 means "not yet
+   the LEVELS array both expect: {name, m, p, w?, h?, g?}. m===99 means "not yet
    verified solvable" (sbLevelObj()'s placeholder) — the promote script
    recomputes par itself regardless, so an unsolved-looking export is still
    safe to hand off, just not guaranteed to go anywhere. */
 function sbLevelExportObj(lv){
-  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}), ...(lv.h?.length ? { h: lv.h } : {}) };
+  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}), ...(lv.h?.length ? { h: lv.h } : {}), ...(lv.g?.length ? { g: lv.g } : {}) };
 }
 
 /* Plain clipboard copy, deliberately skipping shareText()'s navigator.share
@@ -2897,7 +3018,7 @@ function sbRenderSaved(){
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = lv.name;
     const par = document.createElement('span'); par.className = 'par'; par.textContent = lv.m === 99 ? 'par ?' : 'par ' + lv.m;
     const play = document.createElement('button'); play.className = 'btn'; play.textContent = 'Play';
-    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w, h: lv.h }); });
+    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w, h: lv.h, g: lv.g }); });
     const edit = document.createElement('button'); edit.className = 'btn'; edit.textContent = 'Edit';
     edit.addEventListener('click', () => {
       sfx('ui');
@@ -2905,8 +3026,10 @@ function sbRenderSaved(){
         pieces: lv.p.map((a, j) => ({ r: a[0], c: a[1], len: a[2], dir: a[3], hero: j === 0 })),
         walls: (lv.w || []).map(w => [w[0], w[1]]),
         hitches: (lv.h || []).map(h => ({ tow: h.tow, trailer: h.trailer })),
+        gates: (lv.g || []).map(g => ({ gate: g.gate, sensors: g.sensors, polarity: g.polarity })),
       };
       sbHitchPending = null;
+      sbGatePending = null;
       $('sbName').value = lv.name;
       sbRender();
     });
@@ -2939,8 +3062,9 @@ function wireSandbox(){
   $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });
   $('sbClearBtn').addEventListener('click', () => {
     sfx('ui');
-    sbState = { pieces: [], walls: [], hitches: [] };
+    sbState = { pieces: [], walls: [], hitches: [], gates: [] };
     sbHitchPending = null;
+    sbGatePending = null;
     sbRender();
   });
   $('sbSaveBtn').addEventListener('click', async () => {
