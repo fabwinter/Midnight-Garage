@@ -188,6 +188,141 @@ export function tryGenerateHitch(rng, opts = {}){
   };
 }
 
+/* ---------- Gate puzzles (interlock sensors) ----------
+   A dedicated generator like tryGenerateHitch: gates need deliberately-placed
+   sensor + gate cells, and every candidate is rejected unless the optimal
+   solution actually exercises the gate (solve with vs without, reject if
+   gate doesn't increase par). Two polarities: polarity:false = "occupy a
+   sensor to open the gate" (pressure plate), polarity:true = "clear all
+   sensors to open" (tripwire). Sample both. */
+export function tryGenerateGate(rng, opts = {}){
+  const minOptimal = opts.minOptimal ?? 10;
+  const extras = opts.pieces ?? rngInt(rng, 4, 9);
+
+  const hero = { r: EXIT_ROW, c: rngInt(rng, 0, 3), len: 2, dir: 'h' };
+  const pieces = [hero];
+  const grid = Array.from({ length: N }, () => Array(N).fill(false));
+  const mark = p => {
+    for(let k = 0; k < p.len; k++){
+      grid[p.r + (p.dir === 'v' ? k : 0)][p.c + (p.dir === 'h' ? k : 0)] = true;
+    }
+  };
+  const fits = p => {
+    for(let k = 0; k < p.len; k++){
+      const r = p.r + (p.dir === 'v' ? k : 0), c = p.c + (p.dir === 'h' ? k : 0);
+      if(r >= N || c >= N || grid[r][c]) return false;
+    }
+    return true;
+  };
+  mark(hero);
+
+  // Filler pieces, same as tryGenerate
+  let placed = 0, tries = 0;
+  while(placed < extras && tries < 200){
+    tries++;
+    const len = rng() < 0.28 ? 3 : 2;
+    const dir = rng() < 0.5 ? 'h' : 'v';
+    let p;
+    if(dir === 'h'){
+      const r = rngInt(rng, 0, N - 1);
+      if(r === EXIT_ROW) continue;
+      p = { r, c: rngInt(rng, 0, N - len), len, dir };
+    } else {
+      p = { r: rngInt(rng, 0, N - len), c: rngInt(rng, 0, N - 1), len, dir };
+    }
+    if(!fits(p)) continue;
+    mark(p);
+    pieces.push(p);
+    placed++;
+  }
+
+  // Try random gate placements on this board until one exercises the gate.
+  // Prefer exit row to hero's right, but accept any empty cell.
+  let gate = null, sensors = null;
+  for(let gtry = 0; gtry < 30; gtry++){
+    let gr, gc;
+    if(gtry < 10 && hero.c + hero.len < N){
+      // First 10: try exit row to hero's right
+      gc = rngInt(rng, hero.c + hero.len, N - 1);
+      gr = EXIT_ROW;
+    } else {
+      // Fallback: random empty cell
+      gr = rngInt(rng, 0, N - 1);
+      gc = rngInt(rng, 0, N - 1);
+    }
+
+    // Gate cell must not be under a starting piece
+    if(pieces.some(p => {
+      for(let k = 0; k < p.len; k++){
+        const r = p.r + (p.dir === 'v' ? k : 0), c = p.c + (p.dir === 'h' ? k : 0);
+        if(r === gr && c === gc) return true;
+      }
+      return false;
+    })) continue;
+
+    // Try to place 1-2 sensors
+    const sensorCands = [];
+    for(let sr = 0; sr < N; sr++){
+      for(let sc = 0; sc < N; sc++){
+        if(sr === gr && sc === gc) continue;
+        if(!grid[sr][sc]) sensorCands.push([sr, sc]);
+      }
+    }
+    if(sensorCands.length < 1) continue;
+
+    const sensorCount = rng() < 0.6 ? 1 : Math.min(2, sensorCands.length);
+    const pickedSensors = [];
+    for(let i = 0; i < sensorCount; i++){
+      const idx = Math.floor(rng() * sensorCands.length);
+      pickedSensors.push(sensorCands[idx]);
+      sensorCands.splice(idx, 1);
+    }
+
+    gate = [gr, gc];
+    sensors = pickedSensors;
+    break;
+  }
+  if(!gate || !sensors) return null;
+
+  // Sample polarity
+  const polarity = rng() < 0.5 ? false : true;
+
+  const gates = [{ sensors, gate, polarity }];
+
+  // Must exercise the gate: solve with and without, gate must increase par.
+  const solWithGate = solve(pieces, { maxStates: 250000, gates });
+  if(!solWithGate.solvable || solWithGate.optimal < minOptimal) return null;
+
+  const solWithoutGate = solve(pieces, { maxStates: 250000 });
+  if(!solWithoutGate.solvable) return null;
+
+  // Gate must cost moves AND at least one move in optimal path enters gate
+  if(solWithGate.optimal <= solWithoutGate.optimal) return null;
+  const usesGate = solWithGate.path.some(mv => {
+    if(mv.decouple !== undefined || mv.couple !== undefined) return false;
+    // Does this move's target include the gate cell?
+    const cells = [];
+    for(let k = 0; k < pieces[mv.i].len; k++){
+      const r = pieces[mv.i].dir === 'h' ? pieces[mv.i].r : mv.o + k;
+      const c = pieces[mv.i].dir === 'h' ? mv.o + k : pieces[mv.i].c;
+      cells.push([r, c]);
+    }
+    return cells.some(([r, c]) => r === gate[0] && c === gate[1]);
+  });
+  if(!usesGate) return null;
+
+  const stats = rate(pieces, solWithGate, undefined, gates);
+  const gateKey = sensors.map(s => s[0] + ',' + s[1]).join(';');
+  return {
+    p: pieces.map(q => [q.r, q.c, q.len, q.dir]),
+    g: gates,
+    m: solWithGate.optimal,
+    d: stats.score,
+    stats,
+    key: levelKey(pieces, []) + '|G' + gate[0] + ',' + gate[1] + ':' + gateKey + ':' + (polarity ? 1 : 0),
+  };
+}
+
 /* ---------- Hardening (hill-climb) ----------
    Uniform random boards skew easy (p90 ≈ par 7). To reach the deep end of
    the curve we mutate a board — add / remove / relocate a piece or a wall —
