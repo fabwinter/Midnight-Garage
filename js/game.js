@@ -3110,6 +3110,28 @@ function libPositionHandles(){
     el.style.top = `${offY + py * sy}px`;
   });
   $('libStretchReadout').textContent = `Stretch ${Math.round(libStretchX)}% × ${Math.round(libStretchY)}%`;
+
+  // Cell/block reference grid — one column per board cell this piece
+  // occupies in-game (a sedan is length 2, a truck length 3; the target
+  // canvas is always 400px per cell — 800x400 or 1200x400 — so
+  // canvas.width/400 gives the cell count directly rather than hardcoding
+  // it against the category name). Covers the FULL target canvas, not
+  // the car's current fitted rect, so it reads as a fixed reference frame
+  // to scale/position the car against, not something that moves as the
+  // car does.
+  const cells = Math.round(canvas.width / 400);
+  const grid = $('libCellGrid');
+  grid.style.left = `${offX}px`;
+  grid.style.top = `${offY}px`;
+  grid.style.width = `${canvasRect.width}px`;
+  grid.style.height = `${canvasRect.height}px`;
+  grid.innerHTML = '';
+  for(let i = 1; i < cells; i++){
+    const line = document.createElement('div');
+    line.className = 'lib-cell-grid-line';
+    line.style.left = `${(i / cells) * 100}%`;
+    grid.appendChild(line);
+  }
 }
 
 // Drag-to-stretch: each handle nudges libStretchX and/or libStretchY based
