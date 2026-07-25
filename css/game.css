@@ -820,3 +820,25 @@ input[type=range]::-moz-range-thumb{
 .lib-hero-name{flex:1;min-width:0;font-size:13px}
 .lib-hero-row .btn{padding:6px 10px;font-size:11px}
 .lib-hero-file{display:none}
+
+/* ---------- Admin level inspector ---------- */
+.li-filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.li-filters input[type=text]{
+  flex:1;min-width:160px;background:#11151f;border:1px solid var(--line);border-radius:9px;
+  padding:9px 10px;color:var(--ink);font-size:13px;
+}
+.li-summary{font-size:11px;color:var(--muted);margin-bottom:8px}
+.li-list{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto}
+.li-row{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;
+  border:1px solid var(--line);background:linear-gradient(180deg,#1a2130,#131824);font-size:12px;
+}
+.li-num{font-family:var(--disp);color:var(--ink);min-width:38px}
+.li-chapter{flex:1;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li-par{color:var(--amber);font-family:var(--disp);white-space:nowrap}
+.li-badge{
+  font-size:10px;padding:2px 7px;border-radius:20px;white-space:nowrap;
+  border:1px solid rgba(255,180,84,.4);color:var(--amber);
+}
+.li-badge.li-gate{border-color:rgba(79,210,240,.4);color:#4fd2f0}
+.li-row .btn{padding:5px 10px;font-size:11px}
