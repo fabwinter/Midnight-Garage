@@ -112,32 +112,34 @@ export function tryGenerateHitch(rng, opts = {}){
 
   // Trailer: vertical, straddles the exit row somewhere ahead of the hero
   // — a normal blocker shape, except it starts coupled/inert, so it can't
-  // just be slid clear the way an ordinary piece could.
+  // just be slid clear the way an ordinary piece could. Tow sits directly
+  // adjacent to it in the SAME column, touching with no gap on one side
+  // or the other — a real physical hitch (bumper to bumper), not two
+  // pieces linked by an invisible tether across the board. Both share the
+  // same `fixed` coordinate this way, so js/solver.js's auto-couple
+  // (which slides both by an identical delta) keeps them touching for
+  // every step of every drag, automatically, with no extra bookkeeping.
   const trailerLen = rng() < 0.5 ? 2 : 3;
-  let trailer = null;
-  for(let t = 0; t < 40 && !trailer; t++){
+  const towLen = rng() < 0.35 ? 3 : 2;
+  let trailer = null, tow = null;
+  for(let t = 0; t < 60 && !trailer; t++){
     const c = rngInt(rng, hero.c + hero.len, N - 1);
     const r = rngInt(rng, Math.max(0, EXIT_ROW - trailerLen + 1), Math.min(EXIT_ROW, N - trailerLen));
-    const cand = { r, c, len: trailerLen, dir: 'v' };
-    if(fits(cand)) trailer = cand;
+    const trailerCand = { r, c, len: trailerLen, dir: 'v' };
+    if(!fits(trailerCand)) continue;
+    const aboveR = r - towLen, belowR = r + trailerLen;
+    const towCandidates = [];
+    if(aboveR >= 0) towCandidates.push({ r: aboveR, c, len: towLen, dir: 'v' });
+    if(belowR + towLen <= N) towCandidates.push({ r: belowR, c, len: towLen, dir: 'v' });
+    if(towCandidates.length === 2 && rng() < 0.5) towCandidates.reverse();
+    for(const cand of towCandidates){
+      if(fits(cand)){ tow = cand; trailer = trailerCand; break; }
+    }
   }
-  if(!trailer) return null;
+  if(!trailer || !tow) return null;
   mark(trailer);
   pieces.push(trailer);
   const trailerIdx = pieces.length - 1;
-
-  // Tow: another vertical piece elsewhere on the board, linked to the
-  // trailer by the hitch. Dragging it (while coupled) drags the trailer
-  // along by the same row delta — matches game.js's auto-couple exactly.
-  let tow = null;
-  for(let t = 0; t < 40 && !tow; t++){
-    const len = rng() < 0.35 ? 3 : 2;
-    const c = rngInt(rng, 0, N - 1);
-    const r = rngInt(rng, 0, N - len);
-    const cand = { r, c, len, dir: 'v' };
-    if(fits(cand)) tow = cand;
-  }
-  if(!tow) return null;
   mark(tow);
   pieces.push(tow);
   const towIdx = pieces.length - 1;
