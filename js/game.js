@@ -285,10 +285,10 @@ function updatePieceAria(){
   board.querySelectorAll('.piece').forEach(el => {
     const i = +el.dataset.idx, p = pieces[i];
     if(!p) return;
-    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    const isInertTrailer = hitches.some(h => h.trailer === i);
     el.setAttribute('aria-label',
       (i === 0 ? 'Red car — escape this one'
-        : isInertTrailer ? `Vehicle ${i}, trailer — moves only with its tow vehicle`
+        : isInertTrailer ? `Vehicle ${i}, trailer — can't move on its own, only with its tow vehicle`
         : `Vehicle ${i}, ${p.len === 3 ? 'truck' : 'car'}`) +
       `, row ${p.r + 1}, column ${p.c + 1}, ` +
       (p.dir === 'h' ? 'moves left and right' : 'moves up and down'));
@@ -381,10 +381,10 @@ function attachDrag(el, i){
   const p = () => pieces[i];
 
   el.addEventListener('pointerdown', e => {
-    // Double-tap to decouple (for tow pieces)
+    // Double-tap either half of a hitch to couple/decouple it
     const now = performance.now();
     if(now - lastTapT < 300){
-      if(decoupleTow(i)){
+      if(toggleHitch(i)){
         renderPositions(true);
         updateHud();
         updatePieceAria();
@@ -394,8 +394,10 @@ function attachDrag(el, i){
     }
     lastTapT = now;
     if(solvedAnim || pursuitPaused) return;
-    // Prevent dragging inert trailers (only tow can move, trailer follows)
-    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    // A hitch trailer can never move on its own — not while coupled (it
+    // follows its tow), and not once decoupled either (it's dead weight
+    // until re-hitched). Only the tow is ever independently draggable.
+    const isInertTrailer = hitches.some(h => h.trailer === i);
     if(isInertTrailer){ sfx('deny'); return; }
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
@@ -498,8 +500,8 @@ function attachDrag(el, i){
     const map = { ArrowLeft: [-1, 'h'], ArrowRight: [1, 'h'], ArrowUp: [-1, 'v'], ArrowDown: [1, 'v'] };
     const m = map[e.key];
     if(!m) return;
-    // Prevent keyboard control of inert trailers
-    const isInertTrailer = hitches.some((h, hi) => h.trailer === i && !decoupledHitches.has(hi));
+    // A hitch trailer never moves on its own — see the pointerdown handler above.
+    const isInertTrailer = hitches.some(h => h.trailer === i);
     if(isInertTrailer){ sfx('deny'); return; }
     e.preventDefault();
     const pp = p();
@@ -1001,11 +1003,8 @@ function undo(){
   updatePieceAria();
 }
 
-function decoupleTow(towIdx){
-  if(solvedAnim || pursuitPaused) return false;
-  const hi = hitches.findIndex(h => h.tow === towIdx);
-  if(hi === -1) return false;
-  if(decoupledHitches.has(hi)) return false;
+function decoupleHitch(hi){
+  if(solvedAnim || pursuitPaused || decoupledHitches.has(hi)) return false;
   pushHistory();
   decoupledHitches.add(hi);
   moves++;
@@ -1014,6 +1013,48 @@ function decoupleTow(towIdx){
   track('decouple', { mode: mode.type, level: trackLevelId() });
   updateHud();
   return true;
+}
+
+// Same physical test js/solver.js's legalMoves/adjacentNow, js/generate.js's
+// tryGenerateHitch, and the Sandbox's sbHitchable all use: same lane,
+// touching end-to-end with no gap, same orientation.
+function hitchAdjacentNow(towI, trailerI){
+  const tow = pieces[towI], trailer = pieces[trailerI];
+  if(!tow || !trailer || tow.dir !== trailer.dir) return false;
+  if(tow.dir === 'v'){
+    if(tow.c !== trailer.c) return false;
+    return tow.r + tow.len === trailer.r || trailer.r + trailer.len === tow.r;
+  }
+  if(tow.r !== trailer.r) return false;
+  return tow.c + tow.len === trailer.c || trailer.c + trailer.len === tow.c;
+}
+
+// A broken-down car or trailer can never move on its own — decoupling just
+// leaves it stranded like a wall until something re-hitches it. Re-coupling
+// needs the tow to have driven itself back next to the trailer first (the
+// same physical adjacency the pair started under); if it hasn't, this is a
+// no-op deny, not silently ignored, so a double-tap that "does nothing"
+// still reads as a real answer rather than a dead input.
+function coupleHitch(hi){
+  if(solvedAnim || pursuitPaused || !decoupledHitches.has(hi)) return false;
+  const h = hitches[hi];
+  if(!hitchAdjacentNow(h.tow, h.trailer)){ sfx('deny'); return false; }
+  pushHistory();
+  decoupledHitches.delete(hi);
+  moves++;
+  sfx('decouple');
+  haptic('ui');
+  track('couple', { mode: mode.type, level: trackLevelId() });
+  updateHud();
+  return true;
+}
+
+// Double-tapping either half of a hitch toggles it: coupled -> decouple,
+// decoupled -> attempt to re-couple (subject to hitchAdjacentNow above).
+function toggleHitch(pieceIdx){
+  const hi = hitches.findIndex(h => h.tow === pieceIdx || h.trailer === pieceIdx);
+  if(hi === -1) return false;
+  return decoupledHitches.has(hi) ? coupleHitch(hi) : decoupleHitch(hi);
 }
 
 /* ================== HINTS ================== */
@@ -1046,15 +1087,17 @@ function showHint(){
   sfx('hint');
   track('hint_used', { mode: mode.type, level: trackLevelId() });
 
-  if(mv.decouple !== undefined){
-    // No destination to point at — the optimal move is to unhitch this
-    // tow (double-tap it), not slide it anywhere.
-    const el = board.querySelector(`.piece[data-idx="${mv.decouple}"]`);
+  if(mv.decouple !== undefined || mv.couple !== undefined){
+    // No destination to point at — the optimal move is to double-tap this
+    // tow to unhitch it (or re-hitch it, if it's already sitting back
+    // adjacent to its trailer), not slide it anywhere.
+    const idx = mv.decouple ?? mv.couple;
+    const el = board.querySelector(`.piece[data-idx="${idx}"]`);
     el.classList.add('hint-glow');
-    const p = pieces[mv.decouple];
+    const p = pieces[idx];
     const badge = document.createElement('div');
-    badge.className = 'hint-arrow hint-decouple';
-    badge.textContent = '⛓️‍💥';
+    badge.className = mv.decouple !== undefined ? 'hint-arrow hint-decouple' : 'hint-arrow hint-couple';
+    badge.textContent = mv.decouple !== undefined ? '⛓️‍💥' : '🔗';
     badge.style.left = p.c * CELL + 'px';
     badge.style.top = p.r * CELL + 'px';
     badge.style.width = (p.dir === 'h' ? p.len : 1) * CELL + 'px';
@@ -1106,7 +1149,7 @@ function scheduleHand(){
 function showHand(){
   if(solvedAnim || !(mode.type === 'campaign' && cur < 3)) return;
   const mv = firstOptimalMove(pieces, { walls, gates, hitches });
-  if(!mv || mv.decouple !== undefined) return;   // hitches never appear in the intro ramp
+  if(!mv || mv.decouple !== undefined || mv.couple !== undefined) return;   // hitches never appear in the intro ramp
   const p = pieces[mv.idx];
   const hand = document.createElement('div');
   hand.className = 'hand';
@@ -1196,6 +1239,9 @@ function playSolutionReplay(){
     if(mv.decouple !== undefined){
       decoupledHitches.add(mv.decouple);
       sfx('decouple');
+    } else if(mv.couple !== undefined){
+      decoupledHitches.delete(mv.couple);
+      sfx('decouple');
     } else {
       const p = pieces[mv.i];
       if(p.dir === 'h') p.c = mv.o; else p.r = mv.o;
@@ -1251,7 +1297,9 @@ function playMoveReplay(){
     const frame = frames[step++];
     pieces.forEach((p, i) => { p.r = frame.pieces[i].r; p.c = frame.pieces[i].c; });
     decoupledHitches = new Set(frame.decoupled);
-    sfx(decoupledHitches.size > decoupledBefore ? 'decouple' : 'snap');
+    // Either direction of a hitch toggle (couple or decouple) is the same
+    // beat as a plain slide's 'snap' — just the metallic clunk instead.
+    sfx(decoupledHitches.size !== decoupledBefore ? 'decouple' : 'snap');
     renderPositions(true);
     updateGates();
     $('hudMoves').textContent = step;

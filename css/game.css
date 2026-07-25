@@ -281,7 +281,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   font-family:var(--disp);font-weight:700;
 }
 @keyframes arrowmove{0%,100%{opacity:0}20%,80%{opacity:1}}
-.hint-decouple{
+.hint-decouple,.hint-couple{
   font-size:calc(var(--cell)*.42);
   animation:pulsehint 1s ease-in-out 3 forwards;
   text-shadow:0 0 10px rgba(94,230,168,.9);
