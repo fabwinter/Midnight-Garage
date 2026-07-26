@@ -137,15 +137,33 @@ function grid(exclude = -1){
   });
   return g;
 }
-function rangeForWithGrid(i, g){
+/* Closed-gate clamp for the live board, mirroring js/solver.js's
+   gateBlocks exactly: a slide's leading edge may not enter a gate cell
+   whose sensor state says closed. Sensor occupancy is evaluated ONCE per
+   move — pieces' positions when the drag/key run's range is computed —
+   with the moving piece included, same as the solver's start-of-move
+   grid. Without this clamp the drag range slid straight through closed
+   gates: only the solver ever enforced them, so "verified par" could be
+   undercut on the real board (unnoticed while gates were invisible). */
+function gateBlocksCell(r, c){
+  const gt = gates.find(g => g.gate[0] === r && g.gate[1] === c);
+  if(!gt) return false;
+  const covered = gt.sensors.some(([sr, sc]) => pieces.some(p =>
+    p.dir === 'h' ? (p.r === sr && sc >= p.c && sc < p.c + p.len)
+                  : (p.c === sc && sr >= p.r && sr < p.r + p.len)));
+  return covered === gt.polarity;   // blocked iff NOT open
+}
+
+function rangeForWithGrid(i, g, gateCheck = true){
   const p = pieces[i];
+  const open = (r, c) => g[r][c] === -1 && !(gateCheck && gateBlocksCell(r, c));
   let lo, hi;
   if(p.dir === 'h'){
-    lo = p.c; while(lo > 0 && g[p.r][lo - 1] === -1) lo--;
-    hi = p.c; while(hi + p.len < N && g[p.r][hi + p.len] === -1) hi++;
+    lo = p.c; while(lo > 0 && open(p.r, lo - 1)) lo--;
+    hi = p.c; while(hi + p.len < N && open(p.r, hi + p.len)) hi++;
   } else {
-    lo = p.r; while(lo > 0 && g[lo - 1][p.c] === -1) lo--;
-    hi = p.r; while(hi + p.len < N && g[hi + p.len][p.c] === -1) hi++;
+    lo = p.r; while(lo > 0 && open(lo - 1, p.c)) lo--;
+    hi = p.r; while(hi + p.len < N && open(hi + p.len, p.c)) hi++;
   }
   return [lo, hi];
 }
@@ -376,7 +394,11 @@ function rangeFor(i){
     if(trailer && trailer.dir === tow.dir){
       const g2 = grid([i, trailerI]);
       const [towLo, towHi] = rangeForWithGrid(i, g2);
-      const [trLo, trHi] = rangeForWithGrid(trailerI, g2);
+      // gateCheck=false: the solver's coupled-move loop only gate-checks
+      // the TOW's leading edge (see legalMoves' er/ec), so the trailer
+      // half must not clamp on gates or the board would forbid drags the
+      // par was verified against.
+      const [trLo, trHi] = rangeForWithGrid(trailerI, g2, false);
       const towCur = tow.dir === 'h' ? tow.c : tow.r;
       const trCur = trailer.dir === 'h' ? trailer.c : trailer.r;
       const deltaLo = Math.max(towLo - towCur, trLo - trCur);
