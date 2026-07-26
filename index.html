@@ -335,21 +335,45 @@
   </div>
 </div>
 
+<div class="overlay" id="gateTutorialOverlay">
+  <div class="sheet gt-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="gtTitle">Interlock Gate</h2>
+    <div class="gt-diagram">
+      <div class="gt-cell gt-sensor" id="gtSensorLabel">SENSOR</div>
+      <div class="gt-arrow">→</div>
+      <div class="gt-cell gt-gate" id="gtGateLabel">GATE</div>
+      <div class="gt-note" id="gtNoteLabel">Tap to park</div>
+    </div>
+    <p class="gt-line" id="gtLine1"></p>
+    <p class="gt-line" id="gtLine2"></p>
+    <p class="gt-line gt-muted" id="gtLine3"></p>
+    <button class="btn primary" id="gateTutorialGotIt" type="button" data-close>Got it</button>
+  </div>
+</div>
+
 <!-- Admin sandbox level designer -->
 <div class="overlay" id="sandboxOverlay">
   <div class="sheet sandbox-sheet">
     <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h2>Sandbox</h2>
-    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid. Hitch: tap the tow, then tap the trailer it pulls — they must be touching, end to end, on the same line; tap either half of an existing hitch to undo it.</p>
+    <p class="sub">Pick a tool, tap the grid to place. Drag pieces to move, tap one to rotate, Erase removes. Hero lives on the exit row. Or drag a specific car/truck from the picker below straight onto the grid. Hitch: tap the tow, then tap the trailer it pulls — they must be touching, end to end, on the same line; tap either half of an existing hitch to undo it. Gate: tap a cell to place the gate, then tap 1–2 more cells for sensors, then use the buttons below to set polarity and commit; Erase removes a committed gate.</p>
     <div class="sb-tools" id="sbTools">
       <button class="btn sb-tool" data-tool="hero" type="button">Hero</button>
       <button class="btn sb-tool cur" data-tool="car" type="button">Car</button>
       <button class="btn sb-tool" data-tool="truck" type="button">Truck</button>
       <button class="btn sb-tool" data-tool="wall" type="button">Wall</button>
       <button class="btn sb-tool" data-tool="hitch" type="button">Hitch</button>
+      <button class="btn sb-tool" data-tool="gate" type="button">Gate</button>
       <button class="btn sb-tool" data-tool="erase" type="button">Erase</button>
       <button class="btn" id="sbDirBtn" type="button" aria-label="Placement orientation">Dir: H</button>
       <button class="btn" id="sbLibraryBtn" type="button">Library</button>
+    </div>
+    <div class="sb-gate-config" id="sbGateConfig" hidden>
+      <span class="sb-gate-config-lab">Gate: <span id="sbGatePolarityLabel">Pressure Plate</span></span>
+      <button class="btn" id="sbGatePolarityBtn" type="button">Toggle Polarity</button>
+      <button class="btn primary" id="sbGateCommitBtn" type="button">Commit Gate</button>
+      <button class="btn" id="sbGateCancelBtn" type="button">Cancel</button>
     </div>
     <div class="sb-board-wrap">
       <div class="sb-board" id="sbBoard"><span class="sb-exit">▶</span></div>

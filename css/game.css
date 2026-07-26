@@ -702,6 +702,13 @@ input[type=range]::-moz-range-thumb{
 .sb-tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .sb-tools .btn{padding:8px 12px;font-size:12px}
 .sb-tool.cur{border-color:var(--amber);color:var(--amber);box-shadow:0 0 10px -4px var(--amber)}
+.sb-gate-config{
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px;
+  padding:8px 10px;border-radius:11px;border:1px solid var(--line);background:#0d1119;
+}
+.sb-gate-config[hidden]{display:none}
+.sb-gate-config .btn{padding:8px 12px;font-size:12px}
+.sb-gate-config-lab{font-size:12px;color:var(--muted);margin-right:2px}
 .sb-board-wrap{display:flex;justify-content:center}
 .sb-board{
   --sbc:46px;position:relative;width:calc(var(--sbc)*6);height:calc(var(--sbc)*6);

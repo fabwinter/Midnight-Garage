@@ -72,6 +72,7 @@ let save = {
   equippedCar: DEFAULT_CAR,
   carsSeen: [],
   hitchSeen: false,
+  gateSeen: false,
   admin: false,
   bounties: { done: {} },   // 'YYYY-MM-DD' -> {moves, par, met, tier, condition}
   impound: { stars: {}, best: {} },   // keyed by board `key` (levelKey), not array index
@@ -984,6 +985,11 @@ function startBoard(){
     save.hitchSeen = true;
     persist();
     setTimeout(() => showOverlay('hitchTutorialOverlay'), 700);
+  }
+  if(gates && gates.length && !save.gateSeen){
+    save.gateSeen = true;
+    persist();
+    setTimeout(() => showOverlay('gateTutorialOverlay'), 700);
   }
 }
 
@@ -2025,6 +2031,13 @@ function applyStrings(){
   $('htLine2').textContent = t('hitch.tutorial.line2');
   $('htLine3').textContent = t('hitch.tutorial.line3');
   $('hitchTutorialGotIt').textContent = t('hitch.tutorial.gotit');
+  $('gtTitle').textContent = t('gate.tutorial.title');
+  $('gtSensorLabel').textContent = t('gate.tutorial.sensor');
+  $('gtGateLabel').textContent = t('gate.tutorial.gate');
+  $('gtLine1').textContent = t('gate.tutorial.line1');
+  $('gtLine2').textContent = t('gate.tutorial.line2');
+  $('gtLine3').textContent = t('gate.tutorial.line3');
+  $('gateTutorialGotIt').textContent = t('gate.tutorial.gotit');
   $('labLevel').textContent = t('hud.level');
   $('labMoves').textContent = t('hud.moves');
   $('labPar').textContent = t('hud.par');
@@ -2400,11 +2413,14 @@ function renderLevelInspector(){
 const SB_KEY = 'sandbox_levels_v1';
 const SB_CELL = 46;                     // must match --sbc in css
 let sbTool = 'car', sbDir = 'h';
-let sbState = { pieces: [], walls: [], hitches: [] };   // pieces: {r,c,len,dir,hero?,photo?}; hitches: {tow,trailer} piece indices
+let sbState = { pieces: [], walls: [], hitches: [], gates: [] };   // pieces: {r,c,len,dir,hero?,photo?}; hitches: {tow,trailer} piece indices; gates: {gate:[r,c], sensors:[[r,c],...], polarity:bool}
 let sbSaved = [];
 // Index of the piece tapped with the Hitch tool, awaiting its pair (tow
 // tapped first, trailer second) — null when nothing's mid-selection.
 let sbHitchPending = null;
+// Gate being configured: {gate:[r,c], sensors:[], polarity:bool} during creation,
+// null when not mid-configuration. Tracks gate cell and collected sensors.
+let sbGatePending = null;
 
 function openSandbox(){
   hideOverlay('startOverlay');
@@ -2581,6 +2597,123 @@ function sbHitchTapPiece(i){
   sbRender();
 }
 
+/* Gate tool: tap a cell to place the gate, then tap up to 2 more cells for
+   sensors (tapping a placed sensor again removes it). Polarity, commit, and
+   cancel are all handled by #sbGateConfig's buttons, not more taps — an
+   earlier version tried to overload "tap the gate cell again" for both
+   toggling polarity and cancelling, which made the two indistinguishable
+   and left sbCommitGate() unreachable from the UI entirely. */
+function sbGateTapCell(r, c){
+  if(sbGatePending === null){
+    sbGatePending = { gate: [r, c], sensors: [], polarity: false };
+    toast('Gate placed. Tap 1–2 sensor cells, then use the buttons below');
+    sbRender();
+    return;
+  }
+  if(sbGatePending.gate[0] === r && sbGatePending.gate[1] === c){
+    toast('That’s the gate cell — tap a different cell for a sensor, or use Cancel below');
+    return;
+  }
+  const sensorIdx = sbGatePending.sensors.findIndex(s => s[0] === r && s[1] === c);
+  if(sensorIdx !== -1){
+    sbGatePending.sensors.splice(sensorIdx, 1);
+    sbRender();
+    return;
+  }
+  if(sbGatePending.sensors.length < 2){
+    sbGatePending.sensors.push([r, c]);
+    if(sbGatePending.sensors.length === 1) toast('Sensor placed. Tap another, or Commit below');
+    else toast('2 sensors placed — set polarity and Commit below');
+    sbRender();
+    return;
+  }
+  toast('Max 2 sensors — tap a sensor cell again to remove it, or Commit below');
+}
+
+function sbTogglePolarity(){
+  if(!sbGatePending) return;
+  sbGatePending.polarity = !sbGatePending.polarity;
+  sbRender();
+}
+
+function sbCancelGate(){
+  sbGatePending = null;
+  sbRender();
+}
+
+function sbCommitGate(){
+  if(!sbGatePending || !sbGatePending.sensors.length){
+    toast('Add at least 1 sensor to the gate');
+    return;
+  }
+  const [gr, gc] = sbGatePending.gate;
+  // Gate cell must not sit on a wall.
+  if(sbState.walls.some(w => w[0] === gr && w[1] === gc)){
+    toast('Gate cell is on a wall — move it first');
+    return;
+  }
+  // Gate cell must not be under a starting piece (sensors under a piece are fine).
+  for(const p of sbState.pieces){
+    for(let k = 0; k < p.len; k++){
+      const pr = p.r + (p.dir === 'v' ? k : 0);
+      const pc = p.c + (p.dir === 'h' ? k : 0);
+      if(pr === gr && pc === gc){
+        toast('Gate cell cannot be under a piece');
+        return;
+      }
+    }
+  }
+  // Gate cell must not collide with another committed gate's cell or sensors.
+  const existingCells = new Set();
+  sbState.gates.forEach(gt => {
+    existingCells.add(gt.gate[0] * N + gt.gate[1]);
+    gt.sensors.forEach(s => existingCells.add(s[0] * N + s[1]));
+  });
+  if(existingCells.has(gr * N + gc)){
+    toast('Another gate already uses that cell');
+    return;
+  }
+  for(const [sr, sc] of sbGatePending.sensors){
+    if(existingCells.has(sr * N + sc)){
+      toast('Another gate already uses a sensor cell there');
+      return;
+    }
+  }
+  sbState.gates.push({
+    gate: sbGatePending.gate,
+    sensors: sbGatePending.sensors,
+    polarity: sbGatePending.polarity,
+  });
+  sbGatePending = null;
+  toast('Gate committed');
+  sbRender();
+}
+
+// Removes a committed gate if r,c matches its gate cell or any of its
+// sensors — mirrors sbHitchTapPiece's "tap either half to undo" pattern.
+function sbRemoveGateAt(r, c){
+  const idx = sbState.gates.findIndex(gt =>
+    (gt.gate[0] === r && gt.gate[1] === c) || gt.sensors.some(s => s[0] === r && s[1] === c));
+  if(idx === -1) return false;
+  sbState.gates.splice(idx, 1);
+  toast('Gate removed');
+  return true;
+}
+
+// Build a grid marking occupied cells by gates (gate cell + sensor cells)
+function sbGate(){
+  const g = new Set();
+  sbState.gates.forEach(gt => {
+    g.add(gt.gate[0] * N + gt.gate[1]);
+    gt.sensors.forEach(s => g.add(s[0] * N + s[1]));
+  });
+  if(sbGatePending){
+    g.add(sbGatePending.gate[0] * N + sbGatePending.gate[1]);
+    sbGatePending.sensors.forEach(s => g.add(s[0] * N + s[1]));
+  }
+  return g;
+}
+
 /* Every shipped board's identity (levelKey ignores hitches/order/index —
    same board-equality notion tools/verify-levels.mjs's cross-pool dedup
    check uses), memoized on first use since it's ~660 boards' worth of
@@ -2624,7 +2757,7 @@ function sbStatus(){
     return null;
   }
   const sol = solve(sbState.pieces.map(q => ({ r: q.r, c: q.c, len: q.len, dir: q.dir })),
-                    { walls: sbState.walls, hitches: sbState.hitches });
+                    { walls: sbState.walls, hitches: sbState.hitches, gates: sbState.gates });
   const parts = [];
   if(sol.solvable){
     parts.push(`Solvable · par ${sol.optimal}`);
@@ -2644,7 +2777,7 @@ function sbStatus(){
 
 function sbRender(){
   const b = $('sbBoard');
-  b.querySelectorAll('.sb-piece, .sb-wall, .sb-hitch').forEach(e => e.remove());
+  b.querySelectorAll('.sb-piece, .sb-wall, .sb-hitch, .sb-gate, .sb-sensor, .sb-gate-pending').forEach(e => e.remove());
   sbState.walls.forEach(([r, c], wi) => {
     const el = document.createElement('div');
     el.className = 'sb-wall';
@@ -2690,7 +2823,42 @@ function sbRender(){
     el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, SB_CELL * 0.08);
     b.appendChild(el);
   });
+  // Render gates and sensors
+  const renderGateCell = (r, c, classes) => {
+    const el = document.createElement('div');
+    el.className = classes;
+    el.style.width = el.style.height = SB_CELL + 'px';
+    el.style.transform = `translate(${c * SB_CELL}px, ${r * SB_CELL}px)`;
+    el.style.position = 'absolute';
+    el.style.pointerEvents = 'none';
+    el.innerHTML = gateSVG(SB_CELL / 2, SB_CELL / 2, SB_CELL * 0.4);
+    b.appendChild(el);
+  };
+  sbState.gates.forEach((gt, gi) => {
+    const [gr, gc] = gt.gate;
+    renderGateCell(gr, gc, 'sb-gate');
+    gt.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
+  });
+  // Render pending gate being configured
+  if(sbGatePending){
+    const [gr, gc] = sbGatePending.gate;
+    renderGateCell(gr, gc, 'sb-gate-pending');
+    sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
+  }
+  sbRenderGateConfig();
   sbStatus();
+}
+
+// Shows/hides the polarity+commit+cancel bar and keeps its label in sync
+// with sbGatePending — the bar is the only way to set polarity or commit a
+// gate, since overloading board taps for that was ambiguous (see
+// sbGateTapCell). Commit is disabled until at least one sensor is placed.
+function sbRenderGateConfig(){
+  const bar = $('sbGateConfig');
+  bar.hidden = !sbGatePending;
+  if(!sbGatePending) return;
+  $('sbGatePolarityLabel').textContent = sbGatePending.polarity ? 'Tripwire' : 'Pressure Plate';
+  $('sbGateCommitBtn').disabled = sbGatePending.sensors.length === 0;
 }
 
 function sbCellFromEvent(e){
@@ -2705,6 +2873,7 @@ function sbPlace(r, c){
   if(r < 0 || c < 0 || r >= N || c >= N) return;
   const g = sbGrid();
   if(sbTool === 'erase'){
+    if(sbRemoveGateAt(r, c)){ sbRender(); return; }
     if(g[r][c] === 'w') sbState.walls = sbState.walls.filter(w => !(w[0] === r && w[1] === c));
     else if(g[r][c] !== -1) sbRemovePiece(g[r][c]);
     sbRender();
@@ -2722,6 +2891,10 @@ function sbPlace(r, c){
     // an actual piece tap to sbHitchTapPiece before sbPlace is ever
     // called) — nothing to hitch to empty space or a wall.
     toast('Tap a piece to hitch it — tap the tow, then its trailer');
+    return;
+  }
+  if(sbTool === 'gate'){
+    sbGateTapCell(r, c);
     return;
   }
   if(sbTool === 'hero'){
@@ -2817,6 +2990,7 @@ function sbLevelObj(){
     p: sbState.pieces.map(q => [q.r, q.c, q.len, q.dir]),
     w: sbState.walls.map(w => [w[0], w[1]]),
     ...(sbState.hitches.length ? { h: sbState.hitches.map(h => ({ tow: h.tow, trailer: h.trailer })) } : {}),
+    ...(sbState.gates.length ? { g: sbState.gates.map(gt => ({ gate: gt.gate, sensors: gt.sensors, polarity: gt.polarity })) } : {}),
   };
 }
 
@@ -2845,12 +3019,12 @@ async function sbPersistSaved(){
 }
 
 /* Exported shape matches exactly what tools/promote-sandbox-levels.mjs and
-   the LEVELS array both expect: {name, m, p, w?, h?}. m===99 means "not yet
+   the LEVELS array both expect: {name, m, p, w?, h?, g?}. m===99 means "not yet
    verified solvable" (sbLevelObj()'s placeholder) — the promote script
    recomputes par itself regardless, so an unsolved-looking export is still
    safe to hand off, just not guaranteed to go anywhere. */
 function sbLevelExportObj(lv){
-  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}), ...(lv.h?.length ? { h: lv.h } : {}) };
+  return { name: lv.name, m: lv.m, p: lv.p, ...(lv.w?.length ? { w: lv.w } : {}), ...(lv.h?.length ? { h: lv.h } : {}), ...(lv.g?.length ? { g: lv.g } : {}) };
 }
 
 /* Plain clipboard copy, deliberately skipping shareText()'s navigator.share
@@ -2884,7 +3058,7 @@ function sbRenderSaved(){
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = lv.name;
     const par = document.createElement('span'); par.className = 'par'; par.textContent = lv.m === 99 ? 'par ?' : 'par ' + lv.m;
     const play = document.createElement('button'); play.className = 'btn'; play.textContent = 'Play';
-    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w, h: lv.h }); });
+    play.addEventListener('click', () => { sfx('ui'); sbPlaytest({ m: lv.m, p: lv.p, w: lv.w, h: lv.h, g: lv.g }); });
     const edit = document.createElement('button'); edit.className = 'btn'; edit.textContent = 'Edit';
     edit.addEventListener('click', () => {
       sfx('ui');
@@ -2892,8 +3066,10 @@ function sbRenderSaved(){
         pieces: lv.p.map((a, j) => ({ r: a[0], c: a[1], len: a[2], dir: a[3], hero: j === 0 })),
         walls: (lv.w || []).map(w => [w[0], w[1]]),
         hitches: (lv.h || []).map(h => ({ tow: h.tow, trailer: h.trailer })),
+        gates: (lv.g || []).map(g => ({ gate: g.gate, sensors: g.sensors, polarity: g.polarity })),
       };
       sbHitchPending = null;
+      sbGatePending = null;
       $('sbName').value = lv.name;
       sbRender();
     });
@@ -2915,6 +3091,7 @@ function wireSandbox(){
   document.querySelectorAll('.sb-tool').forEach(btn => btn.addEventListener('click', () => {
     sbTool = btn.dataset.tool;
     sbHitchPending = null;
+    sbGatePending = null;
     document.querySelectorAll('.sb-tool').forEach(x => x.classList.toggle('cur', x === btn));
     sbRenderPicker();
     sbRender();
@@ -2923,11 +3100,15 @@ function wireSandbox(){
     sbDir = sbDir === 'h' ? 'v' : 'h';
     $('sbDirBtn').textContent = 'Dir: ' + sbDir.toUpperCase();
   });
+  $('sbGatePolarityBtn').addEventListener('click', () => { sfx('ui'); sbTogglePolarity(); });
+  $('sbGateCommitBtn').addEventListener('click', () => { sfx('ui'); sbCommitGate(); });
+  $('sbGateCancelBtn').addEventListener('click', () => { sfx('ui'); sbCancelGate(); });
   $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });
   $('sbClearBtn').addEventListener('click', () => {
     sfx('ui');
-    sbState = { pieces: [], walls: [], hitches: [] };
+    sbState = { pieces: [], walls: [], hitches: [], gates: [] };
     sbHitchPending = null;
+    sbGatePending = null;
     sbRender();
   });
   $('sbSaveBtn').addEventListener('click', async () => {

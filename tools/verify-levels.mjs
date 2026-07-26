@@ -50,6 +50,46 @@ LEVELS.forEach((lv, i) => {
       bad(`level ${i + 1}: hitch ${hi} tow/trailer orientations differ — auto-couple never fires`);
     }
   });
+  (lv.g ?? []).forEach((gt, gi) => {
+    const [gr, gc] = gt.gate;
+    if(gr < 0 || gc < 0 || gr >= N || gc >= N){
+      bad(`level ${i + 1}: gate ${gi} cell [${gr},${gc}] out of bounds`);
+    }
+    // Gate cell must not be under a starting piece (but sensors under a piece are ok)
+    for(const p of pieces){
+      for(let k = 0; k < p.len; k++){
+        const r = p.r + (p.dir === 'v' ? k : 0), c = p.c + (p.dir === 'h' ? k : 0);
+        if(r === gr && c === gc){
+          bad(`level ${i + 1}: gate ${gi} cell under piece`);
+          break;
+        }
+      }
+    }
+    // Gate cell must not be on a wall
+    for(const [wr, wc] of (lv.w ?? [])){
+      if(wr === gr && wc === gc){
+        bad(`level ${i + 1}: gate ${gi} cell on roadwork`);
+      }
+    }
+    // Sensors must be in bounds and not coincide with gate cell
+    (gt.sensors ?? []).forEach((s, si) => {
+      const [sr, sc] = s;
+      if(sr < 0 || sc < 0 || sr >= N || sc >= N){
+        bad(`level ${i + 1}: gate ${gi} sensor ${si} [${sr},${sc}] out of bounds`);
+      }
+      if(sr === gr && sc === gc){
+        bad(`level ${i + 1}: gate ${gi} sensor ${si} coincides with gate cell`);
+      }
+    });
+  });
+  // Gate levels must exercise the gate: solution without gates must be longer
+  if(lv.g && lv.g.length > 0){
+    const solWithGate = sol;
+    const solWithoutGate = solve(pieces, { walls: lv.w });
+    if(solWithoutGate.solvable && solWithGate.optimal <= solWithoutGate.optimal){
+      bad(`level ${i + 1}: gate is decorative (with gate: ${solWithGate.optimal}, without: ${solWithoutGate.optimal})`);
+    }
+  }
 });
 
 // difficulty progression: only the intro ramp may fall below chapter 1's floor
