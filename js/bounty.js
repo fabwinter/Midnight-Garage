@@ -45,8 +45,15 @@ export function bountyFor(dateStr){
 /* Whether a completed attempt satisfies the night's reward condition.
    Only ever called from a real win (game.js's winSequence) — a Heist/
    Pursuit bust ends the attempt before it can win, so there's no "moves"
-   to judge and this never runs for a busted attempt. */
-export function bountyConditionMet(condition, { moves, par, hintsUsed }){
+   to judge and this never runs for a busted attempt.
+
+   `assisted` (docs/MONETIZATION-PLAN.md §4.2) is true iff the attempt
+   used a bought Heist/Pursuit rescue — a limited-edition mark must stay
+   genuinely earned (js/collection.js's no-purchase-gates-a-car covenant),
+   so a rescued run never qualifies for ANY condition, not just 'par'. A
+   bought hint already fails 'nohints' on its own via hintsUsed. */
+export function bountyConditionMet(condition, { moves, par, hintsUsed, assisted = false }){
+  if(assisted) return false;
   if(condition === 'par') return moves <= par;
   if(condition === 'nohints') return hintsUsed === 0;
   return false;

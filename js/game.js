@@ -22,6 +22,8 @@ import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, sensorSVG, hitchSVG
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
 import { ADMIN_ENABLED } from './build-flags.js';
+import { priceOf as wrenchPriceOf, canAfford as canAffordWrench, spend as spendWrench, grant as grantWrench, dailyWrenchAvailable, claimDailyWrench, REWARDED_WRENCH_GRANT, ALARM_RESCUE_MOVES, PURSUIT_RESCUE_SECONDS } from './economy.js';
+import { adsAvailable, showRewarded } from './ads.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -45,6 +47,14 @@ let decoupledHitches = new Set();             // indices of decoupled hitches
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
+// Per-attempt rescue state (docs/MONETIZATION-PLAN.md §4.2) — a bonus
+// added to the Heist move budget / Pursuit clock at the moment a rescue
+// is bought, NEVER folded into alarmBudgetFor()/pursuitTimeFor() or
+// parOf() itself, so a bought continuation still scores on the real par.
+// assistedThisAttempt flags the eventual level_win so difficulty tuning
+// and bounty eligibility (js/bounty.js: bountyConditionMet) can tell a
+// purchased continuation from a clean run.
+let alarmBonus = 0, rescueUsedThisAttempt = false, assistedThisAttempt = false;
 let solvedAnim = false;
 let levelStart = Date.now();
 let skipShown = false;
@@ -68,6 +78,14 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
+  // Soft currency (docs/MONETIZATION-PLAN.md phase M1) — see js/economy.js
+  // for the earn/spend API. `entitlements.proLegacy` is a permanent,
+  // one-way stamp: once true it must never be cleared or re-derived, it's
+  // the promise every pre-hybrid Pro save is grandfathered on (see the
+  // migration in boot() and MONETIZATION-PLAN.md §2).
+  wrenches: 0,
+  econ: { dailyWrenchDay: '', lifetimeEarned: 0, lifetimeSpent: 0 },
+  entitlements: { pro: false, removeAds: false, proLegacy: false },
   settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, mode: 'heist' },
   modeLevel: { relaxed: 0, heist: 0, pursuit: 0 }, // last-played campaign level index, per mode
   equippedCar: DEFAULT_CAR,
@@ -612,7 +630,7 @@ function commitMove(i, mergedKeyStep = false){
   const gm = save.settings.mode;
 
   if(gm === 'heist'){
-    const budget = alarmBudgetFor(parOf());
+    const budget = effectiveAlarmBudget();
     const remaining = budget - moves;
     if(moves === 1){
       $('srLive').textContent = moveAnnounce + '. ' + t('alarm.triggered', { n: remaining });
@@ -635,7 +653,7 @@ function commitMove(i, mergedKeyStep = false){
     triggerAlarmFlash();
   }
 
-  if(gm === 'heist' && moves > alarmBudgetFor(parOf())){
+  if(gm === 'heist' && moves > effectiveAlarmBudget()){
     busted('heist');
     return;
   }
@@ -669,9 +687,67 @@ function showBustedSheet(kind){
   $('bustedFlag').textContent = t(prefix + 'flag');
   $('bustedTitle').textContent = t(prefix + 'title');
   $('bustedSub').textContent = t(prefix + 'sub');
+  updateBustedRescueUI(kind);
   showOverlay('bustedOverlay');
   $('srLive').textContent = t(prefix + 'title');
   setTimeout(() => $('bustedRetryBtn').focus(), 100);
+}
+
+/* Rescue offer (docs/MONETIZATION-PLAN.md §4.2, §5.1): one continuation
+   per attempt, Heist/Pursuit only, never once already used — the genre's
+   usual "second chance," not an infinite ladder. Continues the SAME
+   attempt (board state/moves are untouched by busted() — only timers and
+   audio stopped) rather than granting a fresh retry, so a rescued win
+   still scores against the level's own par; effectiveAlarmBudget() folds
+   in the bonus without ever touching alarmBudgetFor()/parOf(). */
+let lastBustedKind = null;
+function updateBustedRescueUI(kind){
+  lastBustedKind = kind;
+  const sink = kind === 'heist' ? 'alarm_rescue' : 'pursuit_rescue';
+  const eligible = !rescueUsedThisAttempt && (kind === 'heist' || kind === 'pursuit');
+  $('bustedRescue').hidden = !eligible;
+  if(!eligible) return;
+  $('bustedRescueLab').textContent = t('rescue.lab');
+  $('bustedRescueWatchLabel').textContent = t('rescue.watch');
+  $('bustedRescueSpendLabel').textContent = t('rescue.spend', { n: wrenchPriceOf(sink) });
+  $('bustedRescueSpendBtn').disabled = !canAffordWrench(save, sink);
+}
+
+function applyRescue(kind){
+  rescueUsedThisAttempt = true;
+  assistedThisAttempt = true;
+  hideOverlay('bustedOverlay');
+  solvedAnim = false;
+  if(kind === 'heist'){
+    alarmBonus += ALARM_RESCUE_MOVES;
+  } else {
+    // pursuitPaused is always false here — the countdown interval that
+    // fires busted('pursuit') already returns early while paused.
+    pursuitTimeLeft += PURSUIT_RESCUE_SECONDS;
+    startPursuitTimer();
+  }
+  startAttemptTrack(save.settings.mode);
+  updateModeHud();
+  updateHud();
+  toast(t('rescue.applied'));
+  track('rescue_used', { kind, mode: mode.type, level: trackLevelId() });
+  setTimeout(() => $('board').focus(), 100);
+}
+
+async function rescueViaWatch(kind){
+  if(!adsAvailable()){ toast(t('toast.noads')); return; }
+  $('bustedRescueWatchBtn').disabled = true;
+  const res = await showRewarded(kind === 'heist' ? 'alarm_rescue' : 'pursuit_rescue');
+  $('bustedRescueWatchBtn').disabled = false;
+  if(res.completed) applyRescue(kind);
+}
+
+function rescueViaSpend(kind){
+  const sink = kind === 'heist' ? 'alarm_rescue' : 'pursuit_rescue';
+  if(!spendWrench(save, sink)) return;
+  persist();
+  updateWrenchBadge();
+  applyRescue(kind);
 }
 
 /* "The clock just started" — a brief flash the moment the first piece
@@ -765,6 +841,13 @@ function alarmBudgetFor(par){
   const slack = currentChapter()?.heistSlack ?? 0.25;
   return par + Math.max(2, Math.ceil(par * slack));
 }
+// The budget for the CURRENT attempt, including a bought rescue's bonus
+// moves (see busted()'s rescue offer). alarmBudgetFor() itself stays pure
+// and par-only — this is the only thing the bust check and HUD should
+// ever read, so the bonus can't be forgotten at one of the two call sites.
+function effectiveAlarmBudget(){
+  return alarmBudgetFor(parOf()) + alarmBonus;
+}
 /* Pursuit's real-time budget — v1 formula: 1 second per optimal move
    (par = 10 → 10s), plus a per-chapter think-time bonus for the harder
    late-campaign boards, where 1s/move alone leaves no room to actually
@@ -802,6 +885,7 @@ function applyChapterAccent(){
 }
 
 function updateHud(){
+  updateWrenchBadge();
   if(mode.type === 'daily'){
     $('hudLevel').textContent = '#' + mode.number;
     $('hudTier').textContent = t('hud.daily');
@@ -844,7 +928,7 @@ function updateModeHud(){
   $('hudPursuitRow').hidden = gm !== 'pursuit';
 
   if(gm === 'heist'){
-    const budget = alarmBudgetFor(parOf());
+    const budget = effectiveAlarmBudget();
     const remaining = budget - moves;
     $('hudAlarmBudget').textContent = Math.max(0, remaining);
     $('hudAlarmRow').setAttribute('aria-label', t('alarm.remaining', { n: Math.max(0, remaining) }));
@@ -994,6 +1078,7 @@ function startBoard(){
   gates = curLevel.g ?? [];
   hitches = curLevel.h ?? [];
   history = []; moves = 0; undos = 0; hintsUsed = 0;
+  alarmBonus = 0; rescueUsedThisAttempt = false; assistedThisAttempt = false;
   decoupledHitches.clear();
   solvedAnim = false;
   kbRun = -1;
@@ -1126,17 +1211,33 @@ function showHint(){
   if(solvedAnim || pursuitPaused) return;
   if(!save.pro){
     refreshHintTokens();
-    if(save.hints.left <= 0){
-      toast(t('toast.nohints'));
-      showOverlay('proOverlay');
-      track('iap_view', { source: 'hints' });
-      return;
-    }
+    if(save.hints.left <= 0){ openHintOffer(); return; }
   }
+  useHint({ chargeToken: !save.pro });
+}
+
+// Out of today's 3 free tokens: offer to watch an ad or spend a Wrench
+// for one more, rather than routing straight to the Pro paywall (that
+// dead end is still one tap away via offer.goPro). Docs/MONETIZATION-
+// PLAN.md §4.3/§5.1.
+function openHintOffer(){
+  openOfferSheet({
+    sink: 'hint',
+    titleKey: 'offer.hint.title',
+    subKey: 'offer.hint.sub',
+    showProLink: true,
+    onGranted: () => { assistedThisAttempt = true; useHint({ chargeToken: false }); },
+  });
+}
+
+// The actual hint render + telemetry, split out of showHint() so an
+// offer-granted hint (chargeToken:false — it already paid its own way via
+// a spend/watch) and a Pro/free-token hint share one code path.
+function useHint({ chargeToken }){
   clearHint();
   const mv = firstOptimalMove(pieces, { walls, gates, hitches });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
-  if(!save.pro){
+  if(chargeToken){
     save.hints.left--;
     persist();
     updateHintBadge();
@@ -1180,6 +1281,96 @@ function showHint(){
   arrow.style.height = CELL + 'px';
   board.appendChild(arrow);
   hintTimer = setTimeout(clearHint, 3200);
+}
+
+/* ================== ECONOMY / OFFERS (MONETIZATION-PLAN.md M1/M2) ==================
+   A single reusable offer sheet: `offerCtx` records the sink and what to
+   do once it's paid for; the sheet itself only ever runs the earn/spend
+   transaction, never the gameplay effect — that keeps every call site
+   (currently just openHintOffer; busted()'s rescue below is a separate,
+   two-button sheet since it has no "go Pro" escape hatch) in full control
+   of what "granted" means for its own mechanic. */
+let offerCtx = null;
+function openOfferSheet({ sink, titleKey, subKey, showProLink = false, onGranted }){
+  offerCtx = { sink, onGranted };
+  $('offerTitle').textContent = t(titleKey);
+  $('offerSub').textContent = t(subKey);
+  $('offerBalance').textContent = save.wrenches;
+  $('offerWatchLabel').textContent = t('offer.watch');
+  $('offerSpendLabel').textContent = t('offer.spend', { n: wrenchPriceOf(sink) });
+  $('offerSpendBtn').disabled = !canAffordWrench(save, sink);
+  $('offerProBtn').hidden = !showProLink || !!save.pro;
+  track('offer_view', { sink });
+  showOverlay('offerOverlay');
+}
+
+async function offerWatch(){
+  if(!offerCtx) return;
+  if(!adsAvailable()){ toast(t('toast.noads')); return; }
+  $('offerWatchBtn').disabled = true;
+  const res = await showRewarded(offerCtx.sink);
+  $('offerWatchBtn').disabled = false;
+  if(!offerCtx || !res.completed) return;
+  const { sink, onGranted } = offerCtx;
+  hideOverlay('offerOverlay');
+  track('offer_accept', { sink, method: 'ad' });
+  offerCtx = null;
+  onGranted();
+}
+
+function offerSpend(){
+  if(!offerCtx) return;
+  const { sink, onGranted } = offerCtx;
+  if(!spendWrench(save, sink)) return;
+  persist();
+  updateWrenchBadge();
+  hideOverlay('offerOverlay');
+  track('offer_accept', { sink, method: 'wrenches' });
+  offerCtx = null;
+  onGranted();
+}
+
+function updateWrenchBadge(){
+  const b = $('wrenchBadge');
+  if(b) b.textContent = save.wrenches;
+}
+
+/* Shop: a standing destination (not tied to any single friction point) —
+   the daily free Wrench and the one earn source that exists before any
+   real ad network is wired in (the rewarded-ad stub, watchable any time,
+   not just at a friction point). Wrench packs (IAP) land in phase M4. */
+function openShop(){
+  updateShopUI();
+  track('shop_open', {});
+  showOverlay('shopOverlay');
+}
+function updateShopUI(){
+  $('shopBalance').textContent = save.wrenches;
+  const today = todayStr();
+  const canClaim = dailyWrenchAvailable(save, today);
+  $('shopDailyBtn').disabled = !canClaim;
+  $('shopDailyBadge').hidden = !canClaim;
+}
+async function shopWatch(){
+  if(!adsAvailable()){ toast(t('toast.noads')); return; }
+  $('shopWatchBtn').disabled = true;
+  const res = await showRewarded('shop_watch');
+  $('shopWatchBtn').disabled = false;
+  if(!res.completed) return;
+  grantWrench(save, REWARDED_WRENCH_GRANT);
+  persist();
+  updateWrenchBadge();
+  updateShopUI();
+  track('offer_accept', { sink: 'shop_watch', method: 'ad' });
+  toast(t('toast.wrenchgranted', { n: REWARDED_WRENCH_GRANT }));
+}
+function shopClaimDaily(){
+  if(!claimDailyWrench(save, todayStr())) return;
+  persist();
+  updateWrenchBadge();
+  updateShopUI();
+  track('wrench_grant', { amount: 1, source: 'daily_free' });
+  toast(t('toast.wrenchgranted', { n: 1 }));
 }
 
 /* ================== ONBOARDING (plan 0.6) ================== */
@@ -1419,14 +1610,14 @@ function winSequence(){
     // included).
     if(save.settings.mode !== 'relaxed') save.jobClears[cur] = true;
     persist();
-    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed });
+    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed, assisted: assistedThisAttempt });
   } else if(mode.type === 'daily'){
     const res = recordDailyWin(mode.date, moves, par, stars);
     if(res.usedFreeze) toast(t('toast.freeze'));
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
   } else if(mode.type === 'bounty'){
-    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed });
+    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed, assisted: assistedThisAttempt });
     const prev = save.bounties.done[mode.date];
     save.bounties.done[mode.date] = {
       moves: prev ? Math.min(prev.moves, moves) : moves,
@@ -2065,6 +2256,8 @@ function wirePro(){
     /* StoreKit hook point: in the native shell this calls the purchase
        plugin; the web build sandbox-unlocks so the full flow is testable. */
     save.pro = true;
+    save.entitlements.pro = true;
+    save.entitlements.removeAds = true;
     persist();
     track('iap_purchase', { product: 'pro_garage' });
     toast(t('toast.pro'));
@@ -2140,6 +2333,12 @@ function applyStrings(){
   $('garageSub').textContent = t('garage.sub');
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
+  $('shopTitle').textContent = t('shop.title');
+  $('shopSub').textContent = t('shop.sub');
+  $('shopWatchLabel').textContent = t('shop.watch', { n: REWARDED_WRENCH_GRANT });
+  $('shopDailyLabel').textContent = t('shop.daily');
+  $('shopNote').textContent = t('shop.note');
+  $('offerProLabel').textContent = t('offer.gopro');
   $('bustedRetryBtn').textContent = t('btn.retry');
   $('bustedNoAlarmBtn').textContent = t('btn.relaxed');
   $('startPlayLabel').textContent = t('start.play');
@@ -2244,6 +2443,14 @@ function wire(){
   });
   $('carRevealBtn').addEventListener('click', () => { sfx('ui'); dismissCarReveal(); });
   $('garageBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); buildGarageList(); showOverlay('garageOverlay'); });
+  $('shopBtn').addEventListener('click', () => { sfx('ui'); openShop(); });
+  $('shopWatchBtn').addEventListener('click', () => { sfx('ui'); shopWatch(); });
+  $('shopDailyBtn').addEventListener('click', () => { sfx('ui'); shopClaimDaily(); });
+  $('offerWatchBtn').addEventListener('click', () => { sfx('ui'); offerWatch(); });
+  $('offerSpendBtn').addEventListener('click', () => { sfx('ui'); offerSpend(); });
+  $('offerProBtn').addEventListener('click', () => { sfx('ui'); offerCtx = null; hideOverlay('offerOverlay'); showOverlay('proOverlay'); track('iap_view', { source: 'offer_sheet' }); });
+  $('bustedRescueWatchBtn').addEventListener('click', () => { sfx('ui'); rescueViaWatch(lastBustedKind); });
+  $('bustedRescueSpendBtn').addEventListener('click', () => { sfx('ui'); rescueViaSpend(lastBustedKind); });
   $('dailyPlayBtn').addEventListener('click', () => {
     sfx('ui'); stopSettingsMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
@@ -3999,6 +4206,17 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     // a returning player already earned under the old rule. Only clears
     // from here on actually require a car-earning pacing.
     if(!loaded.jobClears) save.jobClears = Object.assign({}, loaded.stars);
+    save.econ = Object.assign({ dailyWrenchDay: '', lifetimeEarned: 0, lifetimeSpent: 0 }, loaded.econ);
+    save.entitlements = Object.assign({ pro: false, removeAds: false, proLegacy: false }, loaded.entitlements);
+    // Grandfather clause (MONETIZATION-PLAN.md §2): every save that
+    // already owned Pro under the old ad-free-forever promise keeps a
+    // permanently ad-free build, full stop — this must run before any ad
+    // code exists and must never be revisited or made conditional.
+    if(loaded.pro){
+      save.entitlements.proLegacy = true;
+      save.entitlements.removeAds = true;
+      save.entitlements.pro = true;
+    }
     migrateCampaignReorder();
   }
   await loadDaily();
