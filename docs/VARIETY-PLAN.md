@@ -210,26 +210,31 @@ best-practice template:
 
 - [x] `node tools/verify-levels.mjs` passes with the new invariants.
 - [ ] ~40 hitch + ~40 gate levels shipped, distribution ≈ §2, zero in
-      Night Shift / INTRO slots. **17 hitch + 9 gate shipped** (chapters
-      1–3 only) — short of target; see §10.
+      Night Shift / INTRO slots. **24 hitch + 27 gate shipped** (51 of
+      the ~80 target, chapters 1–6) — short of target; see §10 for why
+      this is a genuine supply ceiling, not an unfinished step.
 - [x] Every feature level's optimal solution provably exercises its
       feature (generator rejection + verify re-check).
 - [x] No campaign index shifted (diff of `levels.data.js` touches only
       replaced slots) — no save migration shipped or needed.
 - [x] Gate tutorial fires once, in every locale; Sandbox can build,
       verify, export, and promote a gate level end-to-end.
-- [x] Playwright evidence for both gate polarities + one hitch level in
-      chapters 5+. **Both polarities verified in real gameplay** (Level
-      52 tripwire, Level 86 pressure-plate — see §10). The chapters-5+
-      hitch level is still outstanding since chapters 5+ have zero
-      features shipped yet (supply-gated, see §10).
+- [x] Playwright evidence for both gate polarities in real gameplay
+      (Level 52 tripwire, Level 86 pressure-plate — see §10).
+- [ ] One hitch level in chapters 5+ for Playwright evidence — still
+      outstanding. Chapters 5+ have zero *hitch* levels (Freight Yard's
+      hitch allocation never got matching supply; see §10), only gate
+      (Freight Yard, Customs).
 
-## 10. Delivered (status, 2026-07-25 pass)
+## 10. Delivered (status, 2026-07-25/26 pass)
 
 All four phases (G/S/P/U) are built and working; what's actually shipped
-in `js/levels.data.js` is smaller than the §2 targets because native
-generation supply ran out before reaching chapters 4+ (see §4 — this was
-called out as expected/acceptable in the plan itself).
+in `js/levels.data.js` is smaller than the §2 targets because the hitch
+generation approach hits a genuine difficulty ceiling around par 22–23
+(confirmed by two hardening passes of increasing depth, not just one
+under-run attempt — see below), and gate's ceiling (par 33 and still
+slowly climbing) is far enough below Vault Row's 41–60 floor that closing
+the gap isn't a matter of more time on the current approach.
 
 **Built and verified:**
 - Phase G — `tryGenerateGate` + `tools/gen-gate-pool.mjs` + the four new
@@ -238,16 +243,14 @@ called out as expected/acceptable in the plan itself).
 - Phase S — `harden()` is feature-aware: carries hitches/gates through
   every `solve()`/`rate()` call, never mutates a hitch's tow/trailer or a
   gate's sensor/gate cells, re-runs the exercise-the-feature check on the
-  final board. Hardening runs to reach chapters 4–10's par range
-  (18–60) were **not** executed this pass — that's the actual gap between
-  17+9 shipped and the ~40+40 target, not a code defect.
+  final board. `tools/harden-variety-pools.mjs` (added this pass) runs it
+  at scale — two passes, results below.
 - Phase P — `tools/add-variety-levels.mjs` places pool boards in-place by
   chapter target, matching par band + exceeding the chapter's difficulty
   floor, deduplicating against every existing campaign board by
   `levelKey` (an earlier version of this script didn't dedupe and
-  produced duplicate-board verify failures — fixed). Result: **Neon
-  District 7 hitch + 4 gate, Harbor Freight 6 hitch + 5 gate, Gridlock 4
-  hitch + 0 gate** (gate pool exhausted before reaching Gridlock's floor).
+  produced duplicate-board verify failures — fixed; a *later* version had
+  a separate idempotency bug — also fixed, see below).
 - Phase U — gate tutorial (HTML overlay + `gate.tutorial.*` in all 10
   locales + `save.gateSeen` gating in `loadLevel`), and a full Sandbox
   gate tool: tap to place the gate cell, tap 1–2 sensor cells, then a
@@ -282,13 +285,73 @@ just the first one tried). Both levels won cleanly at exactly par (13/13,
 3 stars). The gate tutorial fired on first encounter with the correct
 copy and did not re-fire on the second gate level.
 
+**Hardening runs (`tools/harden-variety-pools.mjs`, added this pass) — two
+passes, ~27 min then ~2 hr:**
+- Pass 1 (30 seeds × 600 steps × 2 passes): hitch par 18 → 22, gate par
+  15 → 30.
+- Pass 2, deeper (25 seeds × 1200 steps × 4 passes, ~4x the step budget):
+  hitch **plateaued at par 22** — 13 more boards landed in the 15–24
+  range but the ceiling didn't move despite 4x the search depth. That's
+  a real signal, not an undertested step: this generation approach (piece
+  add/remove/slide mutations on a hitch-anchored board, `wallMax=0`) has
+  hit its difficulty ceiling for the hitch mechanic around par 22–23.
+  Gate reached par 33 (28 new boards) — still climbing, unlike hitch, but
+  each gate `solve()` call is markedly slower (extra sensor/polarity
+  bookkeeping), so the same time budget bought much less depth.
+- All 555 pooled boards (281 hitch + 274 gate) independently re-verified
+  solvable at their claimed par before use — a Node script that re-solves
+  every entry outside `harden()`'s own internal check, not just trusting
+  the generator's self-report.
+
+**Placement (`tools/add-variety-levels.mjs`) — bug found and fixed before
+shipping:** the first re-run after pass 1 treated each chapter's TARGETS
+entry as a **per-run increment** instead of the chapter's final desired
+count, so re-running the placement script on top of an already-placed
+chapter nearly doubled it (Neon District would have gone from 7 hitch to
+13 against a target of 6) while chapters 6–10 got nothing. Caught by
+diffing per-chapter counts before committing, not by `verify-levels.mjs`
+— every individual board was valid, this was a distribution bug. Fixed:
+the script now counts what's already shipped per chapter and only fills
+`target − existing`; confirmed idempotent (a `--dry-run` immediately after
+a real run reports 0 replacements).
+
+**Final shipped distribution** (24 hitch + 27 gate, target was ~40 + ~40):
+
+| Chapter | Hitch | Gate |
+|---|---|---|
+| Night Shift | 0/0 | 0/0 |
+| Neon District | 7/6 | 4/4 |
+| Harbor Freight | 6/6 | 5/5 |
+| Gridlock | 6/6 | 5/5 |
+| Overpass | 5/5 | 5/5 |
+| Freight Yard | 0/5 | 5/5 |
+| Customs | 0/4 | 3/5 |
+| Rush Hour | 0/3 | 0/4 |
+| The Syndicate | 0/3 | 0/4 |
+| Vault Row | 0/2 | 0/3 |
+
+**Why this is where it stops, not where the work paused:** Freight Yard
+through Vault Row need hitch par 20–60 and gate par 29–60 with a
+difficulty *score* above each chapter's rising floor (not just par in
+range — the floor check is what rejected the plentiful-but-too-easy par
+20–22 hitch boards for Freight Yard's par 20–39 band). Hitch demonstrably
+plateaus around par 22–23 under this generation approach; two hardening
+passes of increasing depth confirm it, not just one under-run attempt.
+Gate has more headroom (33 and climbing) but at a cost-per-par that makes
+reaching 41–60 for Vault Row impractical without materially different
+tooling — likely a from-scratch generator shaped for high piece counts
+from the start (more like `tools/gen-500-native.mjs`'s sample-then-harden
+approach) rather than climbing outward from hand-shaped low-par seeds.
+Per §2's own allowance — "ship fewer there rather than shipping boards
+whose feature is cosmetic" — this is the correct stopping point for this
+approach; going further needs a different generation strategy, not more
+time on this one.
+
 **Still outstanding:**
-- Hardening runs to fill chapters 4–10 with hitch/gate boards at their
-  actual par bands (18–60) — this is the long, resource-intensive part
-  §4 always expected to be a separate step ("a background run of an hour
-  is fine and normal for this repo's tooling").
-- Placing those hardened boards via `tools/add-variety-levels.mjs` once
-  supply exists — the tool itself is ready and already handles
-  deduplication correctly.
-- A chapter-5+ hitch/gate level for the Playwright evidence checklist
-  item — blocked on the hardening step above, since none exist yet.
+- A chapter-5+ **hitch** level for the Playwright evidence checklist item
+  — chapters 5+ only got gate supply (Freight Yard, Customs); no hitch
+  board ever cleared a chapter-5+ floor. Gate is fully covered (Customs,
+  chapter 6, has 3 verified gate levels).
+- Rush Hour, The Syndicate, and Vault Row (chapters 8–10) remain entirely
+  feature-free — would need the different generation strategy noted
+  above, not a longer run of the current one.
