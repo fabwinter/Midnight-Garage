@@ -86,7 +86,7 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
    this piece's ordinal happened to land on, but dimmer." Still listed as a
    normal SEDAN_PHOTOS entry too, so it stays in ordinary traffic rotation
    and remains disable-able from the admin library like any other asset. */
-const BROKEN_DOWN_SEDAN_PHOTO = { img: 'assets/cars/traffic-sedan-28.png', fixed: true, color: 'rust-weathered' };
+const BROKEN_DOWN_SEDAN_PHOTO = { img: 'assets/cars/library-sedans-1785067674835-5-rust-weathered.png', fixed: true, color: 'rust-weathered' };
 
 const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-6.png', hue: 29, color: 'recolor' },              // skin body, recolors
@@ -96,15 +96,12 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-sports-cyan.png', fixed: true, color: 'cyan-track' },
   { img: 'assets/cars/traffic-sedan-new-lightblue.png', fixed: true, color: 'blue-plain' },
   { img: 'assets/cars/hero-ferrari-nobadge.png', fixed: true, color: 'red' },
-  { img: 'assets/cars/traffic-sedan-25.png', fixed: true, color: 'police' },          // K-9 unit
   { img: 'assets/cars/hero-classic-white-green.png', fixed: true, color: 'white-green-stripe' },
   { img: 'assets/cars/hero-sedan-green.png', fixed: true, color: 'green-sedan' },
   { img: 'assets/cars/hero-convertible-brown.png', fixed: true, color: 'brown' },
-  { img: 'assets/cars/traffic-sedan-24.png', fixed: true, color: 'yellow-taxi' },
   { img: 'assets/cars/traffic-sedan-11.png', fixed: true, color: 'blue-gulf-race' },  // numbered Gulf GT40
   { img: 'assets/cars/hero-ferrari-red-stripe.png', fixed: true, color: 'carbon-red-stripe' },
   { img: 'assets/cars/hero-fluro-cyan.png', fixed: true, color: 'cyan-fluro' },
-  { img: 'assets/cars/hero-jeep-rubicon-nobadge.png', fixed: true, color: 'orange-suv' },
   { img: 'assets/cars/hero-vintage-white.png', fixed: true, color: 'ivory-bug' },
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true, color: 'silver-plain' },    // 300SL
   { img: 'assets/cars/hero-fluro-green.png', fixed: true, color: 'green-fluro' },
@@ -129,7 +126,20 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-countach-nobadge.png', fixed: true, color: 'green-wedge' },
   { img: 'assets/cars/library-sedans-1785066252701-0-pink-lambo.png', fixed: true, color: 'Pink lambo' },
   { img: 'assets/cars/library-sedans-1785066252701-1-silver-yellow-stripe.png', fixed: true, color: 'silver-yellow-stripe' },
-  { img: 'assets/cars/library-sedans-1785066252701-2-blue-mustang.png', hue: 212, color: 'Blue mustang' },
+  { img: 'assets/cars/library-sedans-1785067674835-1-aqua-lambo.png', fixed: true, color: 'Aqua lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-2-yellow-lambo.png', fixed: true, color: 'Yellow lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-3-silver-lambo.png', fixed: true, color: 'Silver lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-4-yellow-taxi.png', fixed: true, color: 'yellow-taxi' },
+  { img: 'assets/cars/library-sedans-1785067674835-6-police.png', fixed: true, color: 'police' },
+  { img: 'assets/cars/library-sedans-1785067674835-7-orange-suv.png', fixed: true, color: 'Orange-suv' },
+  { img: 'assets/cars/library-sedans-1785067674835-8-blue-lambo.png', fixed: true, color: 'Blue lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-9-gold-lambo.png', fixed: true, color: 'Gold lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-10-pink-lambo.png', fixed: true, color: 'Pink lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-11-green-lambo.png', fixed: true, color: 'Green lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-12-orange-porche.png', fixed: true, color: 'Orange porche' },
+  { img: 'assets/cars/library-sedans-1785067674835-13-red-mini.png', fixed: true, color: 'Red mini' },
+  { img: 'assets/cars/library-sedans-1785067674835-14-green-mini.png', fixed: true, color: 'Green mini' },
+  { img: 'assets/cars/library-sedans-1785067674835-15-green-porsche.png', fixed: true, color: 'Green Porsche' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
