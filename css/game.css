@@ -809,6 +809,10 @@ input[type=range]::-moz-range-thumb{
 .lib-slider-lab{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .lib-slider-lab input[type=range]{flex:1}
 .lib-slider-lab span{color:var(--ink);font-family:var(--disp);min-width:28px;text-align:right}
+.lib-rotate-num{
+  width:56px;background:#11151f;border:1px solid var(--line);border-radius:6px;
+  color:var(--ink);font-family:var(--disp);font-size:12px;text-align:right;padding:2px 4px;
+}
 .lib-adjust-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
 .lib-adjust-grid .lib-slider-lab{flex-direction:column;align-items:stretch;gap:2px}
 .lib-adjust-grid .lib-slider-lab span{text-align:left;min-width:0}

@@ -3453,11 +3453,13 @@ let libPreviewRect = null;
 // [rangeId, valueLabelId, default] for every preview-adjustment slider —
 // one list drives both the 'input' wiring and the two reset paths (the
 // explicit Reset-adjustments button, and clearing the form after Add/on
-// tab switch) so the defaults only live in one place.
+// tab switch) so the defaults only live in one place. Rotate isn't here:
+// it's a paired range+number input (see wireLibRotate/libResetSliders)
+// so it needs its own two-way sync instead of the shared span-readout
+// wiring every other slider uses.
 const LIB_SLIDERS = [
   ['libTolerance', 'libToleranceVal', 32],
   ['libScaleRange', 'libScaleVal', 97],
-  ['libRotate', 'libRotateVal', 0],
   ['libBrightness', 'libBrightnessVal', 100],
   ['libContrast', 'libContrastVal', 100],
   ['libSaturation', 'libSaturationVal', 100],
@@ -3472,9 +3474,38 @@ function libResetSliders(){
     $(id).value = def;
     $(labelId).textContent = def;
   });
+  $('libRotate').value = 0;
+  $('libRotateNum').value = 0;
   $('libToleranceLab').hidden = !$('libRemoveBg').checked;
   libStretchX = 100; libStretchY = 100;
   $('libStretchReadout').textContent = 'Stretch 100% × 100%';
+}
+
+// Rotate: a slider with magnetic snap near quarter-turns, plus a paired
+// number input for any exact value. Snapping lives here as a correction
+// applied only to drags off the SLIDER (libSnapRotate, called from its
+// 'input' listener below) rather than via the range input's own `step`
+// attribute — Chromium silently re-snaps a range input's .value to the
+// nearest step multiple on ANY assignment, including a plain JS write, so
+// step="90" fought every attempt to set an in-between value from the
+// number input (e.g. typing "37" would visibly stick in the number field
+// but the slider — and libGatherOpts's actual rotate reading, since it
+// reads $('libRotate').value — would silently revert to 0). Keeping the
+// range input's own step at 1 (fully continuous) and doing the snap
+// ourselves sidesteps that entirely: nothing here fights the number
+// input's exact values.
+const ROTATE_SNAP_POINTS = [-180, -90, 0, 90, 180];
+const ROTATE_SNAP_DEG = 5;
+function libSnapRotate(deg){
+  for(const p of ROTATE_SNAP_POINTS) if(Math.abs(deg - p) <= ROTATE_SNAP_DEG) return p;
+  return deg;
+}
+
+function libSetRotate(deg){
+  const clamped = Math.max(-180, Math.min(180, Math.round(deg)));
+  $('libRotate').value = clamped;
+  $('libRotateNum').value = clamped;
+  scheduleLibPreview();
 }
 
 // Everything renderToCanvas needs, read fresh off the form each call.
@@ -3717,6 +3748,14 @@ function wireLibrary(){
       $(labelId).textContent = $(id).value;
       scheduleLibPreview();
     });
+  });
+  $('libRotate').addEventListener('input', () => libSetRotate(libSnapRotate(Number($('libRotate').value))));
+  $('libRotateNum').addEventListener('input', () => {
+    // Mid-edit states ("", "-") parse to NaN or nothing usable yet — leave
+    // the field alone rather than stomping on what the admin just typed.
+    const n = Number($('libRotateNum').value);
+    if($('libRotateNum').value === '' || Number.isNaN(n)) return;
+    libSetRotate(n);
   });
   $('libResetAdjustBtn').addEventListener('click', () => {
     sfx('ui');

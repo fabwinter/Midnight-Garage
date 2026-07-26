@@ -450,8 +450,9 @@
         <label class="lib-slider-lab">Scale <span id="libScaleVal">97</span>%
           <input id="libScaleRange" type="range" min="30" max="300" value="97">
         </label>
-        <label class="lib-slider-lab">Rotate <span id="libRotateVal">0</span>&deg;
-          <input id="libRotate" type="range" min="-180" max="180" value="0">
+        <label class="lib-slider-lab">Rotate
+          <input id="libRotateNum" class="lib-rotate-num" type="number" min="-180" max="180" step="1" value="0">&deg;
+          <input id="libRotate" type="range" min="-180" max="180" step="1" value="0" aria-label="Rotate (snaps near 0°/90°/180°)">
         </label>
         <label class="lib-slider-lab">Position <span id="libPositionXVal">0</span>
           <input id="libPositionX" type="range" min="-100" max="100" value="0">
