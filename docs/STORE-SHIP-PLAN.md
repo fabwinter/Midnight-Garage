@@ -201,15 +201,35 @@ project + updated privacy labels are ready together.
 
 ## 7. Suggested sequence
 
-**M1 — repo-only, no accounts or Mac needed (do now):**
-P0-1 build step, P0-2 fonts, P0-7 back-button code (testable in Chrome
-via a keyboard shim), P0-8 admin kill switch, P1 audio re-encode, add
-`@capacitor/android` dep + `@capacitor/app`, icon/splash generation
-config. Everything here is committable and CI-verifiable in this repo.
+**M1 — repo-only, no accounts or Mac needed:**
 
-**M2 — platform bring-up (Mac + developer accounts):**
-`cap add ios` / `cap add android`, native config (P0-3/4/5), RevenueCat
-+ store products (P0-6), physical-device QA matrix, background/audio QA.
+| Item | Status |
+|---|---|
+| P0-1 build step (`tools/build-www.mjs`, `webDir` fixed) | ✅ done |
+| P0-2 real fonts | ✅ done |
+| P0-7 back-button handler | ✅ done (logic verified via a temporary test hook, not a shipped keyboard shim — see below) |
+| P0-8 admin kill switch (`js/build-flags.js`) | ✅ done, verified: release build leaves the 5-tap backdoor fully unreachable |
+| `@capacitor/android` + `@capacitor/app` deps | ✅ done |
+| P0-5 icon/splash **source images** | ✅ done (`resources/`) — composition verified by direct inspection (readable at 1024px, adaptive-icon safe zone respected, real alpha transparency confirmed); **not yet verified through the actual `@capacitor/assets generate` → device/simulator pipeline**, since that needs P0-3/P0-4's platforms to exist first |
+| P1 audio re-encode | ⬜ blocked in this environment — no system `ffmpeg` and the package mirror needed to install it is failing on unrelated broken URLs pulling in a large, unnecessary dependency chain (video drivers, speech recognition data); the WASM alternative (`@ffmpeg/ffmpeg`) is a heavyweight, uncertain install for a P1 nice-to-have and wasn't worth gambling the session on. Needs a real dev machine with ffmpeg. |
+
+Note on P0-7's testing: rather than shipping a keyboard shim into
+production code (Escape-key-triggers-back is exactly the kind of
+surprise behavior that shouldn't ride along to a store build for
+developer convenience), the back-button logic was verified by
+temporarily exposing the handler function on `window`, driving all four
+branches with Playwright, then removing the expose before committing.
+The plugin-access pattern itself (`globalThis.Capacitor?.Plugins?.App`)
+means the real native event is still what's untested — that only
+becomes possible once P0-3/P0-4 produce an actual Android build.
+
+**M2 — platform bring-up (Mac + developer accounts, not available in
+this environment):**
+`cap add ios` / `cap add android`, native config (P0-3/4), running
+`@capacitor/assets generate` against the sources already prepared in
+`resources/` and checking the result on a simulator/device, RevenueCat +
+store products (P0-6), physical-device QA matrix, background/audio QA,
+and finishing the audio re-encode with real `ffmpeg`.
 
 **M3 — store operations (parallel with M2's tail):**
 Trademark check → listings, screenshots, privacy policy + support page
@@ -223,15 +243,23 @@ weeks calendar time from starting M2, mostly waiting, not working.
 
 ## 8. Acceptance = ready to submit
 
-- [ ] `npm run build` produces a `www/` with only game files; `cap sync`
-      bundles nothing else.
-- [ ] Real fonts load with zero console errors (or @font-face removed
-      deliberately).
+- [x] `npm run build` produces a `www/` with only game files; `cap sync`
+      bundles nothing else. (`npm run build:release` additionally
+      disables admin mode.)
+- [x] Real fonts load with zero console errors (verified via
+      `document.fonts` + a Playwright console-error check).
 - [ ] Fresh-install purchase AND restore succeed in Apple sandbox and
-      Play license testing; web build still sandbox-unlocks.
-- [ ] Android back button never hard-exits from an overlay or mid-level.
-- [ ] Admin mode unreachable in release builds (or disclosed in notes).
-- [ ] App ≤ ~40 MB installed; audio re-encoded.
+      Play license testing; web build still sandbox-unlocks. (IAP itself
+      — P0-6 — hasn't been built yet; needs M2.)
+- [x] Android back button never hard-exits from an overlay or mid-level.
+      (Logic verified in Chrome; the real native `backButton` event
+      still needs an actual Android build to confirm end-to-end.)
+- [x] Admin mode unreachable in release builds (or disclosed in notes).
+      Verified with Playwright: 5 taps on the title in a `--release`
+      build leaves the admin chip/bar hidden.
+- [ ] App ≤ ~40 MB installed; audio re-encoded. (Currently ~61 MB
+      unpacked, 40 MB of which is unencoded audio — blocked on a real
+      `ffmpeg`, see §7.)
 - [ ] Both privacy forms filed as "no data collected"; policy URL live.
 - [ ] Pursuit timer behaves across backgrounding on both platforms.
 - [ ] All 10 locales spot-checked in native shells.
