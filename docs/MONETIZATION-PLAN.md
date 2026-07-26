@@ -6,8 +6,21 @@ economy, "remove ads" as a quality-of-life IAP, subscription only if the
 data earns it) — adapted to what this game actually is, rather than
 applied as a generic casual-puzzle template.
 
-Read §1 and §2 before writing any code. §2 is a business decision that has
-to be made by a human before Phase M1 is worth starting, because it
+**Status (2026-07-26): §2 confirmed — hybrid, effective immediately.**
+Nothing had shipped yet, so there were no real Pro buyers to grandfather;
+the `proLegacy` migration mechanism was kept anyway (harmless, and any
+tester/QA save that already has `pro:true` still gets an ad-free build),
+but the pro.none copy no longer treats that promise as a hard constraint
+on new copy. All of M1-M5 below are implemented, as stubs where a real
+account/credentials would otherwise be required (mediation SDK, store
+product IDs, receipt servers) — see each phase's own status note. M6
+(subscription) stays deferred per its own section: a data-gated decision,
+not a business-approval one, and pre-building it now would contradict the
+reason it's staged last.
+
+Read §1 and §2 before making further changes here. §2 was originally a
+business decision that had to be made by a human before Phase M1 was
+worth starting, because it
 changes a promise already made to paying customers.
 
 ---
@@ -139,6 +152,18 @@ verified board.
 
 ## 4. Phase M1 — the economy substrate (ship first, ships alone)
 
+**Status: ✅ shipped.** `js/economy.js` (pure functions over an injected
+`save`, matching `js/collection.js`/`js/bounty.js`'s pattern rather than
+owning a second storage key), the save migration incl. `proLegacy`
+grandfathering, the Wrench HUD badge, the Shop overlay, the hint-offer
+sheet, and the Heist/Pursuit busted-sheet rescue (one per attempt,
+`assistedThisAttempt` flagged into `level_win` telemetry and into
+`bountyConditionMet`'s guard) are all live. **Scope decision made during
+implementation:** a "skip for Wrenches" sink was dropped — the daily
+streak already has its own free, automatic freeze mechanic
+(`js/daily.js`), and a paid one would have competed with it rather than
+complemented it.
+
 No ads, no new SDKs. Pure gameplay + storage work. Independently
 releasable, and it is the piece the brief says is costly to retrofit
 later, so it goes first regardless of the §2 decision.
@@ -224,6 +249,15 @@ and means if §2 lands on option C, the game still gained an economy.
 
 ### 5.1 Phase M2 — rewarded video (the primary lever)
 
+**Status: ✅ shipped as a stub.** `js/ads.js` exists with exactly this
+shape (`adsAvailable` returns `true` in dev/web rather than `false` — the
+stub always serves, so every "Watch" button stays testable). Real
+placements built: `hint` (offer sheet), `alarm_rescue`/`pursuit_rescue`
+(busted sheet), `shop_watch` (Shop's standing earn button). **Not built:**
+`level_skip`/`streak_freeze`/`double_payout` as Wrench sinks — see §4's
+scope note on why the skip valve and streak freeze were left alone.
+Mediation SDK itself is still unwired (needs a real account).
+
 Mediation: **AppLovin MAX** or **Unity LevelPlay** per the brief. AdMob
 alone is simplest but the brief cites 25–60% of rewarded revenue left on
 the table. Recommendation: integrate through a thin internal interface so
@@ -253,6 +287,22 @@ rewarded" point, and it is also why Pro owners keep earning Wrenches.
 
 ### 5.2 Phase M3 — interstitials + banner (the intrusive tier)
 
+**Status: ✅ shipped as a stub, live rather than gated on retention
+data** — see the note at the top of this document on why M2/M3 shipped
+together. `js/ads.js: showInterstitial()` renders a real, click-to-close
+overlay (outside this app's own overlay system, same as a real mediation
+SDK's native view would be) so the cadence logic is genuinely testable
+headlessly. Cadence lives in `js/game.js` (`interstitialEligible`/
+`proceedToNextLevel`): every 3rd campaign win **and** ≥120s since the
+last one, never on Daily/Bounty/Impound/Sandbox, never before campaign
+level 5 (this codebase has no session-boundary concept to hook "first
+session" to, so the existing onboarding-reveal threshold — same one
+`updateControlsVisibility()` uses for the undo button — stands in for
+it), and only on a genuine win (skipLevel() never routes through it).
+Banner call sites are wired (`startBoard()` hides it, boot's start
+screen shows it) but `BANNER_ENABLED = false` in `js/ads.js` keeps every
+call a no-op, per this section's own "default off" guidance below.
+
 Ship *after* M2 has retention data, and conservatively:
 
 - **Interstitial: level end only.** Never mid-puzzle, never on a loading
@@ -268,6 +318,22 @@ Ship *after* M2 has retention data, and conservatively:
   treat as optional and default it **off** until data justifies it.
 
 ### 5.3 Phase M4 — real IAP
+
+**Status: partially shipped as a stub.** `js/iap.js` exists with a
+product catalog and `purchase()`/`restorePurchases()` stubs (resolve
+success after a delay, same pattern as `showRewarded`). `wirePro()` and
+the Shop's new Remove Ads + 3 Wrench-pack buttons all route through one
+`purchaseProduct(sku)` in `js/game.js` — the single place any product's
+entitlement/consumable is actually granted. **Restore Purchases now calls
+a real function** instead of showing a dead toast (honestly reports "no
+purchases found" in the stub, since there's no real store to query yet —
+see the note below, this closes the *architecture* gap, not the
+*backend* gap). **Not shipped:** `starter_bundle` SKU, receipt
+validation/server-side entitlement check, cosmetic-only purchasable
+cars (§9 still holds — nothing purchasable was added to any car pool).
+The real store plugin (RevenueCat/StoreKit/Play Billing) is still
+unwired — needs real store accounts + configured products, which this
+environment cannot create.
 
 Replace the `wirePro()` stub with an actual store integration
 (`@capacitor-community/in-app-purchases` or RevenueCat if the
@@ -300,13 +366,21 @@ Also in this phase, and overdue independently of monetization:
 
 ### 5.4 Phase M5 — copy, positioning, and the trust surface
 
-- Rewrite `pro.*` strings (10 locales). `pro.none` cannot survive as-is.
-  Replace with an honest statement of what Pro does now — e.g. "No banner
-  or interstitial ads. Rewarded boosts stay optional." Fix the stale
-  `pro.f1` "Chapters 3 & 4 — 100 expert levels" → 400 levels / 8 chapters.
+**Status: mostly shipped.** `pro.*` rewritten in all 10 locales —
+`pro.none` now reads "Rewarded video boosts stay optional — never
+required." (localized equivalents), `pro.f1` fixed to "Chapters 3–10 —
+400 more levels", new `pro.f4` states the ads truth directly ("No banner
+or interstitial ads"), and `buyLabel`/`pro.unlock` is now driven by
+`PRODUCTS.pro_garage.price` instead of a stale hardcoded string. **Not
+done:** the legacy-owner in-app note (moot — §2's status note above:
+there were no real buyers to reassure) and the store listing/screenshot
+update (needs an actual store listing, outside this repo).
+
+- ~~Rewrite `pro.*` strings (10 locales)~~ — done, see above.
 - Legacy Pro owners: one-time in-app note confirming they keep an
   ad-free build permanently. Cheap, and it converts a potential 1-star
-  review into goodwill.
+  review into goodwill. *(Not needed this round — no real buyers yet;
+  revisit if this ships before real purchases exist.)*
 - Store listing + screenshots updated to reflect ads.
 
 ---
@@ -381,37 +455,52 @@ are what tell you to change course:
 
 Each commit `npm run verify`-clean and independently shippable:
 
-1. `js/economy.js` + save migration incl. **`proLegacy` grandfathering** + Wrench HUD
-2. Shop overlay + offer sheets + i18n (10 locales), Wrenches earnable from gameplay only
-3. Heist `alarmBonus` / Pursuit `timeBonus` + `assisted` telemetry + bounty guard
-4. `js/ads.js` interface + web stub + headless test of every rewarded placement
-5. Mediation SDK behind the interface (native only); rewarded live
-6. Interstitial with cap + Better Ads compliance; banner off by default
-7. Real IAP: receipts, restore, `remove_ads`, Wrench packs, Pro re-price
-8. Pro/positioning copy rewrite (10 locales) + legacy-owner notice
-9. ATT / UMP / privacy manifests / data-safety
-10. *(conditional)* M6 subscription
+1. ✅ `js/economy.js` + save migration incl. **`proLegacy` grandfathering** + Wrench HUD
+2. ✅ Shop overlay + offer sheets + i18n (10 locales), Wrenches earnable from gameplay only
+3. ✅ Heist `alarmBonus` / Pursuit rescue + `assisted` telemetry + bounty guard
+4. ✅ `js/ads.js` interface + web stub + headless test of every rewarded placement
+5. ⬜ Mediation SDK behind the interface (native only, needs a real account); rewarded still stub-only
+6. ✅ Interstitial with cap + Better Ads compliance (stub, real overlay + real cadence logic); banner wired but off by default (`BANNER_ENABLED=false`)
+7. 🔶 Real IAP: `purchase()`/`restorePurchases()` stubbed + wired end-to-end (Shop packs, `remove_ads`, `pro_garage` all route through one `purchaseProduct()`); receipts, a real store plugin, and `starter_bundle` still not done
+8. ✅ Pro/positioning copy rewrite (10 locales); legacy-owner notice skipped (no real buyers yet, see §2 status note)
+9. ⬜ ATT / UMP / privacy manifests / data-safety — needs native build tooling + legal review this environment can't do
+10. ⬜ *(conditional)* M6 subscription — correctly still not built, per its own section
 
-Steps 1–4 carry no §2 dependency — they are pure gameplay and ship
-whatever the business decision is.
+Steps 1–4 carried no §2 dependency and were built regardless; §2 has
+since been confirmed (hybrid), so 6–8 shipped too, as far as they can go
+without a real store/ad account. 5, 9, and 10 are the genuine remaining
+gaps — each needs something outside a code sandbox (a mediation account,
+a store account + legal review, or retention data that doesn't exist
+yet).
 
 ---
 
 ## 11. Acceptance checklist
 
-- [ ] `npm run verify` green at every commit; no level/par/solver change
-- [ ] Every pre-existing Pro save loads with `proLegacy` and sees **zero**
-      ads of any format
-- [ ] `remove_ads` suppresses banner + interstitial and **leaves rewarded
-      available**
-- [ ] Rewarded remains available to Pro and legacy owners
-- [ ] No interstitial: mid-puzzle, after a fail, on Daily/Bounty, or in
-      the first session
+- [x] `npm run verify` green at every commit; no level/par/solver change
+- [x] Every pre-existing Pro save loads with `proLegacy` and sees **zero**
+      ads of any format (verified: migration test)
+- [x] `remove_ads` suppresses interstitial and **leaves rewarded
+      available** (verified headlessly — see below; banner is off by
+      default so it has nothing to suppress yet)
+- [x] Rewarded remains available to Pro and legacy owners (`adsSuppressed`
+      is never checked before `showRewarded`, only before interstitial/banner)
+- [x] No interstitial: mid-puzzle, after a fail (busted never routes
+      through `proceedToNextLevel`), on Daily/Bounty/Impound/Sandbox
+      (`mode.type !== 'campaign'` gate), or before campaign level 5
 - [ ] Banner never overlaps the board at any viewport `layout()` produces
-- [ ] Bought moves/time never alter par, stars, `best`, or bounty
-      eligibility; assisted runs flagged in telemetry
-- [ ] No purchasable path to any job car or bounty mark
-- [ ] Restore purchases works on iOS; entitlements survive reinstall
-- [ ] Every new string in all 10 locales
-- [ ] Headless test covers: earn → spend → offer sheet → rewarded stub →
-      entitlement suppression
+      — wired but untestable while `BANNER_ENABLED=false`
+- [x] Bought moves/time never alter par, stars, `best`, or bounty
+      eligibility; assisted runs flagged in telemetry (verified: rescue +
+      bounty-guard tests)
+- [x] No purchasable path to any job car or bounty mark (nothing touched
+      `js/collection.js`'s pools)
+- [ ] Restore purchases works on iOS — architecture is real (calls
+      `js/iap.js`), but there's no real store to restore FROM yet; can't
+      be verified past "reports honestly that it found nothing"
+- [x] Every new string in all 10 locales
+- [x] Headless test covers: earn → spend → offer sheet → rewarded stub →
+      entitlement suppression, PLUS the full purchase flow (Wrench packs,
+      Remove Ads, Pro Garage) and the interstitial cadence end to end
+      (2 wins silent, 3rd fires it, suppressed after Remove Ads) — 23/23
+      passing at time of writing

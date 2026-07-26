@@ -23,7 +23,8 @@ import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel,
 import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
 import { ADMIN_ENABLED } from './build-flags.js';
 import { priceOf as wrenchPriceOf, canAfford as canAffordWrench, spend as spendWrench, grant as grantWrench, dailyWrenchAvailable, claimDailyWrench, REWARDED_WRENCH_GRANT, ALARM_RESCUE_MOVES, PURSUIT_RESCUE_SECONDS } from './economy.js';
-import { adsAvailable, showRewarded } from './ads.js';
+import { adsAvailable, showRewarded, showInterstitial, setBannerVisible, adsSuppressed } from './ads.js';
+import { PRODUCTS, iapAvailable, purchase as storePurchase, restorePurchases } from './iap.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -1072,6 +1073,7 @@ function trackLevelId(){
 }
 
 function startBoard(){
+  setBannerVisible(false);   // never overlap the board — MONETIZATION-PLAN.md §5.2
   stopReplay(false);   // a new attempt invalidates any in-flight replay
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
@@ -1336,9 +1338,12 @@ function updateWrenchBadge(){
 }
 
 /* Shop: a standing destination (not tied to any single friction point) —
-   the daily free Wrench and the one earn source that exists before any
-   real ad network is wired in (the rewarded-ad stub, watchable any time,
-   not just at a friction point). Wrench packs (IAP) land in phase M4. */
+   free earn sources (daily claim, rewarded-ad stub) plus real IAP (Remove
+   Ads, Wrench packs) via js/iap.js's purchaseProduct(). Pro Garage itself
+   stays on its own dedicated paywall (proOverlay) rather than folding in
+   here — it's a bigger decision than an impulse Shop buy, and every
+   existing entry point into it (chapter gate, hint offer's "Go Pro") is
+   already that overlay. */
 function openShop(){
   updateShopUI();
   track('shop_open', {});
@@ -1350,6 +1355,8 @@ function updateShopUI(){
   const canClaim = dailyWrenchAvailable(save, today);
   $('shopDailyBtn').disabled = !canClaim;
   $('shopDailyBadge').hidden = !canClaim;
+  const adsGone = save.pro || save.entitlements.removeAds;
+  $('shopRemoveAdsRow').hidden = adsGone;
 }
 async function shopWatch(){
   if(!adsAvailable()){ toast(t('toast.noads')); return; }
@@ -1371,6 +1378,45 @@ function shopClaimDaily(){
   updateShopUI();
   track('wrench_grant', { amount: 1, source: 'daily_free' });
   toast(t('toast.wrenchgranted', { n: 1 }));
+}
+
+/* ================== INTERSTITIAL CADENCE (MONETIZATION-PLAN.md phase M3) ==================
+   In-memory only — losing the count/timer across an app restart is fine
+   (worst case: one extra or one fewer interstitial near a cold start),
+   nothing here is worth persisting. Only ever called from a genuine
+   campaign WIN (the "Next" button and the win sheet's own auto-advance
+   timer both funnel through proceedToNextLevel below) — never from
+   skipLevel()'s call into advance(), so bailing out on a level you're
+   stuck on never gets an ad on top of it. */
+let levelsSinceInterstitial = 0, lastInterstitialAt = 0;
+const INTERSTITIAL_EVERY = 3;
+const INTERSTITIAL_MIN_GAP_MS = 120000;
+const INTERSTITIAL_ONBOARDING_LEVEL = 5;   // matches updateControlsVisibility's undo reveal — "past onboarding"
+
+function interstitialEligible(){
+  if(adsSuppressed(save)) return false;
+  if(mode.type !== 'campaign') return false;   // never Daily/Bounty/Impound/Sandbox
+  if(cur < INTERSTITIAL_ONBOARDING_LEVEL) return false;   // never the first session
+  if(levelsSinceInterstitial < INTERSTITIAL_EVERY) return false;
+  if(Date.now() - lastInterstitialAt < INTERSTITIAL_MIN_GAP_MS) return false;
+  return true;
+}
+
+// The only place that leaves the win sheet toward another level after a
+// genuine clear — shows a capped interstitial first when eligible, then
+// runs `after` either way. `after` is always advance() today; taking a
+// callback rather than calling advance() directly keeps this reusable if
+// a future win path needs the same gate.
+function proceedToNextLevel(after){
+  if(mode.type === 'campaign') levelsSinceInterstitial++;
+  if(!interstitialEligible()){ after(); return; }
+  levelsSinceInterstitial = 0;
+  lastInterstitialAt = Date.now();
+  track('ad_request', { placement: 'level_end', type: 'interstitial' });
+  showInterstitial('level_end').then(() => {
+    track('ad_impression', { placement: 'level_end', type: 'interstitial' });
+    after();
+  });
 }
 
 /* ================== ONBOARDING (plan 0.6) ================== */
@@ -1756,7 +1802,7 @@ function showWinSheet(stars){
     if(save.settings.autoAdvance && next !== -1 && !carRevealQueue.length && !matchMedia('(prefers-reduced-motion: reduce)').matches){
       $('autobar').style.setProperty('--automs', '2600ms');
       requestAnimationFrame(() => $('autobar').classList.add('run'));
-      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); advance(); }, 2600);
+      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); proceedToNextLevel(advance); }, 2600);
     }
   }
   showOverlay('winOverlay');
@@ -2245,25 +2291,71 @@ function wireSettings(){
     save.settings.reminder = e.target.checked; persist();
     setStreakReminder(e.target.checked, daily().streak);
   });
-  const restore = () => { toast(save.pro ? t('toast.pro') : t('btn.restore') + ' …'); };
   $('restoreBtn').addEventListener('click', restore);
   $('restoreBtn2').addEventListener('click', restore);
 }
 
-/* ================== PRO GARAGE (plan 1.3) ================== */
-function wirePro(){
-  $('buyBtn').addEventListener('click', () => {
-    /* StoreKit hook point: in the native shell this calls the purchase
-       plugin; the web build sandbox-unlocks so the full flow is testable. */
+// Actually calls the store interface now (js/iap.js), rather than showing
+// a toast and doing nothing — the previous version was a real App Review
+// risk (Apple requires a working restore path for non-consumables). The
+// dev/web stub honestly has no purchase history to find; once a real
+// plugin is wired in, restorePurchases()'s body is the only thing that
+// needs to change for this to actually recover a reinstall's entitlements.
+async function restore(){
+  if(save.pro){ toast(t('toast.pro')); return; }
+  toast(t('toast.restoring'));
+  const res = await restorePurchases();
+  if(res.restored.includes('pro_garage')){
     save.pro = true;
     save.entitlements.pro = true;
     save.entitlements.removeAds = true;
-    persist();
-    track('iap_purchase', { product: 'pro_garage' });
-    toast(t('toast.pro'));
-    hideOverlay('proOverlay');
-    updateHud();
-  });
+  } else if(res.restored.includes('remove_ads')){
+    save.entitlements.removeAds = true;
+  } else {
+    toast(t('toast.norestore'));
+    return;
+  }
+  persist();
+  updateHud();
+  toast(t('toast.pro'));
+}
+
+/* ================== PRO GARAGE (plan 1.3) ================== */
+/* Grants an entitlement/consumable AFTER the store confirms the sale —
+   the only place any product's effect actually happens, same split
+   js/economy.js's grant()/spend() keep from the UI that calls them. All
+   purchase buttons across the app (Pro, Shop's Remove Ads + Wrench packs)
+   route through this one function so there is exactly one place that
+   ever sets save.pro/entitlements or credits a consumable from a sale. */
+async function purchaseProduct(sku, btn){
+  const product = PRODUCTS[sku];
+  if(!product) return;
+  if(!iapAvailable()){ toast(t('toast.noads')); return; }
+  if(btn) btn.disabled = true;
+  const res = await storePurchase(sku);
+  if(btn) btn.disabled = false;
+  if(!res.success) return;
+
+  if(sku === 'pro_garage'){
+    save.pro = true;
+    save.entitlements.pro = true;
+    save.entitlements.removeAds = true;
+  } else if(sku === 'remove_ads'){
+    save.entitlements.removeAds = true;
+  } else if(product.kind === 'consumable'){
+    grantWrench(save, product.wrenches);
+  }
+  persist();
+  updateWrenchBadge();
+  updateHud();
+  track('iap_purchase', { product: sku });
+  toast(sku === 'pro_garage' ? t('toast.pro') : t('toast.purchased'));
+  hideOverlay('proOverlay');
+  updateShopUI();
+}
+
+function wirePro(){
+  $('buyBtn').addEventListener('click', () => purchaseProduct('pro_garage', $('buyBtn')));
 }
 
 /* ================== STATIC STRINGS ================== */
@@ -2327,7 +2419,9 @@ function applyStrings(){
   $('proF1').textContent = t('pro.f1');
   $('proF2').textContent = t('pro.f2');
   $('proF3').textContent = t('pro.f3');
+  $('proF4').textContent = t('pro.f4');
   $('proNone').textContent = t('pro.none');
+  $('buyLabel').textContent = t('pro.unlock', { price: PRODUCTS.pro_garage.price });
   $('restoreBtn2').textContent = t('btn.restore');
   $('garageTitle').textContent = t('garage.title');
   $('garageSub').textContent = t('garage.sub');
@@ -2338,6 +2432,10 @@ function applyStrings(){
   $('shopWatchLabel').textContent = t('shop.watch', { n: REWARDED_WRENCH_GRANT });
   $('shopDailyLabel').textContent = t('shop.daily');
   $('shopNote').textContent = t('shop.note');
+  $('shopRemoveAdsLabel').textContent = t('shop.removeads', { price: PRODUCTS.remove_ads.price });
+  $('shopPackSmallLabel').textContent = t('shop.pack', { n: PRODUCTS.wrenches_small.wrenches, price: PRODUCTS.wrenches_small.price });
+  $('shopPackMediumLabel').textContent = t('shop.pack', { n: PRODUCTS.wrenches_medium.wrenches, price: PRODUCTS.wrenches_medium.price });
+  $('shopPackLargeLabel').textContent = t('shop.pack', { n: PRODUCTS.wrenches_large.wrenches, price: PRODUCTS.wrenches_large.price });
   $('offerProLabel').textContent = t('offer.gopro');
   $('bustedRetryBtn').textContent = t('btn.retry');
   $('bustedNoAlarmBtn').textContent = t('btn.relaxed');
@@ -2439,13 +2537,17 @@ function wire(){
       return;
     }
     cancelAuto(); sfx('ui');
-    proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
+    proceedOrReveal(() => { hideOverlay('winOverlay'); proceedToNextLevel(advance); });
   });
   $('carRevealBtn').addEventListener('click', () => { sfx('ui'); dismissCarReveal(); });
   $('garageBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); buildGarageList(); showOverlay('garageOverlay'); });
   $('shopBtn').addEventListener('click', () => { sfx('ui'); openShop(); });
   $('shopWatchBtn').addEventListener('click', () => { sfx('ui'); shopWatch(); });
   $('shopDailyBtn').addEventListener('click', () => { sfx('ui'); shopClaimDaily(); });
+  $('shopRemoveAdsBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('remove_ads', $('shopRemoveAdsBtn')); });
+  $('shopPackSmallBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('wrenches_small', $('shopPackSmallBtn')); });
+  $('shopPackMediumBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('wrenches_medium', $('shopPackMediumBtn')); });
+  $('shopPackLargeBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('wrenches_large', $('shopPackLargeBtn')); });
   $('offerWatchBtn').addEventListener('click', () => { sfx('ui'); offerWatch(); });
   $('offerSpendBtn').addEventListener('click', () => { sfx('ui'); offerSpend(); });
   $('offerProBtn').addEventListener('click', () => { sfx('ui'); offerCtx = null; hideOverlay('offerOverlay'); showOverlay('proOverlay'); track('iap_view', { source: 'offer_sheet' }); });
@@ -4246,4 +4348,5 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   // shows on every launch; the how-to-play/mode-picker popup that follows
   // it is gated to the first launch only (see startPlayBtn).
   setTimeout(() => $('startPlayBtn').focus(), 100);
+  setBannerVisible(true);   // menu only — startBoard() hides it the moment a level loads
 })();
