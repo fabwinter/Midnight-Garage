@@ -3098,6 +3098,22 @@ async function copyToClipboard(text){
   }
 }
 
+// Triggers a real file download (blob URL + a throwaway anchor's `click()`)
+// instead of clipboard copy — used where the export is meant to be handed
+// straight to a tool as a file (tools/promote-library.mjs) and clipboard
+// access is one more thing that can silently fail depending on browser/
+// permissions, on top of needing an extra paste-into-a-file step either way.
+function downloadTextFile(filename, text, mime = 'application/json'){
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function sbExportOne(lv){
   const ok = await copyToClipboard(JSON.stringify(sbLevelExportObj(lv), null, 2));
   toast(ok ? t('toast.copied') : t('toast.copyfail'));
@@ -3794,10 +3810,11 @@ function wireLibrary(){
     sbRenderPicker();
     sfx('ui');
   });
-  $('libExportBtn').addEventListener('click', async () => {
+  $('libExportBtn').addEventListener('click', () => {
     sfx('ui');
-    const ok = await copyToClipboard(JSON.stringify(getLibrary(), null, 2));
-    toast(ok ? 'Copied — hand it to tools/promote-library.mjs' : t('toast.copyfail'));
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadTextFile(`midnight-garage-library-${stamp}.json`, JSON.stringify(getLibrary(), null, 2));
+    toast('Downloaded — hand it to tools/promote-library.mjs');
   });
   $('libResetBtn').addEventListener('click', async () => {
     sfx('ui');
