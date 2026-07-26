@@ -21,6 +21,7 @@ import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
+import { ADMIN_ENABLED } from './build-flags.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -2248,6 +2249,54 @@ function wire(){
   });
 }
 
+/* ================== ANDROID HARDWARE BACK BUTTON ==================
+   STORE-SHIP-PLAN.md P0-7: on Android, an unhandled hardware back press
+   exits the app immediately from wherever the player is — including out
+   of an open overlay or mid-level. @capacitor/app's backButton event is
+   how the native shell hands that press to JS instead of the OS default;
+   this file no-ops safely if the plugin isn't present (web/iOS have no
+   such event to begin with), same pattern as js/notify.js's plugin().
+
+   Policy, in order:
+   1. Any dismissable overlay open (the same set the backdrop-tap/×
+      handlers in wire() already close) — close the topmost one, exactly
+      like tapping outside it.
+   2. Otherwise, if the start/hub screen (#startOverlay) is what's
+      showing — that's the app's literal home screen, so back exits, the
+      same as a launcher screen on any other Android app.
+   3. Otherwise (mid-level, nothing dismissable open) — surface the hub
+      instead of exiting, so a stray back press while playing can never
+      silently kill the app or the run in progress. */
+const BACK_NONDISMISSABLE = ['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'];
+const BACK_STOPS_SETTINGS_MUSIC = ['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'];
+
+function handleBackButton(){
+  const shown = [...document.querySelectorAll('.overlay.show')];
+  const dismissable = shown.find(o => !BACK_NONDISMISSABLE.includes(o.id));
+  if(dismissable){
+    dismissable.classList.remove('show');
+    if(BACK_STOPS_SETTINGS_MUSIC.includes(dismissable.id)) stopSettingsMusic();
+    return;
+  }
+  // Nothing dismissable is open. A non-dismissable overlay OTHER than the
+  // hub itself (intro / win / busted / car-reveal) has its own required
+  // action button — leave it alone rather than stacking the hub in
+  // underneath it, which would surface unexpectedly once that overlay's
+  // own button eventually closes it.
+  if(shown.some(o => o.id !== 'startOverlay')) return;
+  if(shown.some(o => o.id === 'startOverlay')){
+    appPlugin()?.exitApp();
+    return;
+  }
+  showOverlay('startOverlay');
+}
+
+function appPlugin(){ return globalThis.Capacitor?.Plugins?.App ?? null; }
+
+function wireBackButton(){
+  appPlugin()?.addListener('backButton', handleBackButton);
+}
+
 /* ================== ADMIN MODE + SANDBOX DESIGNER ==================
    Dev-only tooling, hidden behind 5 quick taps on the header title.
    While on: an ADMIN chip in the header reopens the start screen, whose
@@ -2255,6 +2304,10 @@ function wire(){
    2026-07-01", "sandbox") and opens the sandbox level designer. */
 
 function applyAdminUI(){
+  // Defense in depth: a release build must never show admin UI even if
+  // save.admin somehow ended up true (e.g. a save carried over from a dev
+  // build during testing) — ADMIN_ENABLED wins regardless of saved state.
+  if(!ADMIN_ENABLED) save.admin = false;
   $('adminBar').hidden = !save.admin;
   $('adminChip').hidden = !save.admin;
 }
@@ -2305,6 +2358,7 @@ function runAdminCommand(raw){
 }
 
 function wireAdmin(){
+  if(!ADMIN_ENABLED) return;   // release build (tools/build-www.mjs --release) — no backdoor to wire up
   let taps = 0, tapTimer = null;
   $('brandTitle').addEventListener('pointerdown', () => {
     taps++;
@@ -3809,6 +3863,7 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   wireAdmin();
   wireSandbox();
   wireLibrary();
+  wireBackButton();
   await sbLoadSaved();
   applyAdminUI();
   layout();

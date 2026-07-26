@@ -1,10 +1,10 @@
 @font-face{font-family:'Chakra Petch';src:url('../assets/fonts/ChakraPetch-500.woff2') format('woff2');font-weight:500;font-display:swap}
 @font-face{font-family:'Chakra Petch';src:url('../assets/fonts/ChakraPetch-600.woff2') format('woff2');font-weight:600;font-display:swap}
 @font-face{font-family:'Chakra Petch';src:url('../assets/fonts/ChakraPetch-700.woff2') format('woff2');font-weight:700;font-display:swap}
-@font-face{font-family:'Inter';src:url('../assets/fonts/Inter-400.woff2') format('woff2');font-weight:400;font-display:swap}
-@font-face{font-family:'Inter';src:url('../assets/fonts/Inter-500.woff2') format('woff2');font-weight:500;font-display:swap}
-@font-face{font-family:'Inter';src:url('../assets/fonts/Inter-600.woff2') format('woff2');font-weight:600;font-display:swap}
-@font-face{font-family:'Inter';src:url('../assets/fonts/Inter-700.woff2') format('woff2');font-weight:700;font-display:swap}
+/* Google's Inter latin subset ships as one variable-font file covering the
+   whole 400-700 weight axis — one @font-face with a weight range + one
+   file, not four separate downloads of the same bytes. */
+@font-face{font-family:'Inter';src:url('../assets/fonts/Inter-Variable.woff2') format('woff2');font-weight:400 700;font-display:swap}
 
 :root{
   --night:#0b0e14;
