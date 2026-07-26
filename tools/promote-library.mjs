@@ -85,6 +85,13 @@ let collectionSrc = readFileSync(COLLECTION_PATH, 'utf8');
 const written = [];
 const stamp = Date.now();
 
+// Paths overwritten in place this run (see the editOf branch below) — kept
+// out of the generic disabledBase removal loop further down, since an
+// in-place edit means the original array line (or a named const pointing
+// at the same file, e.g. BROKEN_DOWN_SEDAN_PHOTO) must survive untouched;
+// only the PNG bytes on disk change.
+const editedInPlace = new Set();
+
 function promoteCategory(category, arrayName){
   const entries = lib[category] || [];
   if(!entries.length) return;
@@ -95,6 +102,30 @@ function promoteCategory(category, arrayName){
   }
   let additions = '';
   entries.forEach((entry, i) => {
+    // An admin "Edit" (as opposed to "Duplicate") on an already-committed
+    // asset carries editOf: the original file path it's meant to replace,
+    // set by js/game.js's editBaseAsset/libEditAsset. Overwrite that same
+    // file in place — no new filename, no new array entry — so every
+    // existing reference to it (the array entry itself, or a named const
+    // like BROKEN_DOWN_SEDAN_PHOTO) keeps working unchanged. This is what
+    // "edit and resave as the same file" means; Duplicate is the only path
+    // that should ever produce a new file.
+    if(entry.editOf){
+      const m = /^data:image\/png;base64,(.+)$/.exec(entry.img);
+      if(!m){
+        console.error(`✗ ${category}[${i}] (${entry.color}): img isn't a data URL — skipped (already promoted?)`);
+        return;
+      }
+      if(!/^assets\/cars\/[^/]+\.png$/.test(entry.editOf)){
+        console.error(`✗ ${category}[${i}] (${entry.color}): editOf '${entry.editOf}' isn't a plain assets/cars/*.png path — skipped`);
+        return;
+      }
+      if(!DRY_RUN) writeFileSync(join(ROOT, entry.editOf), Buffer.from(m[1], 'base64'));
+      editedInPlace.add(entry.editOf);
+      written.push(entry.editOf);
+      console.log(`✓ ${arrayName}: overwrote ${entry.editOf} in place (${entry.color})`);
+      return;
+    }
     const filename = `library-${category}-${stamp}-${i}-${slugify(entry.color)}.png`;
     const path = decodeDataUrlToFile(entry.img, filename);
     if(!path){
@@ -117,6 +148,15 @@ promoteCategory('trucks', 'TRUCK_PHOTOS');
 promoteCategory('trailers', 'TRAILER_PHOTOS');
 
 (lib.disabledBase || []).forEach(imgPath => {
+  // The "disable original + reupload under the same tag" pattern puts a
+  // base entry's path in BOTH disabledBase and some entry's editOf — that
+  // one's already handled above (file overwritten, line left alone). A
+  // genuine disable-with-no-replacement is the only case that still needs
+  // its array line removed here.
+  if(editedInPlace.has(imgPath)){
+    console.log(`✓ kept base entry (replaced in place by an edit): ${imgPath}`);
+    return;
+  }
   const lineRe = new RegExp(`^.*img: '${escapeRegExp(imgPath)}'.*$\\n`, 'm');
   if(lineRe.test(artSrc)){
     artSrc = artSrc.replace(lineRe, '');

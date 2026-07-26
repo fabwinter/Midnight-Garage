@@ -3222,10 +3222,14 @@ function openLibrary(){
 // this is the "duplicate and save as" flow: one action, immediately
 // followed by naming the result. Duplicating a base entry is how an admin
 // gets an editable variant of a hardcoded asset (same image, independently
-// recolorable/renamable) without touching source.
+// recolorable/renamable) without touching source. Explicitly drops any
+// `editOf` the source entry was carrying — a duplicate is a deliberate
+// fork, promote-library.mjs must give it its own new file, never overwrite
+// the asset it was copied from (that's what plain Edit is for).
 async function duplicateAsset(entry){
   sfx('ui');
   const copy = Object.assign({}, entry, { color: `${entry.color || 'asset'}-copy` });
+  delete copy.editOf;
   await addAsset(libTab, copy);
   libRenamingIndex = (getLibrary()[libTab] || []).length - 1;
   renderLibraryOverlay();
@@ -3242,9 +3246,17 @@ async function duplicateAsset(entry){
 // under its OWN name (no "-copy" suffix, since it's meant to replace,
 // not fork), then drops straight into the same full image-edit pipeline
 // libEditAsset already gives lib-origin entries.
+//
+// `editOf` records the original file path being replaced — carried
+// through to the saved entry (see libAddBtn's handler) so
+// tools/promote-library.mjs can overwrite that same file in place instead
+// of minting a new filename + array entry. Without this, editing an
+// already-promoted asset (like the broken-down-car constant's backing
+// image) produced a brand new file/entry every time, silently orphaning
+// anything that referenced the original path by name.
 async function editBaseAsset(entry){
   await setBaseDisabled(entry.img, true);
-  const copy = Object.assign({}, entry);
+  const copy = Object.assign({}, entry, { editOf: entry.img });
   await addAsset(libTab, copy);
   const idx = (getLibrary()[libTab] || []).length - 1;
   await libEditAsset(copy, idx);
@@ -3454,6 +3466,11 @@ let libPreviewSrc = null;
 // mode). Set by libEditAsset(), cleared by libCancelEdit()/a successful
 // save/switching tabs.
 let libEditingIndex = null;
+
+// The original committed file path (entry.editOf) the asset now being
+// edited should overwrite in place, or null for a plain new/duplicated
+// asset that should get its own file. Mirrors libEditingIndex's lifecycle.
+let libEditingOf = null;
 
 // Independent, centered non-uniform stretch multipliers (%) driven by the
 // preview's drag handles — not a pair of range inputs, since dragging a
@@ -3687,6 +3704,7 @@ function libWireHandles(){
 // switches, a successful Add/Save, and explicit Cancel-edit.
 function libCancelEdit(){
   libEditingIndex = null;
+  libEditingOf = null;
   libPendingImg = null;
   libPreviewSrc = null;
   $('libEditBanner').hidden = true;
@@ -3708,6 +3726,7 @@ function libCancelEdit(){
 async function libEditAsset(entry, index){
   sfx('ui');
   libEditingIndex = index;
+  libEditingOf = entry.editOf || null;
   libPendingImg = await loadImageFromDataUrl(entry.img);
   libPreviewSrc = downscaleForPreview(libPendingImg);
   $('libAddColor').value = entry.color || '';
@@ -3748,6 +3767,7 @@ function wireLibrary(){
     // A fresh upload always means "Add", even if a previous Edit was left
     // open — swap back to add-mode's labelling/state, then load the file.
     libEditingIndex = null;
+    libEditingOf = null;
     $('libEditBanner').hidden = true;
     $('libAddBtn').textContent = 'Add to library';
     libPendingImg = await loadImageFromFile(file);
@@ -3798,6 +3818,7 @@ function wireLibrary(){
       return;
     }
     const entry = fixed ? { img: dataUrl, color, fixed: true } : { img: dataUrl, color, hue };
+    if(libEditingOf) entry.editOf = libEditingOf;
     if(libEditingIndex != null){
       await replaceAsset(libTab, libEditingIndex, entry);
       toast('Saved changes');
