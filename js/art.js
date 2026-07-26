@@ -566,20 +566,56 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
   ${signal(CELL * 0.14, CELL * 2)}`;
 }
 
-/* Interlock gate (camera/laser) symbol: a simple circle with crosshair.
-   Overlaid on the board grid at gate cell positions. Wrapped in its own
-   <svg> (width/height 100%, no viewBox, so its user units map 1:1 to the
-   parent .gate div's own CELL x CELL pixel box) — unlike wallSVG/
-   vehicleSVG, this used to return a bare <g> fragment, which innerHTML on
-   a plain HTML <div> parses as inert unknown elements (no SVG namespace,
-   so cx/cy/r etc do nothing): the gate never actually rendered. */
-export function gateSVG(x, y, size = 30){
-  return `<svg width="100%" height="100%" aria-hidden="true"><g opacity="0.85">
-    <circle cx="${x}" cy="${y}" r="${size * 0.4}" fill="none" stroke="#00ffcc" stroke-width="2"/>
-    <line x1="${x - size * 0.25}" y1="${y}" x2="${x + size * 0.25}" y2="${y}" stroke="#00ffcc" stroke-width="1.5"/>
-    <line x1="${x}" y1="${y - size * 0.25}" x2="${x}" y2="${y + size * 0.25}" stroke="#00ffcc" stroke-width="1.5"/>
-    <circle cx="${x}" cy="${y}" r="${size * 0.08}" fill="#00ffcc"/>
-  </g></svg>`;
+/* Interlock gate: a top-down boom barrier filling its cell. The striped
+   arm hangs from the pivot post and physically blocks the lane; the
+   `.gate-open` class (js/game.js: updateGates) swings it aside and
+   shrinks it via CSS rotate/scale — top-down foreshortening for "arm
+   raised" — and crossfades the post lamp red→green (see .gate[data-gi]
+   rules in css/game.css). Geometry lives in viewBox units so the same
+   markup serves the game board and the Sandbox at any cell size. */
+export function gateSVG(){
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">
+    <rect x="43" y="16" width="14" height="80" rx="7" fill="rgba(0,0,0,.35)"/>
+    <g class="gate-arm">
+      <rect x="45" y="12" width="10" height="82" rx="5" fill="#f2f5fa" stroke="rgba(8,12,20,.6)" stroke-width="1.6"/>
+      <rect x="46.2" y="26" width="7.6" height="14" fill="#ff4d5e"/>
+      <rect x="46.2" y="54" width="7.6" height="14" fill="#ff4d5e"/>
+      <rect x="46.2" y="82" width="7.6" height="10" fill="#ff4d5e"/>
+    </g>
+    <rect x="41" y="3" width="18" height="18" rx="5" fill="#1c2433" stroke="#3a465e" stroke-width="2"/>
+    <circle class="lamp lamp-closed" cx="50" cy="12" r="4.6" fill="#ff4d5e" stroke="rgba(255,77,94,.35)" stroke-width="4"/>
+    <circle class="lamp lamp-open" cx="50" cy="12" r="4.6" fill="#3dffa0" stroke="rgba(61,255,160,.35)" stroke-width="4"/>
+  </svg>`;
+}
+
+/* Interlock trigger pad: the floor marking on a gate's sensor cell —
+   previously sensors weren't rendered at all in the live game, so the
+   tutorial talked about a "sensor cell" the player couldn't see.
+   Two layers crossfaded by `.sensor-on` (updateGates): the dim resting
+   marking, and a lit version shown while a vehicle covers the cell.
+   Polarity picks the visual language: a pressure plate (park HERE to
+   open — teal target) vs a tripwire (keep this cell CLEAR — amber
+   circle-slash; its lit layer goes red for "tripped"). */
+export function sensorSVG(polarity){
+  const pad = (color, icon, cls, fillAlpha) => `<g class="${cls}">
+    <rect x="9" y="9" width="82" height="82" rx="14" fill="${color}" fill-opacity="${fillAlpha}" stroke="${color}" stroke-width="3" stroke-dasharray="11 8"/>
+    <path d="M22 9h-8a5 5 0 0 0-5 5v8M78 9h8a5 5 0 0 1 5 5v8M9 78v8a5 5 0 0 0 5 5h8M91 78v8a5 5 0 0 1-5 5h-8" fill="none" stroke="${color}" stroke-width="4.5" stroke-linecap="round"/>
+    ${icon}
+  </g>`;
+  if(polarity){
+    const slash = c => `<circle cx="50" cy="50" r="16" fill="none" stroke="${c}" stroke-width="4"/>
+      <line x1="39" y1="61" x2="61" y2="39" stroke="${c}" stroke-width="4" stroke-linecap="round"/>`;
+    return `<svg viewBox="0 0 100 100" aria-hidden="true">
+      ${pad('#ffb454', slash('#ffb454'), 'sensor-base', '0.05')}
+      ${pad('#ff5b6b', slash('#ff5b6b'), 'sensor-lit', '0.16')}
+    </svg>`;
+  }
+  const target = c => `<circle cx="50" cy="50" r="16" fill="none" stroke="${c}" stroke-width="4"/>
+    <circle cx="50" cy="50" r="5" fill="${c}"/>`;
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">
+    ${pad('#2fe3bd', target('#2fe3bd'), 'sensor-base', '0.05')}
+    ${pad('#3dffa0', target('#3dffa0'), 'sensor-lit', '0.16')}
+  </svg>`;
 }
 
 /* Hitch coupling indicator: a tow-rope line connecting tow vehicle to trailer.
