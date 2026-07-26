@@ -573,8 +573,14 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
    raised" — and crossfades the post lamp red→green (see .gate[data-gi]
    rules in css/game.css). Geometry lives in viewBox units so the same
    markup serves the game board and the Sandbox at any cell size. */
-export function gateSVG(){
-  return `<svg viewBox="0 0 100 100" aria-hidden="true">
+export function gateSVG(axis = 'h'){
+  /* Drawn for a horizontal-passage gate: the arm lies ACROSS the lane it
+     guards, so a gate letting traffic through left-right has a
+     top-to-bottom arm. A vertical-passage gate is the same barrier rotated
+     a quarter turn — one transform rather than a second hand-built
+     drawing, so the arm/post/lamp can never drift apart between the two. */
+  const turn = axis === 'v' ? ' transform="rotate(90 50 50)"' : '';
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><g${turn}>
     <rect x="43" y="16" width="14" height="80" rx="7" fill="rgba(0,0,0,.35)"/>
     <g class="gate-arm">
       <rect x="45" y="12" width="10" height="82" rx="5" fill="#f2f5fa" stroke="rgba(8,12,20,.6)" stroke-width="1.6"/>
@@ -585,7 +591,7 @@ export function gateSVG(){
     <rect x="41" y="3" width="18" height="18" rx="5" fill="#1c2433" stroke="#3a465e" stroke-width="2"/>
     <circle class="lamp lamp-closed" cx="50" cy="12" r="4.6" fill="#ff4d5e" stroke="rgba(255,77,94,.35)" stroke-width="4"/>
     <circle class="lamp lamp-open" cx="50" cy="12" r="4.6" fill="#3dffa0" stroke="rgba(61,255,160,.35)" stroke-width="4"/>
-  </svg>`;
+  </g></svg>`;
 }
 
 /* Interlock trigger pad: the floor marking on a gate's sensor cell —

@@ -81,6 +81,19 @@ LEVELS.forEach((lv, i) => {
         bad(`level ${i + 1}: gate ${gi} sensor ${si} coincides with gate cell`);
       }
     });
+    // Passage axis must be explicit ('h'/'v') — it decides which traffic
+    // may cross the barrier at all (legalMoves' gateBlocks), so a missing
+    // value silently falling back to 'h' could make a shipped board
+    // unsolvable in a way par verification alone wouldn't localise.
+    if(gt.axis !== 'h' && gt.axis !== 'v'){
+      bad(`level ${i + 1}: gate ${gi} has axis ${JSON.stringify(gt.axis)} (want 'h' or 'v')`);
+    }
+    // An exit-row gate the hero can't drive through is unwinnable by
+    // construction — cheap explicit check, rather than inferring it from
+    // an unsolvable-board failure further down.
+    if(gr === EXIT_ROW && gt.axis === 'v'){
+      bad(`level ${i + 1}: gate ${gi} sits on the exit row but only passes traffic vertically`);
+    }
   });
   // Gate levels must exercise the gate: solution without gates must be longer
   if(lv.g && lv.g.length > 0){

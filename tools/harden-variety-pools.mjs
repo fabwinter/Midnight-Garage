@@ -89,13 +89,17 @@ function hardenPool(poolFile, featureKey, label){
       merged.push(lv);
       added++;
     });
+    /* Checkpoint after every seed, not just at the end. A full run is
+       tens of minutes; writing once at the end meant any interruption
+       (or a container restart) threw away every board climbed so far,
+       even though each one was already verified and mergeable. */
+    writeFileSync(join(WORK, poolFile), JSON.stringify(merged));
     if((si + 1) % 5 === 0 || si === seeds.length - 1){
       const pars = merged.map(l => l.m);
       console.log(`  [${label}] ${si + 1}/${seeds.length} seeds climbed (${elapsed()}) — pool now ${merged.length} (+${added}), par up to ${Math.max(...pars)}`);
     }
   });
 
-  writeFileSync(join(WORK, poolFile), JSON.stringify(merged));
   const hist = {};
   merged.forEach(l => { const b = Math.floor(l.m / 5) * 5; hist[b] = (hist[b] || 0) + 1; });
   console.log(`[${label}] done: ${merged.length} boards (+${added} new), par histogram:`,

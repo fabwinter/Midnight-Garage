@@ -137,26 +137,34 @@ function grid(exclude = -1){
   });
   return g;
 }
-/* Closed-gate clamp for the live board, mirroring js/solver.js's
-   gateBlocks exactly: a slide's leading edge may not enter a gate cell
-   whose sensor state says closed. Sensor occupancy is evaluated ONCE per
-   move — pieces' positions when the drag/key run's range is computed —
-   with the moving piece included, same as the solver's start-of-move
-   grid. Without this clamp the drag range slid straight through closed
-   gates: only the solver ever enforced them, so "verified par" could be
-   undercut on the real board (unnoticed while gates were invisible). */
-function gateBlocksCell(r, c){
+// Is cell r,c covered by any piece? Shared by the gate clamp and
+// updateGates so "on the sensor" / "under the barrier" mean one thing.
+function cellCovered(r, c){
+  return pieces.some(p => p.dir === 'h'
+    ? (p.r === r && c >= p.c && c < p.c + p.len)
+    : (p.c === c && r >= p.r && r < p.r + p.len));
+}
+
+/* Gate clamp for the live board, mirroring js/solver.js's gateBlocks
+   exactly: a slide's leading edge may not enter a gate cell unless the
+   mover runs along the gate's passage axis AND the sensors say open.
+   Sensor occupancy is evaluated ONCE per move — pieces' positions when
+   the drag/key run's range is computed, moving piece included — same as
+   the solver's start-of-move grid. Without this clamp the drag range slid
+   straight through closed gates: only the solver ever enforced them, so
+   "verified par" could be undercut on the real board (unnoticed while
+   gates were invisible). */
+function gateBlocksCell(r, c, moverDir){
   const gt = gates.find(g => g.gate[0] === r && g.gate[1] === c);
   if(!gt) return false;
-  const covered = gt.sensors.some(([sr, sc]) => pieces.some(p =>
-    p.dir === 'h' ? (p.r === sr && sc >= p.c && sc < p.c + p.len)
-                  : (p.c === sc && sr >= p.r && sr < p.r + p.len)));
+  if(moverDir !== (gt.axis || 'h')) return true;   // no crossing the barrier, open or not
+  const covered = gt.sensors.some(([sr, sc]) => cellCovered(sr, sc));
   return covered === gt.polarity;   // blocked iff NOT open
 }
 
 function rangeForWithGrid(i, g, gateCheck = true){
   const p = pieces[i];
-  const open = (r, c) => g[r][c] === -1 && !(gateCheck && gateBlocksCell(r, c));
+  const open = (r, c) => g[r][c] === -1 && !(gateCheck && gateBlocksCell(r, c, p.dir));
   let lo, hi;
   if(p.dir === 'h'){
     lo = p.c; while(lo > 0 && open(p.r, lo - 1)) lo--;
@@ -235,7 +243,7 @@ function buildPieces(){
     el.style.width = CELL + 'px';
     el.style.height = CELL + 'px';
     el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
-    el.innerHTML = gateSVG();
+    el.innerHTML = gateSVG(gate.axis);
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
     // Trigger pads on the gate's sensor cells — floor markings under the
@@ -355,16 +363,25 @@ function renderPositions(animate = true){
 
 /* Interlock-gate state feedback: a gate cell is passable iff sensor
    occupancy differs from its polarity (same rule as js/solver.js's
-   gateBlocks). Open gates dim so the player can read the board state at a
-   glance; a state flip caused by a committed move gets a chirp. Undo,
-   reset and level load refresh silently (silent=true). */
+   gateBlocks). The arm raises/lowers and the post lamp flips (see the
+   .gate[data-gi] rules in css/game.css); a state flip caused by a
+   committed move gets a chirp. Undo, reset and level load refresh
+   silently (silent=true).
+
+   A barrier never comes down on a vehicle: while something occupies the
+   gate cell the arm is held up regardless of the sensors, so you never
+   see it close through a car and then let that car drive on out. This
+   costs the solver nothing — a gate cell that's occupied can't be
+   entered by anything else anyway (legalMoves' occupancy test fires
+   before gateBlocks), so gate state only ever decides moves while the
+   cell is empty, which is exactly when this override doesn't apply. */
 let lastGateOpen = [];
 function updateGates(silent = false){
   if(!gates.length){ lastGateOpen = []; return; }
-  const covered = (r, c) => pieces.some(p =>
-    p.dir === 'h' ? (p.r === r && c >= p.c && c < p.c + p.len)
-                  : (p.c === c && r >= p.r && r < p.r + p.len));
-  const now = gates.map(gt => gt.sensors.some(([sr, sc]) => covered(sr, sc)) !== gt.polarity);
+  const covered = cellCovered;
+  const now = gates.map(gt =>
+    covered(gt.gate[0], gt.gate[1]) ||
+    gt.sensors.some(([sr, sc]) => covered(sr, sc)) !== gt.polarity);
   const changed = lastGateOpen.length === now.length && now.some((v, i) => v !== lastGateOpen[i]);
   board.querySelectorAll('.gate[data-gi]').forEach(el => {
     el.classList.toggle('gate-open', now[+el.dataset.gi]);
@@ -2693,7 +2710,10 @@ function sbHitchTapPiece(i){
    and left sbCommitGate() unreachable from the UI entirely. */
 function sbGateTapCell(r, c){
   if(sbGatePending === null){
-    sbGatePending = { gate: [r, c], sensors: [], polarity: false };
+    // Exit-row gates must pass traffic horizontally or the hero could
+    // never get out — start them that way rather than letting an admin
+    // build an unsolvable board and find out at Playtest.
+    sbGatePending = { gate: [r, c], sensors: [], polarity: false, axis: r === EXIT_ROW ? 'h' : 'v' };
     toast('Gate placed. Tap 1–2 sensor cells, then use the buttons below');
     sbRender();
     return;
@@ -2721,6 +2741,16 @@ function sbGateTapCell(r, c){
 function sbTogglePolarity(){
   if(!sbGatePending) return;
   sbGatePending.polarity = !sbGatePending.polarity;
+  sbRender();
+}
+
+function sbToggleGateAxis(){
+  if(!sbGatePending) return;
+  if(sbGatePending.gate[0] === EXIT_ROW){
+    toast('An exit-row gate has to pass traffic left-right — the hero drives through it');
+    return;
+  }
+  sbGatePending.axis = sbGatePending.axis === 'h' ? 'v' : 'h';
   sbRender();
 }
 
@@ -2771,6 +2801,7 @@ function sbCommitGate(){
     gate: sbGatePending.gate,
     sensors: sbGatePending.sensors,
     polarity: sbGatePending.polarity,
+    axis: sbGatePending.axis,
   });
   sbGatePending = null;
   toast('Gate committed');
@@ -2926,13 +2957,13 @@ function sbRender(){
   };
   sbState.gates.forEach((gt, gi) => {
     const [gr, gc] = gt.gate;
-    renderGateCell(gr, gc, 'sb-gate', gateSVG());
+    renderGateCell(gr, gc, 'sb-gate', gateSVG(gt.axis));
     gt.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor', sensorSVG(gt.polarity)));
   });
   // Render pending gate being configured
   if(sbGatePending){
     const [gr, gc] = sbGatePending.gate;
-    renderGateCell(gr, gc, 'sb-gate-pending', gateSVG());
+    renderGateCell(gr, gc, 'sb-gate-pending', gateSVG(sbGatePending.axis));
     sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor', sensorSVG(sbGatePending.polarity)));
   }
   sbRenderGateConfig();
@@ -2948,6 +2979,8 @@ function sbRenderGateConfig(){
   bar.hidden = !sbGatePending;
   if(!sbGatePending) return;
   $('sbGatePolarityLabel').textContent = sbGatePending.polarity ? 'Tripwire' : 'Pressure Plate';
+  $('sbGateAxisLabel').textContent = sbGatePending.axis === 'v' ? 'passes ↕' : 'passes ↔';
+  $('sbGateAxisBtn').disabled = sbGatePending.gate[0] === EXIT_ROW;
   $('sbGateCommitBtn').disabled = sbGatePending.sensors.length === 0;
 }
 
@@ -3080,7 +3113,7 @@ function sbLevelObj(){
     p: sbState.pieces.map(q => [q.r, q.c, q.len, q.dir]),
     w: sbState.walls.map(w => [w[0], w[1]]),
     ...(sbState.hitches.length ? { h: sbState.hitches.map(h => ({ tow: h.tow, trailer: h.trailer })) } : {}),
-    ...(sbState.gates.length ? { g: sbState.gates.map(gt => ({ gate: gt.gate, sensors: gt.sensors, polarity: gt.polarity })) } : {}),
+    ...(sbState.gates.length ? { g: sbState.gates.map(gt => ({ gate: gt.gate, sensors: gt.sensors, polarity: gt.polarity, axis: gt.axis || 'h' })) } : {}),
   };
 }
 
@@ -3172,7 +3205,7 @@ function sbRenderSaved(){
         pieces: lv.p.map((a, j) => ({ r: a[0], c: a[1], len: a[2], dir: a[3], hero: j === 0 })),
         walls: (lv.w || []).map(w => [w[0], w[1]]),
         hitches: (lv.h || []).map(h => ({ tow: h.tow, trailer: h.trailer })),
-        gates: (lv.g || []).map(g => ({ gate: g.gate, sensors: g.sensors, polarity: g.polarity })),
+        gates: (lv.g || []).map(g => ({ gate: g.gate, sensors: g.sensors, polarity: g.polarity, axis: g.axis || 'h' })),
       };
       sbHitchPending = null;
       sbGatePending = null;
@@ -3207,6 +3240,7 @@ function wireSandbox(){
     $('sbDirBtn').textContent = 'Dir: ' + sbDir.toUpperCase();
   });
   $('sbGatePolarityBtn').addEventListener('click', () => { sfx('ui'); sbTogglePolarity(); });
+  $('sbGateAxisBtn').addEventListener('click', () => { sfx('ui'); sbToggleGateAxis(); });
   $('sbGateCommitBtn').addEventListener('click', () => { sfx('ui'); sbCommitGate(); });
   $('sbGateCancelBtn').addEventListener('click', () => { sfx('ui'); sbCancelGate(); });
   $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });

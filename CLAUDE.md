@@ -55,6 +55,21 @@ need a real headless-browser check — see "Testing UI changes" below.
 - **Never place a wall or non-hero horizontal piece on the exit row** — an
   unwinnable board. Checked in `verify-levels.mjs`, `sbFits`/`sbPlace` in
   the Sandbox, and `promote-sandbox-levels.mjs`.
+- **A gate is a boom barrier, so it has a passage `axis`** (`'h'`/`'v'`,
+  required on every gate): traffic passes *through* along that axis when
+  the sensors say open, and can **never** cross it perpendicular — open or
+  shut. A gate on the exit row must therefore be `'h'`, or the hero is
+  walled in. Enforced in `js/solver.js: legalMoves`'s `gateBlocks` and
+  mirrored on the live board by `js/game.js: gateBlocksCell` — those two
+  must stay in lockstep or the board will allow moves the verified par
+  never accounted for. `verify-levels.mjs` rejects a missing/`'v'`-on-exit-row
+  axis rather than letting it default.
+- **A gate never closes on a vehicle.** `updateGates` holds the arm up
+  while anything occupies the gate cell, whatever the sensors say. This is
+  display-only by construction and must stay that way: an occupied gate
+  cell can't be entered anyway (`legalMoves` tests occupancy *before*
+  `gateBlocks`), so gate state only ever decides moves while the cell is
+  empty. Don't "fix" this by feeding the override into the solver.
 - **Admin-only tools (Sandbox, Asset Library, Level Inspector) are reached
   by tapping the title 5×** on the start screen (`#brandTitle`,
   `pointerdown` × 5) — there's no other entry point, and it's
