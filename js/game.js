@@ -21,6 +21,7 @@ import { setStreakReminder } from './notify.js';
 import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
+import { ADMIN_ENABLED } from './build-flags.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -2255,6 +2256,10 @@ function wire(){
    2026-07-01", "sandbox") and opens the sandbox level designer. */
 
 function applyAdminUI(){
+  // Defense in depth: a release build must never show admin UI even if
+  // save.admin somehow ended up true (e.g. a save carried over from a dev
+  // build during testing) — ADMIN_ENABLED wins regardless of saved state.
+  if(!ADMIN_ENABLED) save.admin = false;
   $('adminBar').hidden = !save.admin;
   $('adminChip').hidden = !save.admin;
 }
@@ -2305,6 +2310,7 @@ function runAdminCommand(raw){
 }
 
 function wireAdmin(){
+  if(!ADMIN_ENABLED) return;   // release build (tools/build-www.mjs --release) — no backdoor to wire up
   let taps = 0, tapTimer = null;
   $('brandTitle').addEventListener('pointerdown', () => {
     taps++;

@@ -1,6 +1,7 @@
 node_modules/
 ios/
 android/
+www/
 .DS_Store
 *.log
 .genwork/
