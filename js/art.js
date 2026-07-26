@@ -95,7 +95,6 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-mclaren-nobadge.png', fixed: true, color: 'orange-f1' },
   { img: 'assets/cars/hero-sports-cyan.png', fixed: true, color: 'cyan-track' },
   { img: 'assets/cars/traffic-sedan-new-lightblue.png', fixed: true, color: 'blue-plain' },
-  { img: 'assets/cars/traffic-sedan-4.png', fixed: true, color: 'silver-yellow-stripe' },
   { img: 'assets/cars/hero-ferrari-nobadge.png', fixed: true, color: 'red' },
   { img: 'assets/cars/traffic-sedan-25.png', fixed: true, color: 'police' },          // K-9 unit
   { img: 'assets/cars/hero-classic-white-green.png', fixed: true, color: 'white-green-stripe' },
@@ -107,7 +106,6 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-fluro-cyan.png', fixed: true, color: 'cyan-fluro' },
   { img: 'assets/cars/hero-jeep-rubicon-nobadge.png', fixed: true, color: 'orange-suv' },
   { img: 'assets/cars/hero-vintage-white.png', fixed: true, color: 'ivory-bug' },
-  { img: 'assets/cars/traffic-sedan-3.png', hue: 212, color: 'recolor' },             // navy classic GT
   { img: 'assets/cars/traffic-sedan-12.png', fixed: true, color: 'silver-plain' },    // 300SL
   { img: 'assets/cars/hero-fluro-green.png', fixed: true, color: 'green-fluro' },
   { img: 'assets/cars/hero-cobra-nobadge.png', fixed: true, color: 'blue-white-stripe' },
@@ -129,6 +127,9 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-classic-blue-stripe.png', fixed: true, color: 'blue-white-stripe' },
   { img: 'assets/cars/hero-muscle-grey-stripe.png', fixed: true, color: 'grey-stripe-muscle' },
   { img: 'assets/cars/hero-countach-nobadge.png', fixed: true, color: 'green-wedge' },
+  { img: 'assets/cars/library-sedans-1785066252701-0-pink-lambo.png', fixed: true, color: 'Pink lambo' },
+  { img: 'assets/cars/library-sedans-1785066252701-1-silver-yellow-stripe.png', fixed: true, color: 'silver-yellow-stripe' },
+  { img: 'assets/cars/library-sedans-1785066252701-2-blue-mustang.png', hue: 212, color: 'Blue mustang' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
