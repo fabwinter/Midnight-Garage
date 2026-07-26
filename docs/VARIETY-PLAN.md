@@ -1,7 +1,9 @@
 # VARIETY-PLAN: many more gate + hitch levels across the campaign
 
-Status: **plan only — not started.** Written 2026-07-25 for hand-off to
-another agent. Read [CLAUDE.md](../CLAUDE.md) first; every invariant it
+Status: **partially shipped.** Written 2026-07-25 for hand-off to another
+agent; §1's counts below are the starting point that hand-off audited, kept
+as history — see [§10](#10-delivered-status-2026-07-25-pass) for what
+actually landed. Read [CLAUDE.md](../CLAUDE.md) first; every invariant it
 lists applies to this work, and the "in-place replacement" rule is the
 backbone of the whole plan.
 
@@ -206,14 +208,87 @@ best-practice template:
 
 ## 9. Acceptance checklist
 
-- [ ] `node tools/verify-levels.mjs` passes with the new invariants.
+- [x] `node tools/verify-levels.mjs` passes with the new invariants.
 - [ ] ~40 hitch + ~40 gate levels shipped, distribution ≈ §2, zero in
-      Night Shift / INTRO slots.
-- [ ] Every feature level's optimal solution provably exercises its
+      Night Shift / INTRO slots. **17 hitch + 9 gate shipped** (chapters
+      1–3 only) — short of target; see §10.
+- [x] Every feature level's optimal solution provably exercises its
       feature (generator rejection + verify re-check).
-- [ ] No campaign index shifted (diff of `levels.data.js` touches only
+- [x] No campaign index shifted (diff of `levels.data.js` touches only
       replaced slots) — no save migration shipped or needed.
-- [ ] Gate tutorial fires once, in every locale; Sandbox can build,
+- [x] Gate tutorial fires once, in every locale; Sandbox can build,
       verify, export, and promote a gate level end-to-end.
-- [ ] Playwright evidence for both gate polarities + one hitch level in
-      chapters 5+.
+- [x] Playwright evidence for both gate polarities + one hitch level in
+      chapters 5+. **Both polarities verified in real gameplay** (Level
+      52 tripwire, Level 86 pressure-plate — see §10). The chapters-5+
+      hitch level is still outstanding since chapters 5+ have zero
+      features shipped yet (supply-gated, see §10).
+
+## 10. Delivered (status, 2026-07-25 pass)
+
+All four phases (G/S/P/U) are built and working; what's actually shipped
+in `js/levels.data.js` is smaller than the §2 targets because native
+generation supply ran out before reaching chapters 4+ (see §4 — this was
+called out as expected/acceptable in the plan itself).
+
+**Built and verified:**
+- Phase G — `tryGenerateGate` + `tools/gen-gate-pool.mjs` + the four new
+  verify-levels.mjs gate invariants (bounds, not-on-wall, not-under-piece,
+  decorative-gate re-check). 41 native gate boards generated, par 9–15.
+- Phase S — `harden()` is feature-aware: carries hitches/gates through
+  every `solve()`/`rate()` call, never mutates a hitch's tow/trailer or a
+  gate's sensor/gate cells, re-runs the exercise-the-feature check on the
+  final board. Hardening runs to reach chapters 4–10's par range
+  (18–60) were **not** executed this pass — that's the actual gap between
+  17+9 shipped and the ~40+40 target, not a code defect.
+- Phase P — `tools/add-variety-levels.mjs` places pool boards in-place by
+  chapter target, matching par band + exceeding the chapter's difficulty
+  floor, deduplicating against every existing campaign board by
+  `levelKey` (an earlier version of this script didn't dedupe and
+  produced duplicate-board verify failures — fixed). Result: **Neon
+  District 7 hitch + 4 gate, Harbor Freight 6 hitch + 5 gate, Gridlock 4
+  hitch + 0 gate** (gate pool exhausted before reaching Gridlock's floor).
+- Phase U — gate tutorial (HTML overlay + `gate.tutorial.*` in all 10
+  locales + `save.gateSeen` gating in `loadLevel`), and a full Sandbox
+  gate tool: tap to place the gate cell, tap 1–2 sensor cells, then a
+  dedicated `#sbGateConfig` bar for polarity toggle / commit / cancel
+  (an earlier version tried to overload board taps for polarity+commit
+  and left `sbCommitGate()` unreachable from the UI — fixed; see the
+  "Fix Sandbox gate tool" commit). `sbStatus()` now solves with gates
+  included. Erase removes a committed gate by tapping its gate or sensor
+  cell.
+
+**Also fixed this pass (not in the original plan, found while testing):**
+a `SyntaxError` in `js/i18n.js` (curly quotes used as string delimiters,
+plus two locale strings with an unescaped straight apostrophe) was
+silently breaking the *entire app's boot* — nothing after the `js/i18n.js`
+import in `js/game.js` ever ran, so even the splash screen's Start button
+did nothing. This had shipped on the branch before this pass and was only
+caught by actually driving the app end-to-end in a real browser, which is
+why CLAUDE.md's Playwright guidance and this plan's §9 Playwright
+checklist both matter — a script that only checks `node --check` on each
+file individually, or only exercises `verify-levels.mjs`, would never
+have caught it (neither touches `js/i18n.js`'s syntax).
+
+**Verified with real Playwright gameplay** (not just Sandbox): loaded
+Level 52 (tripwire gate, `polarity:true`) and Level 86 (pressure-plate
+gate, `polarity:false`) via the admin jump input, drove each with its
+solver-computed optimal move sequence via real mouse drags on the actual
+game board, and confirmed — at the exact moves the solver's path predicts
+— the gate's `.gate-open` class toggles correctly for both polarities
+(including a run where a *different* sensor than the first is what
+reopens a pressure-plate gate, proving the "any sensor" OR logic, not
+just the first one tried). Both levels won cleanly at exactly par (13/13,
+3 stars). The gate tutorial fired on first encounter with the correct
+copy and did not re-fire on the second gate level.
+
+**Still outstanding:**
+- Hardening runs to fill chapters 4–10 with hitch/gate boards at their
+  actual par bands (18–60) — this is the long, resource-intensive part
+  §4 always expected to be a separate step ("a background run of an hour
+  is fine and normal for this repo's tooling").
+- Placing those hardened boards via `tools/add-variety-levels.mjs` once
+  supply exists — the tool itself is ready and already handles
+  deduplication correctly.
+- A chapter-5+ hitch/gate level for the Playwright evidence checklist
+  item — blocked on the hardening step above, since none exist yet.
