@@ -134,12 +134,14 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/library-sedans-1785067674835-7-orange-suv.png', fixed: true, color: 'Orange-suv' },
   { img: 'assets/cars/library-sedans-1785067674835-8-blue-lambo.png', fixed: true, color: 'Blue lambo' },
   { img: 'assets/cars/library-sedans-1785067674835-9-gold-lambo.png', fixed: true, color: 'Gold lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-10-pink-lambo.png', fixed: true, color: 'Pink lambo' },
   { img: 'assets/cars/library-sedans-1785067674835-11-green-lambo.png', fixed: true, color: 'Green lambo' },
   { img: 'assets/cars/library-sedans-1785067674835-12-orange-porche.png', fixed: true, color: 'Orange porche' },
   { img: 'assets/cars/library-sedans-1785067674835-13-red-mini.png', fixed: true, color: 'Red mini' },
   { img: 'assets/cars/library-sedans-1785067674835-14-green-mini.png', fixed: true, color: 'Green mini' },
   { img: 'assets/cars/library-sedans-1785067674835-15-green-porsche.png', fixed: true, color: 'Green Porsche' },
+  { img: 'assets/cars/library-sedans-1785070794205-0-purple-lambo.png', fixed: true, color: 'Purple lambo' },
+  { img: 'assets/cars/library-sedans-1785070794205-1-bronze-lambo.png', fixed: true, color: 'Bronze lambo' },
+  { img: 'assets/cars/library-sedans-1785070794205-2-pink-pale-lambo.png', fixed: true, color: 'Pink pale lambo' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
