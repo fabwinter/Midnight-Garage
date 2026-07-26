@@ -75,25 +75,37 @@ CHAPTERS.forEach((ch, chIdx) => {
   const end = start + CHAPTER_SIZE;
   const plain = [];
 
+  // TARGETS are the chapter's FINAL desired counts, not a per-run
+  // increment — count what's already shipped in this chapter (from an
+  // earlier run of this script, e.g. tools/harden-variety-pools.mjs
+  // topping up supply and this script being re-run) and only fill the
+  // remainder. Re-running this script with no new pool supply is then a
+  // safe no-op instead of silently doubling up features chapter over
+  // chapter.
+  let existingH = 0, existingG = 0;
   for(let i = start; i < end; i++){
-    if(i < INTRO) continue;   // never touch INTRO ramp
+    if(i < INTRO) continue;
     const lv = LEVELS[i];
+    if(lv.h) existingH++;
+    if(lv.g) existingG++;
     if(!lv.h && !lv.g) plain.push(i);   // no feature
   }
+  const needH = Math.max(0, targets.h - existingH);
+  const needG = Math.max(0, targets.g - existingG);
 
   const targetList = [];
 
   // Spread selections across the chapter, avoiding clusters
-  if(targets.h > 0){
-    const step = Math.max(1, Math.floor(plain.length / targets.h));
-    for(let i = 0; i < plain.length && targetList.length < targets.h; i += step){
+  if(needH > 0){
+    const step = Math.max(1, Math.floor(plain.length / needH));
+    for(let i = 0; i < plain.length && targetList.length < needH; i += step){
       targetList.push({ idx: plain[i], type: 'hitch' });
     }
   }
-  if(targets.g > 0){
-    const step = Math.max(1, Math.floor((plain.length - targetList.length) / targets.g));
+  if(needG > 0){
+    const step = Math.max(1, Math.floor((plain.length - targetList.length) / needG));
     let step_i = 0;
-    for(let i = 0; i < plain.length && targetList.length < targets.h + targets.g; i++){
+    for(let i = 0; i < plain.length && targetList.length < needH + needG; i++){
       if(!targetList.some(t => t.idx === plain[i])){
         if(step_i++ % step === 0){
           targetList.push({ idx: plain[i], type: 'gate' });
