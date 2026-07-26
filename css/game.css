@@ -179,13 +179,45 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 /* Interlock gate tiles (js/game.js: buildPieces(), class="gate" data-gi):
    positioned the same way as .wall/.piece (left:0/top:0 + a JS-set
-   transform), not the exit strip above. Dims while passable so board
-   state reads at a glance. */
+   transform), not the exit strip above. The boom arm (see art.js
+   gateSVG) swings aside and shrinks when the gate opens — top-down
+   foreshortening for "barrier raised" — and the post lamp crossfades
+   red→green. Sits ABOVE vehicles (z 12 > .piece's 10): a closed arm
+   reads as physically over the lane, and a car left standing on an
+   open gate cell when it re-closes shows trapped under the barrier. */
 .gate[data-gi]{
   position:absolute;left:0;top:0;
-  transition:opacity .3s ease;
+  z-index:12;pointer-events:none;
+  transition:opacity .35s ease;
+  filter:drop-shadow(0 3px 4px rgba(0,0,0,.45));
 }
-.gate[data-gi].gate-open{opacity:.3}
+.gate[data-gi] svg{display:block;width:100%;height:100%}
+.gate[data-gi] .gate-arm{
+  transform-box:view-box;transform-origin:50% 12%;
+  transition:rotate .45s cubic-bezier(.34,1.45,.64,1), scale .45s cubic-bezier(.34,1.45,.64,1);
+}
+.gate[data-gi].gate-open .gate-arm{rotate:-80deg;scale:.6}
+.gate[data-gi] .lamp{transition:opacity .3s ease}
+.gate[data-gi] .lamp-open{opacity:0}
+.gate[data-gi].gate-open .lamp-open{opacity:1}
+.gate[data-gi].gate-open .lamp-closed{opacity:0}
+.gate[data-gi].gate-open{opacity:.8}
+/* Interlock trigger pads (class="gate-sensor"): floor markings under the
+   vehicles (z 4 < .wall's 5 and .piece's 10) — a car parks ON the pad.
+   .sensor-on (updateGates) crossfades the dim resting marking to the lit
+   layer while the cell is covered. */
+.gate-sensor{
+  position:absolute;left:0;top:0;
+  z-index:4;pointer-events:none;
+}
+.gate-sensor svg{display:block;width:100%;height:100%}
+.gate-sensor .sensor-base{opacity:.6;transition:opacity .25s ease}
+.gate-sensor .sensor-lit{opacity:0;transition:opacity .25s ease}
+.gate-sensor.sensor-on .sensor-base{opacity:0}
+.gate-sensor.sensor-on .sensor-lit{opacity:1}
+/* Sandbox: a gate mid-configuration gets a dashed accent ring so it
+   reads as "not committed yet". */
+.sb-gate-pending{outline:2px dashed var(--accent);outline-offset:-2px;border-radius:10px}
 @keyframes nudge{0%,100%{transform:translate(0,-50%)}50%{transform:translate(3px,-50%)}}
 .board{
   position:relative;

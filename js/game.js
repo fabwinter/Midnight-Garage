@@ -18,7 +18,7 @@ import { BOUNTY_ROTATION } from './bounty-rotation.data.js';
 import { IMPOUND_LOT } from './impound-lot.data.js';
 import { dailyShareText, shareText } from './share.js';
 import { setStreakReminder } from './notify.js';
-import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
+import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, sensorSVG, hitchSVG, warmVehiclePhotos, basePhotos, combinedPhotos } from './art.js';
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
 import { ADMIN_ENABLED } from './build-flags.js';
@@ -197,7 +197,7 @@ function heroCarIdForAttempt(){
 }
 
 function buildPieces(){
-  board.querySelectorAll('.piece, .wall, .gate, .hitch').forEach(el => el.remove());
+  board.querySelectorAll('.piece, .wall, .gate, .gate-sensor, .hitch').forEach(el => el.remove());
   walls.forEach(([r, c], i) => {
     const el = document.createElement('div');
     el.className = 'wall';
@@ -216,14 +216,23 @@ function buildPieces(){
     el.dataset.r = r; el.dataset.c = c; el.dataset.gi = gi;
     el.style.width = CELL + 'px';
     el.style.height = CELL + 'px';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
     el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
-    el.style.pointerEvents = 'none';
-    el.innerHTML = gateSVG(CELL / 2, CELL / 2, CELL * 0.4);
+    el.innerHTML = gateSVG();
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
+    // Trigger pads on the gate's sensor cells — floor markings under the
+    // vehicles (z-index in css/game.css), lit/unlit by updateGates.
+    gate.sensors.forEach(([sr, sc]) => {
+      const pad = document.createElement('div');
+      pad.className = 'gate-sensor';
+      pad.dataset.r = sr; pad.dataset.c = sc; pad.dataset.gi = gi;
+      pad.style.width = CELL + 'px';
+      pad.style.height = CELL + 'px';
+      pad.style.transform = `translate(${sc * CELL}px, ${sr * CELL}px)`;
+      pad.innerHTML = sensorSVG(gate.polarity);
+      pad.setAttribute('aria-hidden', 'true');
+      board.appendChild(pad);
+    });
   });
   hitches.forEach((hitch, hi) => {
     const el = document.createElement('div');
@@ -341,6 +350,9 @@ function updateGates(silent = false){
   const changed = lastGateOpen.length === now.length && now.some((v, i) => v !== lastGateOpen[i]);
   board.querySelectorAll('.gate[data-gi]').forEach(el => {
     el.classList.toggle('gate-open', now[+el.dataset.gi]);
+  });
+  board.querySelectorAll('.gate-sensor[data-gi]').forEach(el => {
+    el.classList.toggle('sensor-on', covered(+el.dataset.r, +el.dataset.c));
   });
   if(!silent && changed) sfx('gate');
   lastGateOpen = now;
@@ -2877,27 +2889,29 @@ function sbRender(){
     el.innerHTML = hitchSVG(towCx, towCy, trailerCx, trailerCy, SB_CELL * 0.08);
     b.appendChild(el);
   });
-  // Render gates and sensors
-  const renderGateCell = (r, c, classes) => {
+  // Render gates and sensors — same art as the live board (gateSVG boom
+  // barrier for the gate cell, sensorSVG trigger pad for sensors, pad
+  // style keyed off the gate's polarity).
+  const renderGateCell = (r, c, classes, html) => {
     const el = document.createElement('div');
     el.className = classes;
     el.style.width = el.style.height = SB_CELL + 'px';
     el.style.transform = `translate(${c * SB_CELL}px, ${r * SB_CELL}px)`;
     el.style.position = 'absolute';
     el.style.pointerEvents = 'none';
-    el.innerHTML = gateSVG(SB_CELL / 2, SB_CELL / 2, SB_CELL * 0.4);
+    el.innerHTML = html;
     b.appendChild(el);
   };
   sbState.gates.forEach((gt, gi) => {
     const [gr, gc] = gt.gate;
-    renderGateCell(gr, gc, 'sb-gate');
-    gt.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
+    renderGateCell(gr, gc, 'sb-gate', gateSVG());
+    gt.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor', sensorSVG(gt.polarity)));
   });
   // Render pending gate being configured
   if(sbGatePending){
     const [gr, gc] = sbGatePending.gate;
-    renderGateCell(gr, gc, 'sb-gate-pending');
-    sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor'));
+    renderGateCell(gr, gc, 'sb-gate-pending', gateSVG());
+    sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor', sensorSVG(sbGatePending.polarity)));
   }
   sbRenderGateConfig();
   sbStatus();
