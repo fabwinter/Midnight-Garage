@@ -134,12 +134,14 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/library-sedans-1785067674835-7-orange-suv.png', fixed: true, color: 'Orange-suv' },
   { img: 'assets/cars/library-sedans-1785067674835-8-blue-lambo.png', fixed: true, color: 'Blue lambo' },
   { img: 'assets/cars/library-sedans-1785067674835-9-gold-lambo.png', fixed: true, color: 'Gold lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-10-pink-lambo.png', fixed: true, color: 'Pink lambo' },
   { img: 'assets/cars/library-sedans-1785067674835-11-green-lambo.png', fixed: true, color: 'Green lambo' },
   { img: 'assets/cars/library-sedans-1785067674835-12-orange-porche.png', fixed: true, color: 'Orange porche' },
   { img: 'assets/cars/library-sedans-1785067674835-13-red-mini.png', fixed: true, color: 'Red mini' },
   { img: 'assets/cars/library-sedans-1785067674835-14-green-mini.png', fixed: true, color: 'Green mini' },
   { img: 'assets/cars/library-sedans-1785067674835-15-green-porsche.png', fixed: true, color: 'Green Porsche' },
+  { img: 'assets/cars/library-sedans-1785070794205-0-purple-lambo.png', fixed: true, color: 'Purple lambo' },
+  { img: 'assets/cars/library-sedans-1785070794205-1-bronze-lambo.png', fixed: true, color: 'Bronze lambo' },
+  { img: 'assets/cars/library-sedans-1785070794205-2-pink-pale-lambo.png', fixed: true, color: 'Pink pale lambo' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
@@ -565,22 +567,30 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
 }
 
 /* Interlock gate (camera/laser) symbol: a simple circle with crosshair.
-   Overlaid on the board grid at gate cell positions. */
+   Overlaid on the board grid at gate cell positions. Wrapped in its own
+   <svg> (width/height 100%, no viewBox, so its user units map 1:1 to the
+   parent .gate div's own CELL x CELL pixel box) — unlike wallSVG/
+   vehicleSVG, this used to return a bare <g> fragment, which innerHTML on
+   a plain HTML <div> parses as inert unknown elements (no SVG namespace,
+   so cx/cy/r etc do nothing): the gate never actually rendered. */
 export function gateSVG(x, y, size = 30){
-  return `<g opacity="0.85">
+  return `<svg width="100%" height="100%" aria-hidden="true"><g opacity="0.85">
     <circle cx="${x}" cy="${y}" r="${size * 0.4}" fill="none" stroke="#00ffcc" stroke-width="2"/>
     <line x1="${x - size * 0.25}" y1="${y}" x2="${x + size * 0.25}" y2="${y}" stroke="#00ffcc" stroke-width="1.5"/>
     <line x1="${x}" y1="${y - size * 0.25}" x2="${x}" y2="${y + size * 0.25}" stroke="#00ffcc" stroke-width="1.5"/>
     <circle cx="${x}" cy="${y}" r="${size * 0.08}" fill="#00ffcc"/>
-  </g>`;
+  </g></svg>`;
 }
 
 /* Hitch coupling indicator: a tow-rope line connecting tow vehicle to trailer.
-   Shows which pieces are currently coupled. */
+   Shows which pieces are currently coupled. Same <svg> wrapper fix as
+   gateSVG above — the coordinates here are already absolute board pixels
+   (matching the .hitch div's own CELL*6 x CELL*6 box), so no viewBox is
+   needed for them to land correctly. */
 export function hitchSVG(x1, y1, x2, y2, size = 4){
-  return `<g opacity="0.75">
+  return `<svg width="100%" height="100%" aria-hidden="true"><g opacity="0.75">
     <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ff9e5c" stroke-width="${size}" stroke-dasharray="${size * 3},${size * 2}" stroke-linecap="round"/>
     <circle cx="${x1}" cy="${y1}" r="${size * 1.2}" fill="#ff9e5c" opacity="0.9"/>
     <circle cx="${x2}" cy="${y2}" r="${size * 1.2}" fill="#ff9e5c" opacity="0.9"/>
-  </g>`;
+  </g></svg>`;
 }

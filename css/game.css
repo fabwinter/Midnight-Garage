@@ -148,7 +148,15 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   color:var(--ink);text-transform:uppercase;
 }
 .board-pauses-left{font-size:12px;color:var(--muted);letter-spacing:.04em}
-.gate{
+/* The exit-row glow strip (id="gate", the single fixed element marking
+   where the hero car escapes) — id-scoped on purpose. This used to be a
+   .gate class rule, which the interlock-gate tiles below share as their
+   className, so its right:-2px/width:20px leaked onto every interlock
+   gate cell instead of the left:0/top:0 + transform positioning every
+   other board overlay (.wall, .piece) uses — they rendered pinned near
+   the board's right edge (often off-board entirely) no matter their real
+   row/column, i.e. invisible. */
+#gate{
   position:absolute;
   right:-2px;
   width:20px;
@@ -156,23 +164,28 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   background:linear-gradient(90deg, rgba(255,180,84,.0), rgba(255,180,84,.22));
   z-index:5;pointer-events:none;
 }
-.gate::before{
+#gate::before{
   content:"";position:absolute;left:1px;top:-3px;bottom:-3px;width:4px;border-radius:3px;
   background:var(--accent);
   box-shadow:0 0 10px 2px var(--accent), 0 0 30px 6px rgba(255,180,84,.35);
   animation:gatepulse 2.6s ease-in-out infinite;
 }
 @keyframes gatepulse{0%,100%{opacity:.8}50%{opacity:1}}
-/* Interlock gate tiles (data-gi, distinct from the exit-gate strip above):
-   dim while passable so board state reads at a glance. */
-.gate[data-gi]{transition:opacity .3s ease}
-.gate[data-gi].gate-open{opacity:.3}
-.gate .arrow{
+#gate .arrow{
   position:absolute;left:8px;top:50%;transform:translateY(-50%);
   color:var(--accent);font-family:var(--disp);font-weight:700;font-size:13px;
   text-shadow:0 0 8px var(--accent);
   animation:nudge 1.6s ease-in-out infinite;
 }
+/* Interlock gate tiles (js/game.js: buildPieces(), class="gate" data-gi):
+   positioned the same way as .wall/.piece (left:0/top:0 + a JS-set
+   transform), not the exit strip above. Dims while passable so board
+   state reads at a glance. */
+.gate[data-gi]{
+  position:absolute;left:0;top:0;
+  transition:opacity .3s ease;
+}
+.gate[data-gi].gate-open{opacity:.3}
 @keyframes nudge{0%,100%{transform:translate(0,-50%)}50%{transform:translate(3px,-50%)}}
 .board{
   position:relative;
