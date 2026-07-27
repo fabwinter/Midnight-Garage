@@ -86,6 +86,14 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   background:var(--red);box-shadow:0 0 8px rgba(255,59,78,.8);display:none;
 }
 .icon-btn .dot.on{display:block}
+/* Wrench balance on the header Shop button — same badge shape as the
+   hint-token badge on .btn (.btn .badge below), just anchored for a
+   smaller icon-btn and always visible (a balance, not a toggle). */
+.icon-btn .wrench-badge{
+  position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;
+  border-radius:9px;background:var(--amber);color:#241503;
+  font-size:10px;font-weight:700;display:grid;place-items:center;letter-spacing:0;
+}
 
 /* ---------- HUD ---------- */
 .hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:stretch}
@@ -625,6 +633,23 @@ input[type=range]::-moz-range-thumb{
 .pro-feats li::before{content:"✓";color:var(--good);font-weight:700}
 .pro-none{color:var(--muted);font-size:12px;margin:0 0 14px}
 .pro-price{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.05em}
+
+/* ---------- Shop + generic offer sheet (docs/MONETIZATION-PLAN.md M1) ---------- */
+.shop-sheet, .offer-sheet{text-align:center}
+.shop-balance{
+  display:flex;align-items:center;justify-content:center;gap:8px;margin:6px 0 16px;
+  font-family:var(--disp);font-size:28px;font-weight:700;color:var(--amber);
+}
+.shop-balance-icon{font-size:22px;filter:drop-shadow(0 0 6px rgba(255,180,84,.4))}
+.shop-note{color:var(--muted);font-size:12px;margin:12px 0 0}
+#shopDailyBtn{position:relative}
+.shop-packs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px}
+.shop-pack{padding:10px 4px;font-size:12px;flex-direction:column;white-space:normal;line-height:1.3}
+.shop-remove-ads{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+
+/* ---------- Busted-sheet rescue offer ---------- */
+.busted-rescue{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.busted-rescue-lab{color:var(--muted);font-size:12px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.1em}
 
 /* ---------- Start Screen (poster art, plan: 2 orientation-specific hero images) ---------- */
 #startOverlay{

@@ -33,6 +33,10 @@
       <button class="icon-btn" id="garageBtn" aria-label="Garage collection">
         <svg viewBox="0 0 24 24"><path d="M3 21V10l9-6 9 6v11"/><path d="M7 21v-6h10v6"/><circle cx="8.5" cy="14.5" r="1"/><circle cx="15.5" cy="14.5" r="1"/></svg>
       </button>
+      <button class="icon-btn" id="shopBtn" aria-label="Shop">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3 9 12l-2.3-2.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l6.4-6.4a1 1 0 0 0-1.4-1.4z"/><path d="M19 15v3.5A2.5 2.5 0 0 1 16.5 21h-9A2.5 2.5 0 0 1 5 18.5V15"/><path d="M12 2 3.5 7 12 12l8.5-5L12 2z"/></svg>
+        <span class="wrench-badge" id="wrenchBadge">0</span>
+      </button>
       <button class="icon-btn" id="settingsBtn" aria-label="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
       </button>
@@ -149,6 +153,13 @@
     <div class="win-row">
       <button class="btn primary" id="bustedRetryBtn">Retry</button>
       <button class="btn" id="bustedNoAlarmBtn"></button>
+    </div>
+    <div class="busted-rescue" id="bustedRescue" hidden>
+      <p class="busted-rescue-lab" id="bustedRescueLab">One more chance —</p>
+      <div class="win-row">
+        <button class="btn accent" id="bustedRescueWatchBtn"><span id="bustedRescueWatchLabel">Watch a video</span></button>
+        <button class="btn" id="bustedRescueSpendBtn"><span id="bustedRescueSpendLabel">Spend 2 🔧</span></button>
+      </div>
     </div>
   </div>
 </div>
@@ -370,8 +381,9 @@
       <button class="btn" id="sbLibraryBtn" type="button">Library</button>
     </div>
     <div class="sb-gate-config" id="sbGateConfig" hidden>
-      <span class="sb-gate-config-lab">Gate: <span id="sbGatePolarityLabel">Pressure Plate</span></span>
+      <span class="sb-gate-config-lab">Gate: <span id="sbGatePolarityLabel">Pressure Plate</span> · <span id="sbGateAxisLabel">passes ↔</span></span>
       <button class="btn" id="sbGatePolarityBtn" type="button">Toggle Polarity</button>
+      <button class="btn" id="sbGateAxisBtn" type="button">Rotate Barrier</button>
       <button class="btn primary" id="sbGateCommitBtn" type="button">Commit Gate</button>
       <button class="btn" id="sbGateCancelBtn" type="button">Cancel</button>
     </div>
@@ -521,6 +533,47 @@
   </div>
 </div>
 
+<!-- Shop (docs/MONETIZATION-PLAN.md phase M1): the standing Wrench
+     destination — daily free claim + rewarded-ad stub. IAP packs land
+     once phase M4 wires a real store. -->
+<div class="overlay" id="shopOverlay">
+  <div class="sheet shop-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="shopTitle">Garage Shop</h2>
+    <p class="sub" id="shopSub">Wrenches buy a little breathing room — never a lower par, never a specific car.</p>
+    <div class="shop-balance"><span class="shop-balance-icon" aria-hidden="true">🔧</span><span class="shop-balance-num" id="shopBalance">0</span></div>
+    <button class="btn primary" id="shopWatchBtn" style="width:100%"><span id="shopWatchLabel">Watch a video · +5 🔧</span></button>
+    <button class="btn" id="shopDailyBtn" style="width:100%;margin-top:8px">
+      <span id="shopDailyLabel">Claim daily free wrench</span>
+      <span class="badge" id="shopDailyBadge" hidden>1</span>
+    </button>
+    <div class="shop-packs">
+      <button class="btn shop-pack" id="shopPackSmallBtn"><span id="shopPackSmallLabel">50 🔧 · $0.99</span></button>
+      <button class="btn shop-pack" id="shopPackMediumBtn"><span id="shopPackMediumLabel">200 🔧 · $2.99</span></button>
+      <button class="btn shop-pack" id="shopPackLargeBtn"><span id="shopPackLargeLabel">800 🔧 · $9.99</span></button>
+    </div>
+    <div class="shop-remove-ads" id="shopRemoveAdsRow">
+      <button class="btn accent" id="shopRemoveAdsBtn" style="width:100%"><span id="shopRemoveAdsLabel">Remove Ads · $3.99</span></button>
+    </div>
+    <p class="shop-note" id="shopNote">More ways to earn wrenches are coming soon.</p>
+  </div>
+</div>
+
+<!-- Generic offer sheet (docs/MONETIZATION-PLAN.md §4.3): driven by
+     js/game.js's openOfferSheet() — content and the granted effect are
+     set per call site, this markup is shared by all of them. -->
+<div class="overlay" id="offerOverlay">
+  <div class="sheet offer-sheet">
+    <button class="icon-btn close-x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2 id="offerTitle">Out of hints</h2>
+    <p class="sub" id="offerSub">Watch a quick video or spend wrenches for one more.</p>
+    <div class="shop-balance"><span class="shop-balance-icon" aria-hidden="true">🔧</span><span class="shop-balance-num" id="offerBalance">0</span></div>
+    <button class="btn primary" id="offerWatchBtn" style="width:100%"><span id="offerWatchLabel">Watch a video</span></button>
+    <button class="btn" id="offerSpendBtn" style="width:100%;margin-top:8px"><span id="offerSpendLabel">Spend 1 🔧</span></button>
+    <button class="btn" id="offerProBtn" style="width:100%;margin-top:8px" hidden><span id="offerProLabel">Go Pro instead</span></button>
+  </div>
+</div>
+
 <!-- Pro Garage paywall -->
 <div class="overlay" id="proOverlay">
   <div class="sheet pro-sheet">
@@ -529,12 +582,13 @@
     <h2 id="proTitle">Pro Garage</h2>
     <p class="sub" id="proPitch">One purchase. Yours forever.</p>
     <ul class="pro-feats">
-      <li id="proF1">Chapters 3 &amp; 4 — 100 expert levels</li>
+      <li id="proF1">Chapters 3–10 — 400 more levels</li>
       <li id="proF2">Unlimited hints</li>
       <li id="proF3">All future cosmetics</li>
+      <li id="proF4">No banner or interstitial ads</li>
     </ul>
-    <p class="pro-none" id="proNone">No ads. No subscriptions.</p>
-    <button class="btn primary" id="buyBtn" style="width:100%"><span class="pro-price" id="buyLabel">Unlock — $5.99</span></button>
+    <p class="pro-none" id="proNone">Rewarded video boosts stay optional — never required.</p>
+    <button class="btn primary" id="buyBtn" style="width:100%"><span class="pro-price" id="buyLabel">Unlock — $6.99</span></button>
     <button class="btn" id="restoreBtn2" style="width:100%;margin-top:10px;font-size:12px" >Restore purchases</button>
   </div>
 </div>

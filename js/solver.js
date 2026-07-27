@@ -47,8 +47,16 @@ function occupy(len, dir, fixed, offs, wm){
 }
 
 /* All legal moves from a state. Optional gates: [{ sensors:[[r,c],…],
-   gate:[r,c], polarity }]. A move entering a gate cell is legal iff
-   (anySensorOccupied) XOR polarity.
+   gate:[r,c], polarity, axis }]. A move entering a gate cell is legal iff
+   the mover runs along the gate's passage axis (`axis`, 'h' or 'v',
+   defaulting to 'h') AND (anySensorOccupied) XOR polarity.
+
+   The axis rule is what makes a gate a boom barrier rather than a magic
+   toggle-able cell: traffic may pass THROUGH the barrier along the lane it
+   guards, but never ACROSS it — a car cannot drive over the arm/post
+   sideways, open or not. No level ships a piece starting on a gate cell
+   (the Sandbox's sbCommitGate rejects that), so testing the leading edge
+   is enough: a piece only ever gains cells there.
 
    Optional hitches: [{ tow, trailer }, …] plus a parallel `coupled` array
    (1 per hitch: 0 = coupled, 1 = decoupled — a two-way toggle, matching
@@ -108,10 +116,11 @@ export function legalMoves(len, dir, fixed, offs, wm, gates, hitches, coupled){
     return cells;
   };
   const clearFor = (cells, selfSet) => cells.every(cell => g[cell] === -1 || selfSet.has(g[cell]));
-  const gateBlocks = (er, ec) => {
+  const gateBlocks = (er, ec, moverDir) => {
     if(!gates) return false;
     const gate = gates.find(gt => gt.gate[0] === er && gt.gate[1] === ec);
     if(!gate) return false;
+    if(moverDir !== (gate.axis || 'h')) return true;   // can't cross the barrier, only pass through it
     const anySensorOccupied = gate.sensors.some(([sr, sc]) => g[sr * N + sc] !== -1);
     return anySensorOccupied === gate.polarity;   // blocked iff NOT open
   };
@@ -140,7 +149,7 @@ export function legalMoves(len, dir, fixed, offs, wm, gates, hitches, coupled){
           if(!clearFor(towCells, selfSet) || !clearFor(trailCells, selfSet)) break;
           const er = dir[i] === 'h' ? fixed[i] : (step > 0 ? o + len[i] - 1 : o);
           const ec = dir[i] === 'h' ? (step > 0 ? o + len[i] - 1 : o) : fixed[i];
-          if(gateBlocks(er, ec)) break;
+          if(gateBlocks(er, ec, dir[i])) break;
           out.push({ i, o, i2: trailerI, o2: to });
           o += step; to += step;
         }
@@ -154,7 +163,7 @@ export function legalMoves(len, dir, fixed, offs, wm, gates, hitches, coupled){
         const er = dir[i] === 'h' ? fixed[i] : (step > 0 ? o + len[i] - 1 : o);
         const ec = dir[i] === 'h' ? (step > 0 ? o + len[i] - 1 : o) : fixed[i];
         if(g[er * N + ec] !== -1) break;
-        if(gateBlocks(er, ec)) break;
+        if(gateBlocks(er, ec, dir[i])) break;
         out.push({ i, o });
         o += step;
       }

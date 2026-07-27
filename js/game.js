@@ -22,6 +22,9 @@ import { PALETTE, vehicleSVG, wallSVG, dressingSVG, gateSVG, sensorSVG, hitchSVG
 import { CARS, DEFAULT_CAR, ownedCarIds, pendingReveals, skinFor, carIdForLevel, carIdForBountyTier, carById } from './collection.js';
 import { loadLibrary, getLibrary, addAsset, updateAsset, replaceAsset, removeAsset, setBaseDisabled, setHeroPhoto, clearHeroPhoto, resetLibrary, loadImageFromFile, loadImageFromDataUrl, downscaleForPreview, renderToCanvas } from './library.js';
 import { ADMIN_ENABLED } from './build-flags.js';
+import { priceOf as wrenchPriceOf, canAfford as canAffordWrench, spend as spendWrench, grant as grantWrench, dailyWrenchAvailable, claimDailyWrench, REWARDED_WRENCH_GRANT, ALARM_RESCUE_MOVES, PURSUIT_RESCUE_SECONDS } from './economy.js';
+import { adsAvailable, showRewarded, showInterstitial, setBannerVisible, adsSuppressed } from './ads.js';
+import { PRODUCTS, iapAvailable, purchase as storePurchase, restorePurchases } from './iap.js';
 
 const BOUNTY_TIER_ACCENT = { common: '#8fbf6b', uncommon: '#e0a840', rare: '#d43f6a', legendary: '#f5d442' };
 
@@ -45,6 +48,14 @@ let decoupledHitches = new Set();             // indices of decoupled hitches
 let history = [];
 let moves = 0;
 let undos = 0, hintsUsed = 0;
+// Per-attempt rescue state (docs/MONETIZATION-PLAN.md §4.2) — a bonus
+// added to the Heist move budget / Pursuit clock at the moment a rescue
+// is bought, NEVER folded into alarmBudgetFor()/pursuitTimeFor() or
+// parOf() itself, so a bought continuation still scores on the real par.
+// assistedThisAttempt flags the eventual level_win so difficulty tuning
+// and bounty eligibility (js/bounty.js: bountyConditionMet) can tell a
+// purchased continuation from a clean run.
+let alarmBonus = 0, rescueUsedThisAttempt = false, assistedThisAttempt = false;
 let solvedAnim = false;
 let levelStart = Date.now();
 let skipShown = false;
@@ -68,6 +79,14 @@ let save = {
   pro: false,
   streak3: 0,
   hints: { day: '', left: HINT_TOKENS_PER_DAY },
+  // Soft currency (docs/MONETIZATION-PLAN.md phase M1) — see js/economy.js
+  // for the earn/spend API. `entitlements.proLegacy` is a permanent,
+  // one-way stamp: once true it must never be cleared or re-derived, it's
+  // the promise every pre-hybrid Pro save is grandfathered on (see the
+  // migration in boot() and MONETIZATION-PLAN.md §2).
+  wrenches: 0,
+  econ: { dailyWrenchDay: '', lifetimeEarned: 0, lifetimeSpent: 0 },
+  entitlements: { pro: false, removeAds: false, proLegacy: false },
   settings: { sfx: 1, music: 0.5, haptics: true, colorblind: false, autoAdvance: true, reminder: false, mode: 'heist' },
   modeLevel: { relaxed: 0, heist: 0, pursuit: 0 }, // last-played campaign level index, per mode
   equippedCar: DEFAULT_CAR,
@@ -137,26 +156,34 @@ function grid(exclude = -1){
   });
   return g;
 }
-/* Closed-gate clamp for the live board, mirroring js/solver.js's
-   gateBlocks exactly: a slide's leading edge may not enter a gate cell
-   whose sensor state says closed. Sensor occupancy is evaluated ONCE per
-   move — pieces' positions when the drag/key run's range is computed —
-   with the moving piece included, same as the solver's start-of-move
-   grid. Without this clamp the drag range slid straight through closed
-   gates: only the solver ever enforced them, so "verified par" could be
-   undercut on the real board (unnoticed while gates were invisible). */
-function gateBlocksCell(r, c){
+// Is cell r,c covered by any piece? Shared by the gate clamp and
+// updateGates so "on the sensor" / "under the barrier" mean one thing.
+function cellCovered(r, c){
+  return pieces.some(p => p.dir === 'h'
+    ? (p.r === r && c >= p.c && c < p.c + p.len)
+    : (p.c === c && r >= p.r && r < p.r + p.len));
+}
+
+/* Gate clamp for the live board, mirroring js/solver.js's gateBlocks
+   exactly: a slide's leading edge may not enter a gate cell unless the
+   mover runs along the gate's passage axis AND the sensors say open.
+   Sensor occupancy is evaluated ONCE per move — pieces' positions when
+   the drag/key run's range is computed, moving piece included — same as
+   the solver's start-of-move grid. Without this clamp the drag range slid
+   straight through closed gates: only the solver ever enforced them, so
+   "verified par" could be undercut on the real board (unnoticed while
+   gates were invisible). */
+function gateBlocksCell(r, c, moverDir){
   const gt = gates.find(g => g.gate[0] === r && g.gate[1] === c);
   if(!gt) return false;
-  const covered = gt.sensors.some(([sr, sc]) => pieces.some(p =>
-    p.dir === 'h' ? (p.r === sr && sc >= p.c && sc < p.c + p.len)
-                  : (p.c === sc && sr >= p.r && sr < p.r + p.len)));
+  if(moverDir !== (gt.axis || 'h')) return true;   // no crossing the barrier, open or not
+  const covered = gt.sensors.some(([sr, sc]) => cellCovered(sr, sc));
   return covered === gt.polarity;   // blocked iff NOT open
 }
 
 function rangeForWithGrid(i, g, gateCheck = true){
   const p = pieces[i];
-  const open = (r, c) => g[r][c] === -1 && !(gateCheck && gateBlocksCell(r, c));
+  const open = (r, c) => g[r][c] === -1 && !(gateCheck && gateBlocksCell(r, c, p.dir));
   let lo, hi;
   if(p.dir === 'h'){
     lo = p.c; while(lo > 0 && open(p.r, lo - 1)) lo--;
@@ -235,7 +262,7 @@ function buildPieces(){
     el.style.width = CELL + 'px';
     el.style.height = CELL + 'px';
     el.style.transform = `translate(${c * CELL}px, ${r * CELL}px)`;
-    el.innerHTML = gateSVG();
+    el.innerHTML = gateSVG(gate.axis);
     el.setAttribute('aria-hidden', 'true');
     board.appendChild(el);
     // Trigger pads on the gate's sensor cells — floor markings under the
@@ -355,16 +382,25 @@ function renderPositions(animate = true){
 
 /* Interlock-gate state feedback: a gate cell is passable iff sensor
    occupancy differs from its polarity (same rule as js/solver.js's
-   gateBlocks). Open gates dim so the player can read the board state at a
-   glance; a state flip caused by a committed move gets a chirp. Undo,
-   reset and level load refresh silently (silent=true). */
+   gateBlocks). The arm raises/lowers and the post lamp flips (see the
+   .gate[data-gi] rules in css/game.css); a state flip caused by a
+   committed move gets a chirp. Undo, reset and level load refresh
+   silently (silent=true).
+
+   A barrier never comes down on a vehicle: while something occupies the
+   gate cell the arm is held up regardless of the sensors, so you never
+   see it close through a car and then let that car drive on out. This
+   costs the solver nothing — a gate cell that's occupied can't be
+   entered by anything else anyway (legalMoves' occupancy test fires
+   before gateBlocks), so gate state only ever decides moves while the
+   cell is empty, which is exactly when this override doesn't apply. */
 let lastGateOpen = [];
 function updateGates(silent = false){
   if(!gates.length){ lastGateOpen = []; return; }
-  const covered = (r, c) => pieces.some(p =>
-    p.dir === 'h' ? (p.r === r && c >= p.c && c < p.c + p.len)
-                  : (p.c === c && r >= p.r && r < p.r + p.len));
-  const now = gates.map(gt => gt.sensors.some(([sr, sc]) => covered(sr, sc)) !== gt.polarity);
+  const covered = cellCovered;
+  const now = gates.map(gt =>
+    covered(gt.gate[0], gt.gate[1]) ||
+    gt.sensors.some(([sr, sc]) => covered(sr, sc)) !== gt.polarity);
   const changed = lastGateOpen.length === now.length && now.some((v, i) => v !== lastGateOpen[i]);
   board.querySelectorAll('.gate[data-gi]').forEach(el => {
     el.classList.toggle('gate-open', now[+el.dataset.gi]);
@@ -595,7 +631,7 @@ function commitMove(i, mergedKeyStep = false){
   const gm = save.settings.mode;
 
   if(gm === 'heist'){
-    const budget = alarmBudgetFor(parOf());
+    const budget = effectiveAlarmBudget();
     const remaining = budget - moves;
     if(moves === 1){
       $('srLive').textContent = moveAnnounce + '. ' + t('alarm.triggered', { n: remaining });
@@ -618,7 +654,7 @@ function commitMove(i, mergedKeyStep = false){
     triggerAlarmFlash();
   }
 
-  if(gm === 'heist' && moves > alarmBudgetFor(parOf())){
+  if(gm === 'heist' && moves > effectiveAlarmBudget()){
     busted('heist');
     return;
   }
@@ -652,9 +688,67 @@ function showBustedSheet(kind){
   $('bustedFlag').textContent = t(prefix + 'flag');
   $('bustedTitle').textContent = t(prefix + 'title');
   $('bustedSub').textContent = t(prefix + 'sub');
+  updateBustedRescueUI(kind);
   showOverlay('bustedOverlay');
   $('srLive').textContent = t(prefix + 'title');
   setTimeout(() => $('bustedRetryBtn').focus(), 100);
+}
+
+/* Rescue offer (docs/MONETIZATION-PLAN.md §4.2, §5.1): one continuation
+   per attempt, Heist/Pursuit only, never once already used — the genre's
+   usual "second chance," not an infinite ladder. Continues the SAME
+   attempt (board state/moves are untouched by busted() — only timers and
+   audio stopped) rather than granting a fresh retry, so a rescued win
+   still scores against the level's own par; effectiveAlarmBudget() folds
+   in the bonus without ever touching alarmBudgetFor()/parOf(). */
+let lastBustedKind = null;
+function updateBustedRescueUI(kind){
+  lastBustedKind = kind;
+  const sink = kind === 'heist' ? 'alarm_rescue' : 'pursuit_rescue';
+  const eligible = !rescueUsedThisAttempt && (kind === 'heist' || kind === 'pursuit');
+  $('bustedRescue').hidden = !eligible;
+  if(!eligible) return;
+  $('bustedRescueLab').textContent = t('rescue.lab');
+  $('bustedRescueWatchLabel').textContent = t('rescue.watch');
+  $('bustedRescueSpendLabel').textContent = t('rescue.spend', { n: wrenchPriceOf(sink) });
+  $('bustedRescueSpendBtn').disabled = !canAffordWrench(save, sink);
+}
+
+function applyRescue(kind){
+  rescueUsedThisAttempt = true;
+  assistedThisAttempt = true;
+  hideOverlay('bustedOverlay');
+  solvedAnim = false;
+  if(kind === 'heist'){
+    alarmBonus += ALARM_RESCUE_MOVES;
+  } else {
+    // pursuitPaused is always false here — the countdown interval that
+    // fires busted('pursuit') already returns early while paused.
+    pursuitTimeLeft += PURSUIT_RESCUE_SECONDS;
+    startPursuitTimer();
+  }
+  startAttemptTrack(save.settings.mode);
+  updateModeHud();
+  updateHud();
+  toast(t('rescue.applied'));
+  track('rescue_used', { kind, mode: mode.type, level: trackLevelId() });
+  setTimeout(() => $('board').focus(), 100);
+}
+
+async function rescueViaWatch(kind){
+  if(!adsAvailable()){ toast(t('toast.noads')); return; }
+  $('bustedRescueWatchBtn').disabled = true;
+  const res = await showRewarded(kind === 'heist' ? 'alarm_rescue' : 'pursuit_rescue');
+  $('bustedRescueWatchBtn').disabled = false;
+  if(res.completed) applyRescue(kind);
+}
+
+function rescueViaSpend(kind){
+  const sink = kind === 'heist' ? 'alarm_rescue' : 'pursuit_rescue';
+  if(!spendWrench(save, sink)) return;
+  persist();
+  updateWrenchBadge();
+  applyRescue(kind);
 }
 
 /* "The clock just started" — a brief flash the moment the first piece
@@ -748,6 +842,13 @@ function alarmBudgetFor(par){
   const slack = currentChapter()?.heistSlack ?? 0.25;
   return par + Math.max(2, Math.ceil(par * slack));
 }
+// The budget for the CURRENT attempt, including a bought rescue's bonus
+// moves (see busted()'s rescue offer). alarmBudgetFor() itself stays pure
+// and par-only — this is the only thing the bust check and HUD should
+// ever read, so the bonus can't be forgotten at one of the two call sites.
+function effectiveAlarmBudget(){
+  return alarmBudgetFor(parOf()) + alarmBonus;
+}
 /* Pursuit's real-time budget — v1 formula: 1 second per optimal move
    (par = 10 → 10s), plus a per-chapter think-time bonus for the harder
    late-campaign boards, where 1s/move alone leaves no room to actually
@@ -785,6 +886,7 @@ function applyChapterAccent(){
 }
 
 function updateHud(){
+  updateWrenchBadge();
   if(mode.type === 'daily'){
     $('hudLevel').textContent = '#' + mode.number;
     $('hudTier').textContent = t('hud.daily');
@@ -827,7 +929,7 @@ function updateModeHud(){
   $('hudPursuitRow').hidden = gm !== 'pursuit';
 
   if(gm === 'heist'){
-    const budget = alarmBudgetFor(parOf());
+    const budget = effectiveAlarmBudget();
     const remaining = budget - moves;
     $('hudAlarmBudget').textContent = Math.max(0, remaining);
     $('hudAlarmRow').setAttribute('aria-label', t('alarm.remaining', { n: Math.max(0, remaining) }));
@@ -971,12 +1073,14 @@ function trackLevelId(){
 }
 
 function startBoard(){
+  setBannerVisible(false);   // never overlap the board — MONETIZATION-PLAN.md §5.2
   stopReplay(false);   // a new attempt invalidates any in-flight replay
   pieces = curLevel.p.map(a => ({ r: a[0], c: a[1], len: a[2], dir: a[3] }));
   walls = (curLevel.w ?? []).map(a => [a[0], a[1]]);
   gates = curLevel.g ?? [];
   hitches = curLevel.h ?? [];
   history = []; moves = 0; undos = 0; hintsUsed = 0;
+  alarmBonus = 0; rescueUsedThisAttempt = false; assistedThisAttempt = false;
   decoupledHitches.clear();
   solvedAnim = false;
   kbRun = -1;
@@ -1109,17 +1213,33 @@ function showHint(){
   if(solvedAnim || pursuitPaused) return;
   if(!save.pro){
     refreshHintTokens();
-    if(save.hints.left <= 0){
-      toast(t('toast.nohints'));
-      showOverlay('proOverlay');
-      track('iap_view', { source: 'hints' });
-      return;
-    }
+    if(save.hints.left <= 0){ openHintOffer(); return; }
   }
+  useHint({ chargeToken: !save.pro });
+}
+
+// Out of today's 3 free tokens: offer to watch an ad or spend a Wrench
+// for one more, rather than routing straight to the Pro paywall (that
+// dead end is still one tap away via offer.goPro). Docs/MONETIZATION-
+// PLAN.md §4.3/§5.1.
+function openHintOffer(){
+  openOfferSheet({
+    sink: 'hint',
+    titleKey: 'offer.hint.title',
+    subKey: 'offer.hint.sub',
+    showProLink: true,
+    onGranted: () => { assistedThisAttempt = true; useHint({ chargeToken: false }); },
+  });
+}
+
+// The actual hint render + telemetry, split out of showHint() so an
+// offer-granted hint (chargeToken:false — it already paid its own way via
+// a spend/watch) and a Pro/free-token hint share one code path.
+function useHint({ chargeToken }){
   clearHint();
   const mv = firstOptimalMove(pieces, { walls, gates, hitches });
   if(!mv){ toast(t('toast.nosol')); sfx('deny'); return; }
-  if(!save.pro){
+  if(chargeToken){
     save.hints.left--;
     persist();
     updateHintBadge();
@@ -1163,6 +1283,140 @@ function showHint(){
   arrow.style.height = CELL + 'px';
   board.appendChild(arrow);
   hintTimer = setTimeout(clearHint, 3200);
+}
+
+/* ================== ECONOMY / OFFERS (MONETIZATION-PLAN.md M1/M2) ==================
+   A single reusable offer sheet: `offerCtx` records the sink and what to
+   do once it's paid for; the sheet itself only ever runs the earn/spend
+   transaction, never the gameplay effect — that keeps every call site
+   (currently just openHintOffer; busted()'s rescue below is a separate,
+   two-button sheet since it has no "go Pro" escape hatch) in full control
+   of what "granted" means for its own mechanic. */
+let offerCtx = null;
+function openOfferSheet({ sink, titleKey, subKey, showProLink = false, onGranted }){
+  offerCtx = { sink, onGranted };
+  $('offerTitle').textContent = t(titleKey);
+  $('offerSub').textContent = t(subKey);
+  $('offerBalance').textContent = save.wrenches;
+  $('offerWatchLabel').textContent = t('offer.watch');
+  $('offerSpendLabel').textContent = t('offer.spend', { n: wrenchPriceOf(sink) });
+  $('offerSpendBtn').disabled = !canAffordWrench(save, sink);
+  $('offerProBtn').hidden = !showProLink || !!save.pro;
+  track('offer_view', { sink });
+  showOverlay('offerOverlay');
+}
+
+async function offerWatch(){
+  if(!offerCtx) return;
+  if(!adsAvailable()){ toast(t('toast.noads')); return; }
+  $('offerWatchBtn').disabled = true;
+  const res = await showRewarded(offerCtx.sink);
+  $('offerWatchBtn').disabled = false;
+  if(!offerCtx || !res.completed) return;
+  const { sink, onGranted } = offerCtx;
+  hideOverlay('offerOverlay');
+  track('offer_accept', { sink, method: 'ad' });
+  offerCtx = null;
+  onGranted();
+}
+
+function offerSpend(){
+  if(!offerCtx) return;
+  const { sink, onGranted } = offerCtx;
+  if(!spendWrench(save, sink)) return;
+  persist();
+  updateWrenchBadge();
+  hideOverlay('offerOverlay');
+  track('offer_accept', { sink, method: 'wrenches' });
+  offerCtx = null;
+  onGranted();
+}
+
+function updateWrenchBadge(){
+  const b = $('wrenchBadge');
+  if(b) b.textContent = save.wrenches;
+}
+
+/* Shop: a standing destination (not tied to any single friction point) —
+   free earn sources (daily claim, rewarded-ad stub) plus real IAP (Remove
+   Ads, Wrench packs) via js/iap.js's purchaseProduct(). Pro Garage itself
+   stays on its own dedicated paywall (proOverlay) rather than folding in
+   here — it's a bigger decision than an impulse Shop buy, and every
+   existing entry point into it (chapter gate, hint offer's "Go Pro") is
+   already that overlay. */
+function openShop(){
+  updateShopUI();
+  track('shop_open', {});
+  showOverlay('shopOverlay');
+}
+function updateShopUI(){
+  $('shopBalance').textContent = save.wrenches;
+  const today = todayStr();
+  const canClaim = dailyWrenchAvailable(save, today);
+  $('shopDailyBtn').disabled = !canClaim;
+  $('shopDailyBadge').hidden = !canClaim;
+  const adsGone = save.pro || save.entitlements.removeAds;
+  $('shopRemoveAdsRow').hidden = adsGone;
+}
+async function shopWatch(){
+  if(!adsAvailable()){ toast(t('toast.noads')); return; }
+  $('shopWatchBtn').disabled = true;
+  const res = await showRewarded('shop_watch');
+  $('shopWatchBtn').disabled = false;
+  if(!res.completed) return;
+  grantWrench(save, REWARDED_WRENCH_GRANT);
+  persist();
+  updateWrenchBadge();
+  updateShopUI();
+  track('offer_accept', { sink: 'shop_watch', method: 'ad' });
+  toast(t('toast.wrenchgranted', { n: REWARDED_WRENCH_GRANT }));
+}
+function shopClaimDaily(){
+  if(!claimDailyWrench(save, todayStr())) return;
+  persist();
+  updateWrenchBadge();
+  updateShopUI();
+  track('wrench_grant', { amount: 1, source: 'daily_free' });
+  toast(t('toast.wrenchgranted', { n: 1 }));
+}
+
+/* ================== INTERSTITIAL CADENCE (MONETIZATION-PLAN.md phase M3) ==================
+   In-memory only — losing the count/timer across an app restart is fine
+   (worst case: one extra or one fewer interstitial near a cold start),
+   nothing here is worth persisting. Only ever called from a genuine
+   campaign WIN (the "Next" button and the win sheet's own auto-advance
+   timer both funnel through proceedToNextLevel below) — never from
+   skipLevel()'s call into advance(), so bailing out on a level you're
+   stuck on never gets an ad on top of it. */
+let levelsSinceInterstitial = 0, lastInterstitialAt = 0;
+const INTERSTITIAL_EVERY = 3;
+const INTERSTITIAL_MIN_GAP_MS = 120000;
+const INTERSTITIAL_ONBOARDING_LEVEL = 5;   // matches updateControlsVisibility's undo reveal — "past onboarding"
+
+function interstitialEligible(){
+  if(adsSuppressed(save)) return false;
+  if(mode.type !== 'campaign') return false;   // never Daily/Bounty/Impound/Sandbox
+  if(cur < INTERSTITIAL_ONBOARDING_LEVEL) return false;   // never the first session
+  if(levelsSinceInterstitial < INTERSTITIAL_EVERY) return false;
+  if(Date.now() - lastInterstitialAt < INTERSTITIAL_MIN_GAP_MS) return false;
+  return true;
+}
+
+// The only place that leaves the win sheet toward another level after a
+// genuine clear — shows a capped interstitial first when eligible, then
+// runs `after` either way. `after` is always advance() today; taking a
+// callback rather than calling advance() directly keeps this reusable if
+// a future win path needs the same gate.
+function proceedToNextLevel(after){
+  if(mode.type === 'campaign') levelsSinceInterstitial++;
+  if(!interstitialEligible()){ after(); return; }
+  levelsSinceInterstitial = 0;
+  lastInterstitialAt = Date.now();
+  track('ad_request', { placement: 'level_end', type: 'interstitial' });
+  showInterstitial('level_end').then(() => {
+    track('ad_impression', { placement: 'level_end', type: 'interstitial' });
+    after();
+  });
 }
 
 /* ================== ONBOARDING (plan 0.6) ================== */
@@ -1402,14 +1656,14 @@ function winSequence(){
     // included).
     if(save.settings.mode !== 'relaxed') save.jobClears[cur] = true;
     persist();
-    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed });
+    track('level_win', { level: cur + 1, moves, par, stars, time_s: timeS, undos, hints: hintsUsed, assisted: assistedThisAttempt });
   } else if(mode.type === 'daily'){
     const res = recordDailyWin(mode.date, moves, par, stars);
     if(res.usedFreeze) toast(t('toast.freeze'));
     track('daily_win', { date: mode.date, number: mode.number, moves, par, stars, time_s: timeS, streak: daily().streak });
     if(save.settings.reminder) setStreakReminder(true, daily().streak);
   } else if(mode.type === 'bounty'){
-    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed });
+    isBountyMet = bountyConditionMet(mode.condition, { moves, par, hintsUsed, assisted: assistedThisAttempt });
     const prev = save.bounties.done[mode.date];
     save.bounties.done[mode.date] = {
       moves: prev ? Math.min(prev.moves, moves) : moves,
@@ -1548,7 +1802,7 @@ function showWinSheet(stars){
     if(save.settings.autoAdvance && next !== -1 && !carRevealQueue.length && !matchMedia('(prefers-reduced-motion: reduce)').matches){
       $('autobar').style.setProperty('--automs', '2600ms');
       requestAnimationFrame(() => $('autobar').classList.add('run'));
-      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); advance(); }, 2600);
+      autoTimer = setTimeout(() => { hideOverlay('winOverlay'); proceedToNextLevel(advance); }, 2600);
     }
   }
   showOverlay('winOverlay');
@@ -2037,23 +2291,71 @@ function wireSettings(){
     save.settings.reminder = e.target.checked; persist();
     setStreakReminder(e.target.checked, daily().streak);
   });
-  const restore = () => { toast(save.pro ? t('toast.pro') : t('btn.restore') + ' …'); };
   $('restoreBtn').addEventListener('click', restore);
   $('restoreBtn2').addEventListener('click', restore);
 }
 
-/* ================== PRO GARAGE (plan 1.3) ================== */
-function wirePro(){
-  $('buyBtn').addEventListener('click', () => {
-    /* StoreKit hook point: in the native shell this calls the purchase
-       plugin; the web build sandbox-unlocks so the full flow is testable. */
+// Actually calls the store interface now (js/iap.js), rather than showing
+// a toast and doing nothing — the previous version was a real App Review
+// risk (Apple requires a working restore path for non-consumables). The
+// dev/web stub honestly has no purchase history to find; once a real
+// plugin is wired in, restorePurchases()'s body is the only thing that
+// needs to change for this to actually recover a reinstall's entitlements.
+async function restore(){
+  if(save.pro){ toast(t('toast.pro')); return; }
+  toast(t('toast.restoring'));
+  const res = await restorePurchases();
+  if(res.restored.includes('pro_garage')){
     save.pro = true;
-    persist();
-    track('iap_purchase', { product: 'pro_garage' });
-    toast(t('toast.pro'));
-    hideOverlay('proOverlay');
-    updateHud();
-  });
+    save.entitlements.pro = true;
+    save.entitlements.removeAds = true;
+  } else if(res.restored.includes('remove_ads')){
+    save.entitlements.removeAds = true;
+  } else {
+    toast(t('toast.norestore'));
+    return;
+  }
+  persist();
+  updateHud();
+  toast(t('toast.pro'));
+}
+
+/* ================== PRO GARAGE (plan 1.3) ================== */
+/* Grants an entitlement/consumable AFTER the store confirms the sale —
+   the only place any product's effect actually happens, same split
+   js/economy.js's grant()/spend() keep from the UI that calls them. All
+   purchase buttons across the app (Pro, Shop's Remove Ads + Wrench packs)
+   route through this one function so there is exactly one place that
+   ever sets save.pro/entitlements or credits a consumable from a sale. */
+async function purchaseProduct(sku, btn){
+  const product = PRODUCTS[sku];
+  if(!product) return;
+  if(!iapAvailable()){ toast(t('toast.noads')); return; }
+  if(btn) btn.disabled = true;
+  const res = await storePurchase(sku);
+  if(btn) btn.disabled = false;
+  if(!res.success) return;
+
+  if(sku === 'pro_garage'){
+    save.pro = true;
+    save.entitlements.pro = true;
+    save.entitlements.removeAds = true;
+  } else if(sku === 'remove_ads'){
+    save.entitlements.removeAds = true;
+  } else if(product.kind === 'consumable'){
+    grantWrench(save, product.wrenches);
+  }
+  persist();
+  updateWrenchBadge();
+  updateHud();
+  track('iap_purchase', { product: sku });
+  toast(sku === 'pro_garage' ? t('toast.pro') : t('toast.purchased'));
+  hideOverlay('proOverlay');
+  updateShopUI();
+}
+
+function wirePro(){
+  $('buyBtn').addEventListener('click', () => purchaseProduct('pro_garage', $('buyBtn')));
 }
 
 /* ================== STATIC STRINGS ================== */
@@ -2117,12 +2419,24 @@ function applyStrings(){
   $('proF1').textContent = t('pro.f1');
   $('proF2').textContent = t('pro.f2');
   $('proF3').textContent = t('pro.f3');
+  $('proF4').textContent = t('pro.f4');
   $('proNone').textContent = t('pro.none');
+  $('buyLabel').textContent = t('pro.unlock', { price: PRODUCTS.pro_garage.price });
   $('restoreBtn2').textContent = t('btn.restore');
   $('garageTitle').textContent = t('garage.title');
   $('garageSub').textContent = t('garage.sub');
   $('carRevealFlag').textContent = t('garage.newcar');
   $('carRevealBtn').textContent = t('btn.nice');
+  $('shopTitle').textContent = t('shop.title');
+  $('shopSub').textContent = t('shop.sub');
+  $('shopWatchLabel').textContent = t('shop.watch', { n: REWARDED_WRENCH_GRANT });
+  $('shopDailyLabel').textContent = t('shop.daily');
+  $('shopNote').textContent = t('shop.note');
+  $('shopRemoveAdsLabel').textContent = t('shop.removeads', { price: PRODUCTS.remove_ads.price });
+  $('shopPackSmallLabel').textContent = t('shop.pack', { n: PRODUCTS.wrenches_small.wrenches, price: PRODUCTS.wrenches_small.price });
+  $('shopPackMediumLabel').textContent = t('shop.pack', { n: PRODUCTS.wrenches_medium.wrenches, price: PRODUCTS.wrenches_medium.price });
+  $('shopPackLargeLabel').textContent = t('shop.pack', { n: PRODUCTS.wrenches_large.wrenches, price: PRODUCTS.wrenches_large.price });
+  $('offerProLabel').textContent = t('offer.gopro');
   $('bustedRetryBtn').textContent = t('btn.retry');
   $('bustedNoAlarmBtn').textContent = t('btn.relaxed');
   $('startPlayLabel').textContent = t('start.play');
@@ -2223,10 +2537,22 @@ function wire(){
       return;
     }
     cancelAuto(); sfx('ui');
-    proceedOrReveal(() => { hideOverlay('winOverlay'); advance(); });
+    proceedOrReveal(() => { hideOverlay('winOverlay'); proceedToNextLevel(advance); });
   });
   $('carRevealBtn').addEventListener('click', () => { sfx('ui'); dismissCarReveal(); });
   $('garageBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); buildGarageList(); showOverlay('garageOverlay'); });
+  $('shopBtn').addEventListener('click', () => { sfx('ui'); openShop(); });
+  $('shopWatchBtn').addEventListener('click', () => { sfx('ui'); shopWatch(); });
+  $('shopDailyBtn').addEventListener('click', () => { sfx('ui'); shopClaimDaily(); });
+  $('shopRemoveAdsBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('remove_ads', $('shopRemoveAdsBtn')); });
+  $('shopPackSmallBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('wrenches_small', $('shopPackSmallBtn')); });
+  $('shopPackMediumBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('wrenches_medium', $('shopPackMediumBtn')); });
+  $('shopPackLargeBtn').addEventListener('click', () => { sfx('ui'); purchaseProduct('wrenches_large', $('shopPackLargeBtn')); });
+  $('offerWatchBtn').addEventListener('click', () => { sfx('ui'); offerWatch(); });
+  $('offerSpendBtn').addEventListener('click', () => { sfx('ui'); offerSpend(); });
+  $('offerProBtn').addEventListener('click', () => { sfx('ui'); offerCtx = null; hideOverlay('offerOverlay'); showOverlay('proOverlay'); track('iap_view', { source: 'offer_sheet' }); });
+  $('bustedRescueWatchBtn').addEventListener('click', () => { sfx('ui'); rescueViaWatch(lastBustedKind); });
+  $('bustedRescueSpendBtn').addEventListener('click', () => { sfx('ui'); rescueViaSpend(lastBustedKind); });
   $('dailyPlayBtn').addEventListener('click', () => {
     sfx('ui'); stopSettingsMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
@@ -2693,7 +3019,10 @@ function sbHitchTapPiece(i){
    and left sbCommitGate() unreachable from the UI entirely. */
 function sbGateTapCell(r, c){
   if(sbGatePending === null){
-    sbGatePending = { gate: [r, c], sensors: [], polarity: false };
+    // Exit-row gates must pass traffic horizontally or the hero could
+    // never get out — start them that way rather than letting an admin
+    // build an unsolvable board and find out at Playtest.
+    sbGatePending = { gate: [r, c], sensors: [], polarity: false, axis: r === EXIT_ROW ? 'h' : 'v' };
     toast('Gate placed. Tap 1–2 sensor cells, then use the buttons below');
     sbRender();
     return;
@@ -2721,6 +3050,16 @@ function sbGateTapCell(r, c){
 function sbTogglePolarity(){
   if(!sbGatePending) return;
   sbGatePending.polarity = !sbGatePending.polarity;
+  sbRender();
+}
+
+function sbToggleGateAxis(){
+  if(!sbGatePending) return;
+  if(sbGatePending.gate[0] === EXIT_ROW){
+    toast('An exit-row gate has to pass traffic left-right — the hero drives through it');
+    return;
+  }
+  sbGatePending.axis = sbGatePending.axis === 'h' ? 'v' : 'h';
   sbRender();
 }
 
@@ -2771,6 +3110,7 @@ function sbCommitGate(){
     gate: sbGatePending.gate,
     sensors: sbGatePending.sensors,
     polarity: sbGatePending.polarity,
+    axis: sbGatePending.axis,
   });
   sbGatePending = null;
   toast('Gate committed');
@@ -2926,13 +3266,13 @@ function sbRender(){
   };
   sbState.gates.forEach((gt, gi) => {
     const [gr, gc] = gt.gate;
-    renderGateCell(gr, gc, 'sb-gate', gateSVG());
+    renderGateCell(gr, gc, 'sb-gate', gateSVG(gt.axis));
     gt.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor', sensorSVG(gt.polarity)));
   });
   // Render pending gate being configured
   if(sbGatePending){
     const [gr, gc] = sbGatePending.gate;
-    renderGateCell(gr, gc, 'sb-gate-pending', gateSVG());
+    renderGateCell(gr, gc, 'sb-gate-pending', gateSVG(sbGatePending.axis));
     sbGatePending.sensors.forEach(s => renderGateCell(s[0], s[1], 'sb-sensor', sensorSVG(sbGatePending.polarity)));
   }
   sbRenderGateConfig();
@@ -2948,6 +3288,8 @@ function sbRenderGateConfig(){
   bar.hidden = !sbGatePending;
   if(!sbGatePending) return;
   $('sbGatePolarityLabel').textContent = sbGatePending.polarity ? 'Tripwire' : 'Pressure Plate';
+  $('sbGateAxisLabel').textContent = sbGatePending.axis === 'v' ? 'passes ↕' : 'passes ↔';
+  $('sbGateAxisBtn').disabled = sbGatePending.gate[0] === EXIT_ROW;
   $('sbGateCommitBtn').disabled = sbGatePending.sensors.length === 0;
 }
 
@@ -3080,7 +3422,7 @@ function sbLevelObj(){
     p: sbState.pieces.map(q => [q.r, q.c, q.len, q.dir]),
     w: sbState.walls.map(w => [w[0], w[1]]),
     ...(sbState.hitches.length ? { h: sbState.hitches.map(h => ({ tow: h.tow, trailer: h.trailer })) } : {}),
-    ...(sbState.gates.length ? { g: sbState.gates.map(gt => ({ gate: gt.gate, sensors: gt.sensors, polarity: gt.polarity })) } : {}),
+    ...(sbState.gates.length ? { g: sbState.gates.map(gt => ({ gate: gt.gate, sensors: gt.sensors, polarity: gt.polarity, axis: gt.axis || 'h' })) } : {}),
   };
 }
 
@@ -3172,7 +3514,7 @@ function sbRenderSaved(){
         pieces: lv.p.map((a, j) => ({ r: a[0], c: a[1], len: a[2], dir: a[3], hero: j === 0 })),
         walls: (lv.w || []).map(w => [w[0], w[1]]),
         hitches: (lv.h || []).map(h => ({ tow: h.tow, trailer: h.trailer })),
-        gates: (lv.g || []).map(g => ({ gate: g.gate, sensors: g.sensors, polarity: g.polarity })),
+        gates: (lv.g || []).map(g => ({ gate: g.gate, sensors: g.sensors, polarity: g.polarity, axis: g.axis || 'h' })),
       };
       sbHitchPending = null;
       sbGatePending = null;
@@ -3207,6 +3549,7 @@ function wireSandbox(){
     $('sbDirBtn').textContent = 'Dir: ' + sbDir.toUpperCase();
   });
   $('sbGatePolarityBtn').addEventListener('click', () => { sfx('ui'); sbTogglePolarity(); });
+  $('sbGateAxisBtn').addEventListener('click', () => { sfx('ui'); sbToggleGateAxis(); });
   $('sbGateCommitBtn').addEventListener('click', () => { sfx('ui'); sbCommitGate(); });
   $('sbGateCancelBtn').addEventListener('click', () => { sfx('ui'); sbCancelGate(); });
   $('sbTestBtn').addEventListener('click', () => { sfx('ui'); sbPlaytest(); });
@@ -3965,6 +4308,17 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
     // a returning player already earned under the old rule. Only clears
     // from here on actually require a car-earning pacing.
     if(!loaded.jobClears) save.jobClears = Object.assign({}, loaded.stars);
+    save.econ = Object.assign({ dailyWrenchDay: '', lifetimeEarned: 0, lifetimeSpent: 0 }, loaded.econ);
+    save.entitlements = Object.assign({ pro: false, removeAds: false, proLegacy: false }, loaded.entitlements);
+    // Grandfather clause (MONETIZATION-PLAN.md §2): every save that
+    // already owned Pro under the old ad-free-forever promise keeps a
+    // permanently ad-free build, full stop — this must run before any ad
+    // code exists and must never be revisited or made conditional.
+    if(loaded.pro){
+      save.entitlements.proLegacy = true;
+      save.entitlements.removeAds = true;
+      save.entitlements.pro = true;
+    }
     migrateCampaignReorder();
   }
   await loadDaily();
@@ -3994,4 +4348,5 @@ document.addEventListener('keydown', () => startMenuMusic(), { once: true });
   // shows on every launch; the how-to-play/mode-picker popup that follows
   // it is gated to the first launch only (see startPlayBtn).
   setTimeout(() => $('startPlayBtn').focus(), 100);
+  setBannerVisible(true);   // menu only — startBoard() hides it the moment a level loads
 })();

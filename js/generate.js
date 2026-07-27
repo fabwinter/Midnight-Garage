@@ -287,11 +287,20 @@ export function tryGenerateGate(rng, opts = {}){
   // Sample polarity
   const polarity = rng() < 0.5 ? false : true;
 
-  const gates = [{ sensors, gate, polarity }];
+  /* Passage axis: which way traffic may cross the barrier (see legalMoves'
+     gateBlocks). A gate on the exit row is a boom across the hero's own
+     lane, so it has to be 'h' or the hero could never leave; anywhere else
+     both orientations are viable, so try the sampled one first and fall
+     back to the other rather than throwing the whole board away. */
+  const axisPref = gate[0] === EXIT_ROW ? ['h'] : (rng() < 0.5 ? ['h', 'v'] : ['v', 'h']);
 
-  // Must exercise the gate: solve with and without, gate must increase par.
-  const solWithGate = solve(pieces, { maxStates: 250000, gates });
-  if(!solWithGate.solvable || solWithGate.optimal < minOptimal) return null;
+  let gates = null, solWithGate = null;
+  for(const axis of axisPref){
+    const cand = [{ sensors, gate, polarity, axis }];
+    const sol = solve(pieces, { maxStates: 250000, gates: cand });
+    if(sol.solvable && sol.optimal >= minOptimal){ gates = cand; solWithGate = sol; break; }
+  }
+  if(!gates) return null;
 
   const solWithoutGate = solve(pieces, { maxStates: 250000 });
   if(!solWithoutGate.solvable) return null;
@@ -319,7 +328,7 @@ export function tryGenerateGate(rng, opts = {}){
     m: solWithGate.optimal,
     d: stats.score,
     stats,
-    key: levelKey(pieces, []) + '|G' + gate[0] + ',' + gate[1] + ':' + gateKey + ':' + (polarity ? 1 : 0),
+    key: levelKey(pieces, []) + '|G' + gate[0] + ',' + gate[1] + ':' + gateKey + ':' + (polarity ? 1 : 0) + ':' + gates[0].axis,
   };
 }
 
