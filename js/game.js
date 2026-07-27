@@ -302,6 +302,21 @@ function buildPieces(){
      ordinal only needs to track "which one of this level's sedans/trucks/
      trailers is this", not fold the seed into itself. */
   const seed = levelPhotoSeed();
+  const heroSkin = skinFor(heroCarIdForAttempt());
+  // skinFor() returns null for the classic default car (level 1's hero,
+  // and anyone who hasn't equipped a Garage skin) — it has no CARS entry,
+  // so vehicleSVG's own PALETTE[0][0] fallback is the real colour here.
+  const heroBase = heroSkin?.base ?? PALETTE[0][0];
+  // Precomputed once so every piece's colour-safe pick (see vehicleSVG's
+  // bucketSequence) can exclude the hero's own colour and cross-exclude
+  // sedans' colours from the truck rotation, not just avoid raw photo
+  // repeats — see the July '26 "no double-ups" pass.
+  let sedanNeeded = 0, truckNeeded = 0;
+  pieces.forEach((p, i) => {
+    if(i === 0) return;
+    if(hitches.some(h => h.trailer === i)) return;
+    if(p.len >= 3) truckNeeded++; else sedanNeeded++;
+  });
   let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
@@ -320,7 +335,10 @@ function buildPieces(){
     const photoOrd = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
     el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
       colorblind: save.settings.colorblind,
-      skin: i === 0 ? skinFor(heroCarIdForAttempt()) : null,
+      skin: i === 0 ? heroSkin : null,
+      heroBase,
+      sedanNeeded,
+      truckNeeded,
       seed,
       photoOrd,
       trailer: isTrailer,
@@ -688,6 +706,13 @@ function showBustedSheet(kind){
   $('bustedFlag').textContent = t(prefix + 'flag');
   $('bustedTitle').textContent = t(prefix + 'title');
   $('bustedSub').textContent = t(prefix + 'sub');
+  // Tonight's Mark has no "switch to Relaxed" escape hatch (its pacing is
+  // forced for the whole attempt — see updateModeSelectUI/leaveBounty),
+  // so a bust there offers Quit instead: leave the job entirely rather
+  // than continue it under an easier mode.
+  const isBounty = mode.type === 'bounty';
+  $('bustedNoAlarmBtn').textContent = isBounty ? t('btn.quit') : t('btn.relaxed');
+  $('bustedNoAlarmBtn').dataset.action = isBounty ? 'quit' : 'relaxed';
   updateBustedRescueUI(kind);
   showOverlay('bustedOverlay');
   $('srLive').textContent = t(prefix + 'title');
@@ -981,6 +1006,39 @@ function refreshHintTokens(){
 // session. Null whenever no override is currently in effect.
 let preBountyMode = null;
 
+// Set right before the calendar overlay is (re)opened as part of leaving a
+// just-finished daily win sheet — closeDailyOverlay() consumes it to hand
+// the player back to the campaign level they were on, rather than
+// stranding them on the now-solved daily board. Left false for the
+// ordinary "peek at the calendar mid-campaign" entry via the header's
+// calendar icon, where closing it must NOT re-navigate (the campaign
+// board underneath is already exactly where they were).
+let dailyReturnToCampaign = false;
+
+function returnFromDailyWin(){
+  dailyReturnToCampaign = true;
+  hideOverlay('winOverlay');
+  openDaily();
+}
+
+function closeDailyOverlay(){
+  hideOverlay('dailyOverlay');
+  stopSettingsMusic();
+  if(dailyReturnToCampaign){
+    dailyReturnToCampaign = false;
+    loadLevel(Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound())));
+  }
+}
+
+function restorePreBountyMode(){
+  if(preBountyMode === null) return;
+  save.settings.mode = preBountyMode;
+  setGameMode(preBountyMode);
+  updateModeSelectUI();
+  preBountyMode = null;
+  persist();
+}
+
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
@@ -988,13 +1046,23 @@ function abandonIfMidLevel(){
       moves, time_s: Math.round((Date.now() - levelStart) / 1000),
     });
   }
-  if(preBountyMode !== null){
-    save.settings.mode = preBountyMode;
-    setGameMode(preBountyMode);
-    updateModeSelectUI();
-    preBountyMode = null;
-    persist();
-  }
+  restorePreBountyMode();
+}
+
+/* The only way out of a bounty attempt short of clearing it — Tonight's
+   Mark forces its own pacing (see loadBountyLevel) for the run's whole
+   duration, so unlike every other mode there's no in-place "switch to
+   Relaxed" escape hatch (see showBustedSheet/updateModeSelectUI). Quitting
+   (from the busted sheet) or finishing (the win sheet's Done) both land
+   here: restore whatever pacing the player actually had selected BEFORE
+   computing which campaign level to return to — restorePreBountyMode()
+   must run first, or the level index below gets read under the bounty's
+   still-active forced pacing and written back under the just-restored
+   one, jumping the player's real progress in that mode to whatever
+   position the FORCED pacing happened to be sitting at. */
+function leaveBounty(){
+  restorePreBountyMode();
+  loadLevel(Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound())));
 }
 
 function loadLevel(idx){
@@ -1016,6 +1084,11 @@ function loadLevel(idx){
 
 function loadDailyLevel(dateStr){
   abandonIfMidLevel();
+  // Starting any daily attempt (including from the calendar's own "play a
+  // back-dated day" links, which skip closeDailyOverlay) supersedes a
+  // pending return-to-campaign from a previous win — this attempt's own
+  // win will re-arm it if it's won in turn.
+  dailyReturnToCampaign = false;
   const lv = dailyLevel(dateStr);
   mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
   curLevel = lv;
@@ -1036,9 +1109,14 @@ function loadBountyLevel(dateStr){
     preBountyMode = save.settings.mode;
     save.settings.mode = pacing;
     setGameMode(pacing);
-    updateModeSelectUI();
   }
+  // Must land after save.settings.mode/pacing are settled but before
+  // updateModeSelectUI() below — that's what it reads mode.type off of to
+  // lock the mode-select for the whole attempt, pacing switch or not (a
+  // mark whose pacing happens to match whatever was already selected
+  // still needs the lock; it was previously skipped in that case).
   mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition, pacing };
+  updateModeSelectUI();
   curLevel = lv;
   persist();
   startBoard();
@@ -2261,7 +2339,14 @@ function updateModeSelectUI(){
   const m = save.settings.mode;
   document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
   document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
-  $('modeDesc').textContent = t('mode.desc.' + m);
+  // Tonight's Mark forces its own pacing for the whole attempt (see
+  // loadBountyLevel) — no in-place switch to another mode, Relaxed
+  // included. Disabling the buttons here is the visible half of that;
+  // the click handler below still guards against it too, since a
+  // disabled attribute alone doesn't stop every path to firing a click.
+  const bountyLocked = mode.type === 'bounty';
+  document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.disabled = bountyLocked);
+  $('modeDesc').textContent = bountyLocked ? t('toast.bountylocked') : t('mode.desc.' + m);
 }
 
 function wireSettings(){
@@ -2272,6 +2357,7 @@ function wireSettings(){
   document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.addEventListener('click', () => {
     const m = b.dataset.mode;
     if(save.settings.mode === m) return;
+    if(mode.type === 'bounty'){ sfx('deny'); toast(t('toast.bountylocked')); return; }
     sfx('ui');
     save.settings.mode = m;
     setGameMode(m);
@@ -2473,26 +2559,41 @@ function wire(){
   $('settingsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay');
     updateThemeButtonUI();   // re-sync in case the theme ended/kept playing while Settings was closed
+    updateModeSelectUI();    // re-sync the bounty mode-lock too, same reason
   });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
-    e.target.closest('.overlay').classList.remove('show'); sfx('ui');
-    if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
+    const o = e.target.closest('.overlay');
+    sfx('ui');
+    // dailyOverlay gets its own close path (closeDailyOverlay) — closing
+    // the calendar right after a daily win hands the player back to the
+    // campaign level they were on; closing it any other time (the header
+    // icon's ordinary "peek at the calendar" entry) is a no-op beyond the
+    // usual hide, same as every other overlay here.
+    if(o.id === 'dailyOverlay'){ closeDailyOverlay(); return; }
+    o.classList.remove('show');
+    if(['settingsOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
+      if(o.id === 'dailyOverlay'){ closeDailyOverlay(); return; }
       o.classList.remove('show');
-      if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+      if(['settingsOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
   $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); setTimeout(() => $('board').focus(), 100); });
   $('bustedNoAlarmBtn').addEventListener('click', () => {
+    sfx('ui');
+    if($('bustedNoAlarmBtn').dataset.action === 'quit'){
+      hideOverlay('bustedOverlay');
+      leaveBounty();
+      return;
+    }
     // Deliberate exception to "modes don't share a level": this is a
     // retry-easier escape hatch right after a bust, so it stays on the
     // same level rather than jumping to Relaxed's own tracked position.
-    sfx('ui');
     save.settings.mode = 'relaxed';
     setGameMode('relaxed');
     updateModeSelectUI();
@@ -2512,12 +2613,28 @@ function wire(){
   });
   $('moveReplayBtn').addEventListener('click', () => { sfx('ui'); playMoveReplay(); });
   $('watchSolBtn').addEventListener('click', () => { sfx('ui'); playSolutionReplay(); });
-  $('winCloseBtn').addEventListener('click', () => { sfx('ui'); cancelAuto(); hideOverlay('winOverlay'); });
+  $('winCloseBtn').addEventListener('click', () => {
+    sfx('ui'); cancelAuto();
+    // Daily has no "next level" to advance into on its own board — closing
+    // its win sheet any other way used to just leave the solved daily
+    // board sitting there with no route onward. Route through the
+    // calendar instead, same destination Share already lands on below.
+    if(mode.type === 'daily'){ returnFromDailyWin(); return; }
+    // Same reasoning for bounty: its forced pacing means there's no board
+    // to just sit on afterward either — closing X should leave the job
+    // the same way "Done" does below, not strand the player on it.
+    if(mode.type === 'bounty'){ hideOverlay('winOverlay'); leaveBounty(); return; }
+    hideOverlay('winOverlay');
+  });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);
       track('share_daily', { result: res, date: mode.date });
       if(res === 'copied') toast(t('toast.copied'));
+      // A cancelled native share sheet means they backed out, not that
+      // they're done here — leave the win sheet up so they can retry or
+      // just close it themselves instead of navigating out from under them.
+      if(res !== 'cancelled') returnFromDailyWin();
       return;
     }
     if($('nextBtn').dataset.action === 'sandbox'){
@@ -2528,7 +2645,7 @@ function wire(){
     }
     if($('nextBtn').dataset.action === 'bounty'){
       cancelAuto(); sfx('ui');
-      proceedOrReveal(() => hideOverlay('winOverlay'));
+      proceedOrReveal(() => { hideOverlay('winOverlay'); leaveBounty(); });
       return;
     }
     if($('nextBtn').dataset.action === 'impound'){
@@ -3216,6 +3333,15 @@ function sbRender(){
     b.appendChild(el);
   });
   const seed = hashStr(JSON.stringify(sbState.pieces));
+  // Sandbox has no skin selection — the hero is always the default red
+  // (PALETTE[0][0], see vehicleSVG) — passed through so traffic's
+  // colour-safe rotation avoids it same as the real board does.
+  let sedanNeeded = 0, truckNeeded = 0;
+  sbState.pieces.forEach((p, i) => {
+    if(p.hero) return;
+    if(sbState.hitches.some(h => h.trailer === i)) return;
+    if(p.len >= 3) truckNeeded++; else sedanNeeded++;
+  });
   let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   sbState.pieces.forEach((p, i) => {
     const el = document.createElement('div');
@@ -3231,7 +3357,7 @@ function sbRender(){
     el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
     el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
     const photoOrd = p.hero ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo, trailer: isTrailer, towCar });
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo, trailer: isTrailer, towCar, heroBase: PALETTE[0][0], sedanNeeded, truckNeeded });
     b.appendChild(el);
   });
   sbState.hitches.forEach(h => {

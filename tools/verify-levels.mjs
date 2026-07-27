@@ -10,6 +10,8 @@ import { solve, N, EXIT_ROW, levelKey } from '../js/solver.js';
 import { dailyLevel } from '../js/generate.js';
 import { bountyFor, BOUNTY_EPOCH } from '../js/bounty.js';
 import { todayStr } from '../js/storage.js';
+import { bucketSequence, familyFromTag, familyFromHex, familiesUsedBy, boundedExclude, bucketizeByFamily, combinedPhotos } from '../js/art.js';
+import { carIdForLevel, carIdForBountyTier, skinFor } from '../js/collection.js';
 
 let fail = 0;
 const bad = (msg) => { console.error('✗ ' + msg); fail++; };
@@ -215,6 +217,70 @@ BOUNTY_ROTATION.forEach((lv, i) => {
 impoundKeys.forEach(key => {
   if(campaignKeys.has(key)) bad(`impound board also appears in the campaign (key "${key}")`);
   if(bountyKeys.has(key)) bad(`impound board also appears in bounty rotation (key "${key}")`);
+});
+
+// July '26 "no double-ups of colour" pass: every level's traffic must
+// steer clear of the hero's own colour family, and of each other's,
+// within the limits of the 12-colour-family ceiling (see js/art.js's
+// COLOR_FAMILIES) — this mirrors vehicleSVG's exact allocation (truck
+// pool first, unconstrained but for the hero; sedan's much roomier pool
+// then bounded-excludes whatever families truck claimed) so any future
+// change to that ordering that regresses back toward the "sedan claims
+// everything before truck gets a turn" failure mode gets caught here
+// instead of by a player noticing two blue cars on one board. A level
+// needing more concurrent vehicles than there are non-hero families (11)
+// is only forced into `total - 11` repeats — the least a scheme has ever
+// been shown able to do here — not the raw drawn value.
+const CLASSIC_RED = '#ff4d5e'; // PALETTE[0][0] — DEFAULT_CAR has no skin entry
+const sedanFamilyList = Object.keys(bucketizeByFamily(combinedPhotos('sedans')));
+const truckFamilyList = Object.keys(bucketizeByFamily(combinedPhotos('trucks')));
+
+function countConcurrent(lv){
+  const hitchTrailerIdxs = new Set((lv.h ?? []).map(h => h.trailer));
+  let sedan = 0, truck = 0;
+  lv.p.forEach((piece, i) => {
+    if(i === 0 || hitchTrailerIdxs.has(i)) return;
+    if(piece[2] >= 3) truck++; else sedan++;
+  });
+  return { sedan, truck };
+}
+
+function checkColourPlan(label, i, heroBase, sedanNeeded, truckNeeded){
+  const heroFamily = familyFromHex(heroBase);
+  const heroExclude = [heroFamily];
+  const truckSeq = bucketSequence('truck', i, heroExclude);
+  const truckFamiliesUsed = familiesUsedBy(truckSeq, truckNeeded);
+  const sedanExclude = boundedExclude(heroExclude, truckFamiliesUsed, sedanFamilyList, sedanNeeded);
+  const sedanSeq = bucketSequence('sedan', i, sedanExclude);
+  const sedanFamilies = sedanSeq.slice(0, sedanNeeded).map(e => familyFromTag(e.color));
+  const truckFamilies = truckSeq.slice(0, truckNeeded).map(e => familyFromTag(e.color));
+  const seen = new Map();
+  let repeats = 0;
+  for(const f of [...sedanFamilies, ...truckFamilies]){
+    seen.set(f, (seen.get(f) || 0) + 1);
+    if(f === heroFamily) repeats++; // must never happen — hero's family is excluded outright
+  }
+  for(const c of seen.values()) if(c > 1) repeats += c - 1;
+  const floor = Math.max(0, sedanNeeded + truckNeeded - 11); // 12 families minus the hero's own
+  if(repeats > floor) bad(`${label} ${i}: ${repeats} colour-family repeat(s) among ${sedanNeeded + truckNeeded} concurrent vehicles — expected at most ${floor} (the 12-family ceiling minus the hero's own)`);
+}
+
+LEVELS.forEach((lv, i) => {
+  const { sedan, truck } = countConcurrent(lv);
+  const heroBase = skinFor(carIdForLevel(i))?.base ?? CLASSIC_RED;
+  checkColourPlan('level', i + 1, heroBase, sedan, truck);
+});
+BOUNTY_ROTATION.forEach((lv, i) => {
+  const { sedan, truck } = countConcurrent(lv);
+  const heroBase = skinFor(carIdForBountyTier(lv.tier))?.base ?? CLASSIC_RED;
+  checkColourPlan('bounty rotation slot', i, heroBase, sedan, truck);
+});
+// Impound has no fixed job-car hero (the player's own equipped car shows
+// up instead, decided at runtime) — checked against the default red as a
+// stand-in so this still exercises the mechanism itself.
+IMPOUND_LOT.forEach((lv, i) => {
+  const { sedan, truck } = countConcurrent(lv);
+  checkColourPlan('impound slot', i, CLASSIC_RED, sedan, truck);
 });
 
 if(fail){ console.error(`${fail} check(s) failed`); process.exit(1); }
