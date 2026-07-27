@@ -74,6 +74,29 @@ need a real headless-browser check — see "Testing UI changes" below.
   by tapping the title 5×** on the start screen (`#brandTitle`,
   `pointerdown` × 5) — there's no other entry point, and it's
   `save.admin`-gated, not a build flag.
+- **No two vehicles in one level (hero included) may share a colour
+  family.** Colours aren't stored in level data — they're computed at
+  render time in `js/art.js` from each photo's `color` tag, grouped into
+  one of 12 basic-colour families (`COLOR_FAMILIES`/`familyFromTag`/
+  `familyFromHex`). `vehicleSVG`'s `bucketSequence` round-robins by family
+  (not by the finer `color` tag) so no two same-family entries land in one
+  level; the hero's family (from its skin hex, via `opts.heroBase`) is
+  excluded outright, and the truck sequence — allocated first, since its
+  family space is a tiny 7-wide subset of sedan's 12 — reserves against
+  sedan's via `boundedExclude`, which only excludes as much as still
+  leaves the needed count satisfiable (an earlier version excluded
+  everything sedans used and collapsed to zero candidates, silently
+  dropping even the hero exclusion). A level needing more concurrent
+  vehicles than there are non-hero families (11) is only forced into
+  `total - 11` repeats, never more — `tools/verify-levels.mjs`'s
+  colour-collision check asserts exactly that floor for every campaign/
+  bounty/impound board. `skinFor()` returns `null` for the classic default
+  car (level 1's hero, and anyone who hasn't equipped a Garage skin) —
+  always fall back to `PALETTE[0][0]` before reading `.base`, never call
+  it unguarded (this crashed `buildPieces()` silently on level 1 during
+  development; the browser smoke test in "Testing UI changes" below is
+  what catches this class of bug, `verify-levels.mjs` doesn't touch this
+  render-time path at all).
 
 ## Coding conventions already established here
 

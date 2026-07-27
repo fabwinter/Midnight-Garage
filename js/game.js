@@ -302,6 +302,21 @@ function buildPieces(){
      ordinal only needs to track "which one of this level's sedans/trucks/
      trailers is this", not fold the seed into itself. */
   const seed = levelPhotoSeed();
+  const heroSkin = skinFor(heroCarIdForAttempt());
+  // skinFor() returns null for the classic default car (level 1's hero,
+  // and anyone who hasn't equipped a Garage skin) — it has no CARS entry,
+  // so vehicleSVG's own PALETTE[0][0] fallback is the real colour here.
+  const heroBase = heroSkin?.base ?? PALETTE[0][0];
+  // Precomputed once so every piece's colour-safe pick (see vehicleSVG's
+  // bucketSequence) can exclude the hero's own colour and cross-exclude
+  // sedans' colours from the truck rotation, not just avoid raw photo
+  // repeats — see the July '26 "no double-ups" pass.
+  let sedanNeeded = 0, truckNeeded = 0;
+  pieces.forEach((p, i) => {
+    if(i === 0) return;
+    if(hitches.some(h => h.trailer === i)) return;
+    if(p.len >= 3) truckNeeded++; else sedanNeeded++;
+  });
   let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   pieces.forEach((p, i) => {
     const el = document.createElement('div');
@@ -320,7 +335,10 @@ function buildPieces(){
     const photoOrd = i === 0 ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
     el.innerHTML = vehicleSVG(i, p.len, p.dir, i === 0, {
       colorblind: save.settings.colorblind,
-      skin: i === 0 ? skinFor(heroCarIdForAttempt()) : null,
+      skin: i === 0 ? heroSkin : null,
+      heroBase,
+      sedanNeeded,
+      truckNeeded,
       seed,
       photoOrd,
       trailer: isTrailer,
@@ -3216,6 +3234,15 @@ function sbRender(){
     b.appendChild(el);
   });
   const seed = hashStr(JSON.stringify(sbState.pieces));
+  // Sandbox has no skin selection — the hero is always the default red
+  // (PALETTE[0][0], see vehicleSVG) — passed through so traffic's
+  // colour-safe rotation avoids it same as the real board does.
+  let sedanNeeded = 0, truckNeeded = 0;
+  sbState.pieces.forEach((p, i) => {
+    if(p.hero) return;
+    if(sbState.hitches.some(h => h.trailer === i)) return;
+    if(p.len >= 3) truckNeeded++; else sedanNeeded++;
+  });
   let sedanOrd = 0, truckOrd = 0, trailerOrd = 0;
   sbState.pieces.forEach((p, i) => {
     const el = document.createElement('div');
@@ -3231,7 +3258,7 @@ function sbRender(){
     el.style.height = (p.dir === 'v' ? p.len : 1) * SB_CELL + 'px';
     el.style.transform = `translate(${p.c * SB_CELL}px, ${p.r * SB_CELL}px)`;
     const photoOrd = p.hero ? 0 : (isTrailer ? trailerOrd++ : (p.len >= 3 ? truckOrd++ : sedanOrd++));
-    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo, trailer: isTrailer, towCar });
+    el.innerHTML = vehicleSVG(i, p.len, p.dir, !!p.hero, { seed, photoOrd, photoOverride: p.photo, trailer: isTrailer, towCar, heroBase: PALETTE[0][0], sedanNeeded, truckNeeded });
     b.appendChild(el);
   });
   sbState.hitches.forEach(h => {

@@ -89,7 +89,7 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.png';
 const BROKEN_DOWN_SEDAN_PHOTO = { img: 'assets/cars/library-sedans-1785067674835-5-rust-weathered.png', fixed: true, color: 'rust-weathered' };
 
 const SEDAN_PHOTOS = [
-  { img: 'assets/cars/traffic-sedan-6.png', hue: 29, color: 'recolor' },              // skin body, recolors
+  { img: 'assets/cars/traffic-sedan-6.png', hue: 29, color: 'blue' },                 // skin body, recolors
   { img: 'assets/cars/traffic-sedan-13.png', fixed: true, color: 'white-plain' },
   { img: 'assets/cars/traffic-sedan-5.png', fixed: true, color: 'yellow-tricolor' },  // Ferrari, tricolor stripe
   { img: 'assets/cars/hero-mclaren-nobadge.png', fixed: true, color: 'orange-f1' },
@@ -120,7 +120,7 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-7.png', fixed: true, color: 'white-black-stripe' }, // 911
   { img: 'assets/cars/hero-porsche-911-silver.png', fixed: true, color: 'silver-track' }, // longtail
   { img: 'assets/cars/hero-sedan-bronze.png', fixed: true, color: 'bronze' },
-  { img: 'assets/cars/traffic-sedan-8.png', hue: 90, color: 'recolor' },              // lime GT3 RS
+  { img: 'assets/cars/traffic-sedan-8.png', hue: 90, color: 'green' },                // lime GT3 RS
   { img: 'assets/cars/hero-classic-blue-stripe.png', fixed: true, color: 'blue-white-stripe' },
   { img: 'assets/cars/hero-muscle-grey-stripe.png', fixed: true, color: 'grey-stripe-muscle' },
   { img: 'assets/cars/hero-countach-nobadge.png', fixed: true, color: 'green-wedge' },
@@ -158,7 +158,7 @@ const SEDAN_PHOTOS = [
 // tow cars" needs one recognizable truck body, not whatever the ordinary
 // truck rotation would have picked. Still a normal TRUCK_PHOTOS entry too,
 // so it stays in ordinary traffic rotation same as any other truck.
-const TOW_TRUCK_PHOTO = { img: 'assets/cars/traffic-truck-4.png', hue: 358, color: 'recolor' };
+const TOW_TRUCK_PHOTO = { img: 'assets/cars/traffic-truck-4.png', hue: 358, color: 'red' };
 
 const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-3.png', fixed: true, color: 'silver-tanker' },
@@ -228,9 +228,101 @@ function seedHash(seed, salt){
   return h;
 }
 
+/* Strict per-level colour dedup (July '26 "no double-ups" pass). The
+   per-entry `color` tag above is finer than a human calls "a colour" —
+   it distinguishes liveries/models (e.g. 'blue-gulf-race' vs 'blue-classic'
+   vs 'Blue lambo') that all still read as "a blue car" at a glance. That
+   finer tag remains the bucket key for VARIETY (no two identical liveries
+   back to back — see bucketize below), but the actual same-colour
+   guarantee groups tags into one of these 12 basic-colour families first,
+   so bucketSequence never lets two members of the SAME family both appear
+   in one level (until it's genuinely forced to, see the round-robin
+   fallback) — a family is exactly the granularity a player judges "does
+   this look the same colour as that one" at, no finer.
+   Whichever family the hero's own skin hex lands in is excluded from
+   traffic's rotation entirely for that level (see vehicleSVG's heroFamily
+   plumbing) — "no light-blue traffic if the hero is light blue" from a
+   single hex, no tagging required on the hero side. */
+export const COLOR_FAMILIES = ['red','orange','yellow','green','teal','blue','purple','pink','brown','white','black','grey'];
+
+// One representative hex per family — the hue-rotate TARGET for the
+// handful of hue-rotatable entries (garage-skin sedan body, lime GT3 RS,
+// tow truck): their actual rendered colour now comes from whichever
+// family the round-robin assigns them, instead of drifting with board
+// position, so they participate in the same exclusion as every fixed
+// photo instead of being invisible to it.
+const FAMILY_HEX = {
+  red: '#ff4d4d', orange: '#ff9a3d', yellow: '#f5d442', green: '#5fbf4a',
+  teal: '#2fb5b0', blue: '#4a7dff', purple: '#9a5bd6', pink: '#e85fa8',
+  brown: '#8a5a34', white: '#e9e9e3', black: '#26262a', grey: '#8a929c',
+};
+
+// Checked token-by-token, first hit wins — every existing tag is either a
+// single colour word or a hyphenated "basecolor-livery/model" string where
+// the base paint is always the FIRST recognizable colour word (matches how
+// these tags were authored, see the SEDAN_PHOTOS comment above).
+const TAG_KEYWORD_FAMILY = [
+  ['white', 'white'], ['cream', 'white'], ['ivory', 'white'],
+  ['black', 'black'],
+  ['silver', 'grey'], ['chrome', 'grey'], ['grey', 'grey'], ['gray', 'grey'],
+  ['gold', 'yellow'], ['yellow', 'yellow'],
+  ['orange', 'orange'],
+  ['rust', 'brown'], ['brown', 'brown'], ['bronze', 'brown'], ['tan', 'brown'],
+  ['green', 'green'], ['lime', 'green'], ['sage', 'green'],
+  ['teal', 'teal'], ['cyan', 'teal'], ['aqua', 'teal'],
+  ['blue', 'blue'],
+  ['purple', 'purple'],
+  ['pink', 'pink'],
+  ['red', 'red'],
+];
+
+// The odd tag with no colour word in it at all — called out explicitly
+// rather than silently falling through the keyword scan.
+const TAG_FAMILY_OVERRIDE = { police: 'black' };
+
+export function familyFromTag(tag){
+  const key = (tag || '').toLowerCase();
+  if(TAG_FAMILY_OVERRIDE[key]) return TAG_FAMILY_OVERRIDE[key];
+  const tokens = key.split(/[^a-z]+/).filter(Boolean);
+  for(const tok of tokens){
+    const hit = TAG_KEYWORD_FAMILY.find(([kw]) => tok.includes(kw));
+    if(hit) return hit[1];
+  }
+  return 'grey'; // shouldn't happen for any current tag — safe neutral fallback
+}
+
+// Classifies a raw hero skin hex into the same 12-family taxonomy, so the
+// hero (which has no `color` tag, just a hex) can be excluded from
+// traffic's rotation on equal footing.
+export function familyFromHex(hex){
+  const hue = hexHue(hex), sat = hexSat(hex);
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const light = (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+  if(sat < 0.12) return light > 0.78 ? 'white' : (light < 0.22 ? 'black' : 'grey');
+  if(hue < 15 || hue >= 345) return 'red';
+  if(hue < 45) return sat < 0.35 ? 'brown' : 'orange';
+  if(hue < 68) return 'yellow';
+  if(hue < 165) return 'green';
+  if(hue < 195) return 'teal';
+  if(hue < 255) return 'blue';
+  if(hue < 300) return 'purple';
+  return 'pink';
+}
+
 function bucketize(pool){
   const buckets = {};
   pool.forEach(entry => (buckets[entry.color] ??= []).push(entry));
+  return buckets;
+}
+
+// Same idea, but grouped by the coarser family instead of the exact tag —
+// this is the bucket bucketSequence actually round-robins across, so two
+// entries that are technically different liveries (different `color` tags)
+// but the same basic colour can't both land in one level.
+export function bucketizeByFamily(pool){
+  const buckets = {};
+  pool.forEach(entry => (buckets[familyFromTag(entry.color)] ??= []).push(entry));
   return buckets;
 }
 
@@ -265,16 +357,28 @@ export function combinedPhotos(category){
   return combinedTrailerPhotos();
 }
 
-const sequenceCache = new Map(); // "poolName:seed:libVersion" -> resolved pick order
+const sequenceCache = new Map(); // "poolName:seed:excludeFamilies:libVersion" -> resolved pick order
 
-function bucketSequence(poolName, seed){
-  const key = poolName + ':' + seed + ':' + libraryVersion();
+/* excludeFamilies (array of family names, order-insensitive) is left out of
+   the rotation for this level entirely — used to keep the hero's own
+   colour, and (for trucks) whatever families the sedans already claimed,
+   out of traffic's picks. If excluding would leave NO family to draw from
+   (only possible once a level's own vehicle count exceeds the 12-family
+   ceiling — see the campaign's largest boards), the exclusion is dropped
+   rather than crashing on an empty sequence; a forced repeat of the hero's
+   or a sibling class's colour is a much smaller problem than no traffic
+   art at all. */
+export function bucketSequence(poolName, seed, excludeFamilies = []){
+  const excludeKey = [...excludeFamilies].sort().join(',');
+  const key = poolName + ':' + seed + ':' + excludeKey + ':' + libraryVersion();
   const cached = sequenceCache.get(key);
   if(cached) return cached;
-  const buckets = bucketize(poolName === 'sedan' ? combinedSedanPhotos() : combinedTruckPhotos());
+  const buckets = bucketizeByFamily(poolName === 'sedan' ? combinedSedanPhotos() : combinedTruckPhotos());
 
-  const names = Object.keys(buckets);
-  const start = seedHash(seed, poolName) % names.length;
+  const exclude = new Set(excludeFamilies);
+  let names = Object.keys(buckets).filter(f => !exclude.has(f));
+  if(!names.length) names = Object.keys(buckets);
+  const start = names.length ? seedHash(seed, poolName) % names.length : 0;
   const order = names.slice(start).concat(names.slice(0, start));
 
   const seq = [];
@@ -291,6 +395,37 @@ function bucketSequence(poolName, seed){
   }
   sequenceCache.set(key, seq);
   return seq;
+}
+
+// The families the first `count` picks of a sequence actually land on —
+// used to cross-exclude sedans' colours from the truck sequence so a
+// same-family sedan and truck can't both appear in one level either.
+export function familiesUsedBy(seq, count){
+  const out = new Set();
+  for(let i = 0; i < count && i < seq.length; i++) out.add(familyFromTag(seq[i].color));
+  return out;
+}
+
+/* Truck's own family space is tiny (7 families across its 8 tags) next to
+   sedan's (up to 12) — sedans alone can plausibly claim every one of
+   truck's 7 colours on a big board. Excluding all of them would starve
+   the truck sequence down to zero candidates, which used to fall back to
+   NO exclusion at all (see bucketSequence's own empty-names fallback) —
+   silently dropping even the hero exclusion, worse than not trying. This
+   only adds a "nice to have" exclusion (a family sedans already used)
+   while there's still enough headroom left for `needed` truck picks to
+   stay collision-free; once adding one more would starve it, it stops,
+   so a `mustExclude` (the hero's own family) always survives intact and
+   `needed` slots are always satisfiable from what's left. */
+export function boundedExclude(mustExclude, niceToExclude, poolFamilies, needed){
+  const relevant = new Set(poolFamilies);
+  const result = new Set([...mustExclude].filter(f => relevant.has(f)));
+  for(const fam of niceToExclude){
+    if(!relevant.has(fam) || result.has(fam)) continue;
+    if(relevant.size - result.size - 1 < needed) break;
+    result.add(fam);
+  }
+  return [...result];
 }
 
 function hexHue(hex){
@@ -377,7 +512,6 @@ function decal(idx, cx, cy){
    takes a tow truck. */
 export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const skin = isHero ? opts.skin : null;
-  const base = skin ? skin.base : (isHero ? PALETTE[0][0] : PALETTE[1 + (idx - 1) % (PALETTE.length - 1)][0]);
   const L = len * H;
   const gid = 'v' + idx + '-' + Math.random().toString(36).slice(2, 7);
   const soft = gid + 's';
@@ -385,10 +519,31 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
   const photoOrd = opts.photoOrd ?? 0;
   const isTrailer = !!opts.trailer && !isHero;
   const towCar = !!opts.towCar && !isHero;
-  // Computed unconditionally (cheap — memoized per seed) even though heroes
-  // don't use them, so the unused branch below never indexes into null.
-  const sedanSeq = bucketSequence('sedan', seed);
-  const truckSeq = bucketSequence('truck', seed);
+  const heroBaseHex = skin ? skin.base : (isHero ? PALETTE[0][0] : opts.heroBase);
+  const heroFamily = heroBaseHex ? familyFromHex(heroBaseHex) : null;
+  // opts.sedanNeeded/opts.truckNeeded — how many of each slot this level's
+  // board actually has (see buildPieces in js/game.js). The truck pool's
+  // own family space is tiny (7, next to sedan's 12) and its need is small
+  // (measured max 6) — always satisfiable from just the hero exclusion, so
+  // it's allocated FIRST and unconstrained. Sedan's sequence then steers
+  // away from whatever families trucks just claimed too — not just hero vs
+  // traffic — bounded so it never claims so much of sedan's own (much
+  // roomier, but also much more heavily drawn-on) family space that there's
+  // nowhere left for sedan's own needed picks to land; see boundedExclude
+  // above. Allocating the tightly-constrained pool first and letting the
+  // roomier one absorb the reservation avoids the reverse order's failure
+  // mode: sedan (up to 14 needed) can easily claim every one of truck's 7
+  // families before truck gets a turn, forcing truck to collide on
+  // effectively every pick instead of just the handful the 12-family
+  // ceiling makes genuinely unavoidable. Computed unconditionally (cheap —
+  // memoized per seed) even though heroes don't use them, so the unused
+  // branch below never indexes into null.
+  const heroExclude = heroFamily ? [heroFamily] : [];
+  const truckSeq = bucketSequence('truck', seed, heroExclude);
+  const sedanFamilies = Object.keys(bucketizeByFamily(combinedSedanPhotos()));
+  const truckFamiliesUsed = familiesUsedBy(truckSeq, opts.truckNeeded ?? 0);
+  const sedanExclude = boundedExclude(heroExclude, truckFamiliesUsed, sedanFamilies, opts.sedanNeeded ?? 0);
+  const sedanSeq = bucketSequence('sedan', seed, sedanExclude);
   // opts.photoOverride: the Sandbox's car/truck picker pins an exact asset
   // to one piece instead of letting the colour-safe rotation pick — used
   // nowhere else (real levels always want the rotation's variety).
@@ -400,6 +555,19 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     : (towCar ? TOW_TRUCK_PHOTO : truckSeq[photoOrd % truckSeq.length]));
   const hueAttr = brokenDown ? ` filter="url(#${gid}broke)"` : (sedanPhoto.fixed ? '' : ` filter="url(#${gid}hue)"`);
   const hueAttr2 = truckPhoto.fixed ? '' : ` filter="url(#${gid}hue2)"`;
+  // Hue-rotatable, non-hero entries (garage-skin sedan body, lime GT3 RS,
+  // tow truck) render at their assigned family's representative hex rather
+  // than an idx-derived PALETTE colour, so their ACTUAL rendered colour
+  // participates in the same exclusion as every fixed photo. towCar/
+  // override/brokenDown bypass the sequence's own exclusion, so as a last
+  // resort nudge off the hero's family if it lands there anyway.
+  function familyTargetHex(colorTag){
+    let fam = familyFromTag(colorTag);
+    if(heroFamily && fam === heroFamily) fam = COLOR_FAMILIES[(COLOR_FAMILIES.indexOf(fam) + 1) % COLOR_FAMILIES.length];
+    return FAMILY_HEX[fam];
+  }
+  const sedanBase = isHero ? heroBaseHex : familyTargetHex(sedanPhoto.color);
+  const truckBase = isHero ? heroBaseHex : familyTargetHex(truckPhoto.color);
 
   const defs = `
   <defs>
@@ -411,12 +579,12 @@ export function vehicleSVG(idx, len, dir, isHero, opts = {}){
     <filter id="${soft}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>
     <filter id="${gid}bblur" filterUnits="userSpaceOnUse" x="-40" y="-100" width="${L + 350}" height="300"><feGaussianBlur stdDeviation="4.5"/></filter>
     <filter id="${gid}hue">
-      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, sedanPhoto.hue || 0)}"/>
-      <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(sedanBase, sedanPhoto.hue || 0)}"/>
+      <feColorMatrix type="saturate" values="${satScaleFor(sedanBase)}"/>
     </filter>
     <filter id="${gid}hue2">
-      <feColorMatrix type="hueRotate" values="${hueRotationFor(base, truckPhoto.hue || 0)}"/>
-      <feColorMatrix type="saturate" values="${satScaleFor(base)}"/>
+      <feColorMatrix type="hueRotate" values="${hueRotationFor(truckBase, truckPhoto.hue || 0)}"/>
+      <feColorMatrix type="saturate" values="${satScaleFor(truckBase)}"/>
     </filter>
     <filter id="${gid}broke">
       <feColorMatrix type="saturate" values="0.18"/>
