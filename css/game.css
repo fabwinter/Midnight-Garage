@@ -360,6 +360,26 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .btn:active{transform:translateY(1px) scale(.98)}
 .btn:disabled{opacity:.35;cursor:default;transform:none}
 .btn.accent{border-color:rgba(255,180,84,.4);color:var(--amber)}
+/* Brushed-gold purchase button (Pro Garage). Stops sampled straight off the
+   supplied mockup: a horizontal metallic sheen, dull gold at both edges
+   peaking bright just right of centre — not the app's flat amber .primary. */
+.btn.gold{
+  background:linear-gradient(90deg,
+    #81623f 0%, #8d6945 9%, #9c7951 17%, #ae8d5f 25%, #bd9c6c 32%,
+    #cfad79 40%, #dfba86 48%, #f0cd97 55%, #e9c893 63%, #d6b583 71%,
+    #b8996b 78%, #a07e57 86%, #896642 94%, #81623f 100%);
+  color:#221704;border-color:rgba(255,255,255,.16);font-weight:700;
+  box-shadow:0 6px 18px -4px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.38);
+}
+.btn.gold:hover{border-color:rgba(255,255,255,.28);filter:brightness(1.06)}
+/* Light companion button, also from the mockup — reads as secondary against
+   the gold without vanishing into the dark plate the way a dark button does. */
+.btn.light{
+  background:linear-gradient(180deg,#dadada,#cbcbcb);
+  color:#6f6f6f;border-color:rgba(0,0,0,.18);
+  box-shadow:0 4px 12px -4px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.7);
+}
+.btn.light:hover{border-color:rgba(0,0,0,.3);color:#555}
 .btn.hidden{display:none}
 .btn .badge{
   position:absolute;top:-7px;right:-6px;min-width:20px;height:20px;padding:0 5px;
@@ -600,32 +620,54 @@ input[type=range]::-moz-range-thumb{
    stroke-only outline icons .icon-btn svg is styled for elsewhere. */
 .theme-play-btn svg{fill:currentColor;stroke:none}
 
-/* Shared hero car banner (intro sheet + Pro sheet): bleeds to the sheet's
-   own rounded top corners via negative margins matching .sheet's own
-   padding/border-radius, and fades into the sheet's background at the
-   bottom (a gradient over the image, not a hard edge) so a square source
-   photo reads as a wide banner rather than a cropped square pasted in. */
-.hero-banner{
-  position:relative;margin:-20px -20px 14px;aspect-ratio:2.6/1;
-  overflow:hidden;border-radius:22px 22px 0 0;
+/* Full-bleed art plates (intro sheet + Pro sheet): the supplied background
+   plate IS the popup — car at the top, its polygon texture running behind
+   every bit of content, no inner panel.
+
+   background-size is `100% auto`, not `cover`, on purpose: it pins the
+   image's scale to the sheet's WIDTH, so the car always lands at the same
+   fraction of the sheet no matter how tall the content makes it, and
+   `padding-top` (also width-relative) can reserve exactly the band the car
+   occupies. `cover` would rescale with height and drift the car out from
+   under that padding. The plates are pre-extended to 2x width and fade
+   into `background-color` at their bottom edge (see assets/start/), so a
+   sheet taller than the art has no seam.
+
+   Cars occupy 7-30.5% of plate width; content starts at 32%. */
+.plate-sheet{
+  background-repeat:no-repeat;
+  background-position:top center;
+  background-size:100% auto;
+  border-color:rgba(255,255,255,.08);
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.05);
 }
-.hero-banner img{width:100%;height:100%;object-fit:cover;object-position:50% 18%;display:block}
-.hero-banner::after{
-  content:"";position:absolute;inset:0;
-  background:linear-gradient(180deg, rgba(17,21,31,0) 55%, #11151f 96%);
+/* Reserves the band the car occupies, so content starts below it. A real
+   element rather than padding-% or ::before: percentage padding resolves
+   against the OVERLAY's width (the containing block), not the sheet's, and
+   a ::before would land above the sticky close button and push it off the
+   art. aspect-ratio here is width-relative to this box — i.e. to the
+   sheet — which is exactly the reference the plate's own scaling uses. */
+.plate-spacer{width:100%;aspect-ratio:1/.30}
+/* Chipless close button — on a photo the usual dark chip reads as a hole. */
+.plate-sheet .close-x{
+  background:none;border-color:transparent;box-shadow:none;color:rgba(255,255,255,.85);
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.9));
 }
+.plate-sheet .close-x:hover{color:#fff}
 
 /* ---------- First-launch mode picker (intro sheet) ---------- */
-.intro-sheet{max-width:520px}
+.intro-sheet{max-width:520px;background-color:#292228;background-image:url('../assets/start/intro-plate.jpg')}
 .intro-modes-title{
   font-family:var(--disp);font-weight:700;letter-spacing:.08em;font-size:12px;
   text-transform:uppercase;color:var(--muted);margin:14px 0 8px;
 }
 .mode-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+/* Translucent, not opaque: these sit on the intro sheet's art plate, and a
+   solid fill would punch three flat rectangles through the texture. */
 .mode-card{
   display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
-  border:1px solid var(--line);border-radius:14px;padding:12px 6px 10px;cursor:pointer;
-  background:linear-gradient(180deg,#1c2331,#141a25);color:var(--ink);
+  border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px 6px 10px;cursor:pointer;
+  background:rgba(255,255,255,.05);color:var(--ink);
   transition:border-color .12s ease,box-shadow .12s ease,transform .1s ease;
 }
 .mode-card:active{transform:scale(.97)}
@@ -639,7 +681,7 @@ input[type=range]::-moz-range-thumb{
 }
 
 /* ---------- Pro sheet ---------- */
-.pro-sheet{text-align:center}
+.pro-sheet{text-align:center;background-color:#222024;background-image:url('../assets/start/pro-plate.jpg')}
 .pro-feats{list-style:none;margin:12px 0 16px;padding:0;text-align:left}
 .pro-feats li{
   display:flex;gap:10px;align-items:center;padding:9px 4px;font-size:14px;
