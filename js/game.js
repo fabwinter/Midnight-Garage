@@ -999,6 +999,30 @@ function refreshHintTokens(){
 // session. Null whenever no override is currently in effect.
 let preBountyMode = null;
 
+// Set right before the calendar overlay is (re)opened as part of leaving a
+// just-finished daily win sheet — closeDailyOverlay() consumes it to hand
+// the player back to the campaign level they were on, rather than
+// stranding them on the now-solved daily board. Left false for the
+// ordinary "peek at the calendar mid-campaign" entry via the header's
+// calendar icon, where closing it must NOT re-navigate (the campaign
+// board underneath is already exactly where they were).
+let dailyReturnToCampaign = false;
+
+function returnFromDailyWin(){
+  dailyReturnToCampaign = true;
+  hideOverlay('winOverlay');
+  openDaily();
+}
+
+function closeDailyOverlay(){
+  hideOverlay('dailyOverlay');
+  stopSettingsMusic();
+  if(dailyReturnToCampaign){
+    dailyReturnToCampaign = false;
+    loadLevel(Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound())));
+  }
+}
+
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
@@ -1034,6 +1058,11 @@ function loadLevel(idx){
 
 function loadDailyLevel(dateStr){
   abandonIfMidLevel();
+  // Starting any daily attempt (including from the calendar's own "play a
+  // back-dated day" links, which skip closeDailyOverlay) supersedes a
+  // pending return-to-campaign from a previous win — this attempt's own
+  // win will re-arm it if it's won in turn.
+  dailyReturnToCampaign = false;
   const lv = dailyLevel(dateStr);
   mode = { type: 'daily', date: dateStr, number: dailyNumber(dateStr) };
   curLevel = lv;
@@ -2494,13 +2523,22 @@ function wire(){
   });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
-    e.target.closest('.overlay').classList.remove('show'); sfx('ui');
-    if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(e.target.closest('.overlay').id)) stopSettingsMusic();
+    const o = e.target.closest('.overlay');
+    sfx('ui');
+    // dailyOverlay gets its own close path (closeDailyOverlay) — closing
+    // the calendar right after a daily win hands the player back to the
+    // campaign level they were on; closing it any other time (the header
+    // icon's ordinary "peek at the calendar" entry) is a no-op beyond the
+    // usual hide, same as every other overlay here.
+    if(o.id === 'dailyOverlay'){ closeDailyOverlay(); return; }
+    o.classList.remove('show');
+    if(['settingsOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
+      if(o.id === 'dailyOverlay'){ closeDailyOverlay(); return; }
       o.classList.remove('show');
-      if(['settingsOverlay', 'dailyOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+      if(['settingsOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
@@ -2530,12 +2568,24 @@ function wire(){
   });
   $('moveReplayBtn').addEventListener('click', () => { sfx('ui'); playMoveReplay(); });
   $('watchSolBtn').addEventListener('click', () => { sfx('ui'); playSolutionReplay(); });
-  $('winCloseBtn').addEventListener('click', () => { sfx('ui'); cancelAuto(); hideOverlay('winOverlay'); });
+  $('winCloseBtn').addEventListener('click', () => {
+    sfx('ui'); cancelAuto();
+    // Daily has no "next level" to advance into on its own board — closing
+    // its win sheet any other way used to just leave the solved daily
+    // board sitting there with no route onward. Route through the
+    // calendar instead, same destination Share already lands on below.
+    if(mode.type === 'daily'){ returnFromDailyWin(); return; }
+    hideOverlay('winOverlay');
+  });
   $('nextBtn').addEventListener('click', async () => {
     if($('nextBtn').dataset.action === 'share'){
       const res = await shareText($('nextBtn').dataset.share);
       track('share_daily', { result: res, date: mode.date });
       if(res === 'copied') toast(t('toast.copied'));
+      // A cancelled native share sheet means they backed out, not that
+      // they're done here — leave the win sheet up so they can retry or
+      // just close it themselves instead of navigating out from under them.
+      if(res !== 'cancelled') returnFromDailyWin();
       return;
     }
     if($('nextBtn').dataset.action === 'sandbox'){
