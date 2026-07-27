@@ -600,6 +600,21 @@ input[type=range]::-moz-range-thumb{
    stroke-only outline icons .icon-btn svg is styled for elsewhere. */
 .theme-play-btn svg{fill:currentColor;stroke:none}
 
+/* Shared hero car banner (intro sheet + Pro sheet): bleeds to the sheet's
+   own rounded top corners via negative margins matching .sheet's own
+   padding/border-radius, and fades into the sheet's background at the
+   bottom (a gradient over the image, not a hard edge) so a square source
+   photo reads as a wide banner rather than a cropped square pasted in. */
+.hero-banner{
+  position:relative;margin:-20px -20px 14px;aspect-ratio:2.6/1;
+  overflow:hidden;border-radius:22px 22px 0 0;
+}
+.hero-banner img{width:100%;height:100%;object-fit:cover;object-position:50% 18%;display:block}
+.hero-banner::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg, rgba(17,21,31,0) 55%, #11151f 96%);
+}
+
 /* ---------- First-launch mode picker (intro sheet) ---------- */
 .intro-sheet{max-width:520px}
 .intro-modes-title{
@@ -625,7 +640,6 @@ input[type=range]::-moz-range-thumb{
 
 /* ---------- Pro sheet ---------- */
 .pro-sheet{text-align:center}
-.pro-car{width:120px;height:120px;margin:4px auto 6px;display:block}
 .pro-feats{list-style:none;margin:12px 0 16px;padding:0;text-align:left}
 .pro-feats li{
   display:flex;gap:10px;align-items:center;padding:9px 4px;font-size:14px;
