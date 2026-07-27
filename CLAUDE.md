@@ -97,6 +97,22 @@ need a real headless-browser check — see "Testing UI changes" below.
   development; the browser smoke test in "Testing UI changes" below is
   what catches this class of bug, `verify-levels.mjs` doesn't touch this
   render-time path at all).
+- **Tonight's Mark (bounty) forces its own pacing for the whole attempt —
+  no switching to Relaxed, or any other mode, mid-job.** `loadBountyLevel`
+  sets `save.settings.mode` to the mark's own pacing and remembers whatever
+  the player actually had selected in `preBountyMode`; `updateModeSelectUI`
+  disables `#modeSelect`'s buttons whenever `mode.type === 'bounty'`, and
+  the click handler guards the same case too (a `disabled` attribute isn't
+  the only thing that could fire a click). A bust swaps the busted sheet's
+  "Play in Relaxed Mode" escape hatch for "Quit" instead (`showBustedSheet`
+  branches on `mode.type`) — quitting and finishing (the win sheet's
+  "Done") both go through `leaveBounty()`, which restores `preBountyMode`
+  **before** computing which campaign level to return to. Order matters:
+  `save.modeLevel[save.settings.mode]` reads differently before vs. after
+  that restore, and computing the index under the bounty's still-forced
+  pacing then writing it back under the just-restored one would silently
+  jump the player's real progress in that mode to wherever the forced
+  pacing happened to be sitting.
 
 ## Coding conventions already established here
 

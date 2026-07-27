@@ -706,6 +706,13 @@ function showBustedSheet(kind){
   $('bustedFlag').textContent = t(prefix + 'flag');
   $('bustedTitle').textContent = t(prefix + 'title');
   $('bustedSub').textContent = t(prefix + 'sub');
+  // Tonight's Mark has no "switch to Relaxed" escape hatch (its pacing is
+  // forced for the whole attempt — see updateModeSelectUI/leaveBounty),
+  // so a bust there offers Quit instead: leave the job entirely rather
+  // than continue it under an easier mode.
+  const isBounty = mode.type === 'bounty';
+  $('bustedNoAlarmBtn').textContent = isBounty ? t('btn.quit') : t('btn.relaxed');
+  $('bustedNoAlarmBtn').dataset.action = isBounty ? 'quit' : 'relaxed';
   updateBustedRescueUI(kind);
   showOverlay('bustedOverlay');
   $('srLive').textContent = t(prefix + 'title');
@@ -1023,6 +1030,15 @@ function closeDailyOverlay(){
   }
 }
 
+function restorePreBountyMode(){
+  if(preBountyMode === null) return;
+  save.settings.mode = preBountyMode;
+  setGameMode(preBountyMode);
+  updateModeSelectUI();
+  preBountyMode = null;
+  persist();
+}
+
 function abandonIfMidLevel(){
   if(moves > 0 && !solvedAnim){
     track('level_abandon', {
@@ -1030,13 +1046,23 @@ function abandonIfMidLevel(){
       moves, time_s: Math.round((Date.now() - levelStart) / 1000),
     });
   }
-  if(preBountyMode !== null){
-    save.settings.mode = preBountyMode;
-    setGameMode(preBountyMode);
-    updateModeSelectUI();
-    preBountyMode = null;
-    persist();
-  }
+  restorePreBountyMode();
+}
+
+/* The only way out of a bounty attempt short of clearing it — Tonight's
+   Mark forces its own pacing (see loadBountyLevel) for the run's whole
+   duration, so unlike every other mode there's no in-place "switch to
+   Relaxed" escape hatch (see showBustedSheet/updateModeSelectUI). Quitting
+   (from the busted sheet) or finishing (the win sheet's Done) both land
+   here: restore whatever pacing the player actually had selected BEFORE
+   computing which campaign level to return to — restorePreBountyMode()
+   must run first, or the level index below gets read under the bounty's
+   still-active forced pacing and written back under the just-restored
+   one, jumping the player's real progress in that mode to whatever
+   position the FORCED pacing happened to be sitting at. */
+function leaveBounty(){
+  restorePreBountyMode();
+  loadLevel(Math.max(0, Math.min(save.modeLevel[save.settings.mode] ?? 0, campaignUpperBound())));
 }
 
 function loadLevel(idx){
@@ -1083,9 +1109,14 @@ function loadBountyLevel(dateStr){
     preBountyMode = save.settings.mode;
     save.settings.mode = pacing;
     setGameMode(pacing);
-    updateModeSelectUI();
   }
+  // Must land after save.settings.mode/pacing are settled but before
+  // updateModeSelectUI() below — that's what it reads mode.type off of to
+  // lock the mode-select for the whole attempt, pacing switch or not (a
+  // mark whose pacing happens to match whatever was already selected
+  // still needs the lock; it was previously skipped in that case).
   mode = { type: 'bounty', date: dateStr, number: lv.number, tier: lv.tier, condition: lv.condition, pacing };
+  updateModeSelectUI();
   curLevel = lv;
   persist();
   startBoard();
@@ -2308,7 +2339,14 @@ function updateModeSelectUI(){
   const m = save.settings.mode;
   document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
   document.querySelectorAll('#introModeCards .mode-card').forEach(b => b.classList.toggle('cur', b.dataset.mode === m));
-  $('modeDesc').textContent = t('mode.desc.' + m);
+  // Tonight's Mark forces its own pacing for the whole attempt (see
+  // loadBountyLevel) — no in-place switch to another mode, Relaxed
+  // included. Disabling the buttons here is the visible half of that;
+  // the click handler below still guards against it too, since a
+  // disabled attribute alone doesn't stop every path to firing a click.
+  const bountyLocked = mode.type === 'bounty';
+  document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.disabled = bountyLocked);
+  $('modeDesc').textContent = bountyLocked ? t('toast.bountylocked') : t('mode.desc.' + m);
 }
 
 function wireSettings(){
@@ -2319,6 +2357,7 @@ function wireSettings(){
   document.querySelectorAll('#modeSelect .mode-btn').forEach(b => b.addEventListener('click', () => {
     const m = b.dataset.mode;
     if(save.settings.mode === m) return;
+    if(mode.type === 'bounty'){ sfx('deny'); toast(t('toast.bountylocked')); return; }
     sfx('ui');
     save.settings.mode = m;
     setGameMode(m);
@@ -2520,6 +2559,7 @@ function wire(){
   $('settingsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay');
     updateThemeButtonUI();   // re-sync in case the theme ended/kept playing while Settings was closed
+    updateModeSelectUI();    // re-sync the bounty mode-lock too, same reason
   });
   $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
@@ -2545,10 +2585,15 @@ function wire(){
   $('resetBtn').addEventListener('click', () => { sfx('ui'); startBoard(); toast(t('toast.reset')); });
   $('bustedRetryBtn').addEventListener('click', () => { sfx('ui'); hideOverlay('bustedOverlay'); startBoard(); setTimeout(() => $('board').focus(), 100); });
   $('bustedNoAlarmBtn').addEventListener('click', () => {
+    sfx('ui');
+    if($('bustedNoAlarmBtn').dataset.action === 'quit'){
+      hideOverlay('bustedOverlay');
+      leaveBounty();
+      return;
+    }
     // Deliberate exception to "modes don't share a level": this is a
     // retry-easier escape hatch right after a bust, so it stays on the
     // same level rather than jumping to Relaxed's own tracked position.
-    sfx('ui');
     save.settings.mode = 'relaxed';
     setGameMode('relaxed');
     updateModeSelectUI();
@@ -2575,6 +2620,10 @@ function wire(){
     // board sitting there with no route onward. Route through the
     // calendar instead, same destination Share already lands on below.
     if(mode.type === 'daily'){ returnFromDailyWin(); return; }
+    // Same reasoning for bounty: its forced pacing means there's no board
+    // to just sit on afterward either — closing X should leave the job
+    // the same way "Done" does below, not strand the player on it.
+    if(mode.type === 'bounty'){ hideOverlay('winOverlay'); leaveBounty(); return; }
     hideOverlay('winOverlay');
   });
   $('nextBtn').addEventListener('click', async () => {
@@ -2596,7 +2645,7 @@ function wire(){
     }
     if($('nextBtn').dataset.action === 'bounty'){
       cancelAuto(); sfx('ui');
-      proceedOrReveal(() => hideOverlay('winOverlay'));
+      proceedOrReveal(() => { hideOverlay('winOverlay'); leaveBounty(); });
       return;
     }
     if($('nextBtn').dataset.action === 'impound'){
