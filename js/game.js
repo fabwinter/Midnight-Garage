@@ -8,7 +8,7 @@ import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { LEGACY_CAMPAIGN_KEYS_V1 } from './legacy-campaign-keys-v1.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener, isContinuousMode } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -742,7 +742,13 @@ function busted(kind){
   solvedAnim = true;
   clearHint(); clearHand();
   clearPursuitTimer();
-  stopAttemptTrack();
+  // Same continuity rule as the win path: Heist's set list plays through a
+  // bust and on into the retry, because stopping here would rewind the
+  // current track and restart it from the top on the next attempt — the
+  // "starts and stops at every level" behaviour the set list replaced. The
+  // bust still reads as a bust; sfx('busted') lands over the music exactly
+  // as every other cue does. Pursuit stops, as its music always has.
+  if(!isContinuousMode(save.settings.mode)) stopAttemptTrack();
   sfx('busted');
   haptic('thudHeavy');
   track(kind === 'pursuit' ? 'pursuit_busted' : 'alarm_busted', {
@@ -1746,12 +1752,12 @@ function winSequence(){
   solvedAnim = true;
   clearHint(); clearHand();
   clearPursuitTimer();
-  // Relaxed's music is a continuous session-long playlist (see
-  // attemptContinuous in js/audio.js), not tied to any one level — a win
-  // must let it keep playing straight into whatever's next, same as it
-  // already does through Retry/Reset. Heist/Pursuit still stop clean: the
-  // tension music belongs to that one attempt.
-  if(save.settings.mode !== 'relaxed') stopAttemptTrack();
+  // Relaxed and Heist both run a continuous session-long set list (see
+  // CONTINUOUS_MODES in js/audio.js), not music tied to any one level — a
+  // win must let it keep playing straight into whatever's next, same as it
+  // already does through Retry/Reset. Only Pursuit still stops clean: its
+  // tension music genuinely belongs to that one timed attempt.
+  if(!isContinuousMode(save.settings.mode)) stopAttemptTrack();
   updateHud();
   sfx('win');
   haptic('success');
