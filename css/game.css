@@ -50,7 +50,21 @@ body::before{
   content:"";position:fixed;inset:0;pointer-events:none;opacity:.35;
   background:repeating-linear-gradient(90deg, transparent 0 140px, rgba(255,255,255,.012) 140px 142px);
 }
-.wrap{width:100%;max-width:560px;padding:14px 14px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:calc(14px + env(safe-area-inset-top))}
+/* min-height + border-box turn .wrap into a full-viewport flex column with
+   real leftover space to distribute — without it, .wrap only ever sizes to
+   its content and the auto-margin split below (.hud/.controls) has nothing
+   to split. header/hud stay pinned to the top and .ad-slot pinned to the
+   bottom; the slack in between is what pushes the board down into
+   one-handed thumb reach (docs/MOBILE-LAYOUT-PLAN.md item 1) while keeping
+   a real gap above and below it, in proportion to whatever height the
+   device/browser-chrome actually leaves — never a fixed px guess that
+   under- or over-shoots on a shorter viewport (e.g. Safari's own toolbar). */
+.wrap{
+  width:100%;max-width:560px;min-height:100dvh;box-sizing:border-box;
+  padding:14px 14px calc(18px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  padding-top:calc(14px + env(safe-area-inset-top));
+}
 
 /* ---------- Header ---------- */
 header{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
@@ -96,7 +110,10 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 
 /* ---------- HUD ---------- */
-.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:stretch}
+/* margin-bottom:auto is the first half of the slack split described on
+   .wrap above — it claims the free space between the HUD and the board
+   rather than the 12px gap every other pair of children gets. */
+.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:stretch;margin-bottom:auto}
 .hud .chip{
   border:1px solid var(--line);border-radius:12px;padding:7px 12px;
   background:linear-gradient(180deg,#181e2a,#131824);
@@ -342,7 +359,13 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 @keyframes pulsehint{0%,100%{opacity:0;transform:scale(.85)}20%,80%{opacity:1;transform:scale(1)}}
 
 /* ---------- Controls ---------- */
-.controls{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+/* margin-bottom:auto is the second half of the .wrap slack split — an
+   equal (flexbox splits free space evenly across every auto margin in the
+   same flex line) share of leftover height lands here too, so the board
+   gets breathing room on BOTH sides rather than being shoved to one edge
+   (see docs/MOBILE-LAYOUT-PLAN.md item 1 and item 3's mockup — variant
+   "C", chosen over pushing the board all the way down). */
+.controls{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:auto}
 .controls.two{grid-template-columns:repeat(2,1fr)}
 .controls.one{grid-template-columns:1fr}
 .btn{
@@ -389,6 +412,12 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .skip-row{width:100%;display:none;justify-content:center;margin-top:-2px}
 .skip-row.show{display:flex}
 .skip-row .btn{padding:9px 22px;font-size:12px;color:var(--muted);border-style:dashed;background:none;box-shadow:none}
+
+/* Reserved ad footprint — see the comment on the element in index.html.
+   flex:none so it never shrinks or grows: a real banner (standard mobile
+   size) always gets exactly this much room, independent of the .hud/
+   .controls auto-margin split above it. */
+.ad-slot{width:100%;height:50px;flex:none;border-top:1px solid rgba(255,255,255,.06)}
 
 /* ---------- Overlays ---------- */
 .overlay{
