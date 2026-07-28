@@ -64,25 +64,38 @@ function pickTrack(mode){
   return pick;
 }
 
-/* Nudges the browser to start fetching/buffering every track in a mode's
-   pool ahead of an actual attempt. Pursuit shuffles across 4 different
-   files (unlike Heist's single, quickly-warm-cached track), so on a slow
-   connection the very first attempt after switching to Pursuit can pick a
-   track that's still mid-download when the (often short, timer-driven)
-   attempt already ends — this makes that "silent because it never
-   finished loading" case rare instead of routine. Fire-and-forget: these
-   elements are never played, just left to buffer in the background. */
+/* Nudges the browser to start fetching/buffering one track from a mode's
+   pool ahead of an actual attempt, then lets the rest of the pool warm in
+   the background once the browser is idle. Pursuit shuffles across 4
+   different files (unlike Heist's single, quickly-warm-cached track), so
+   on a slow connection the very first attempt after switching to Pursuit
+   can pick a track that's still mid-download when the (often short,
+   timer-driven) attempt already ends — warming one track immediately keeps
+   that "silent because it never finished loading" case rare, without
+   pulling a whole pool (up to ~16 MB for Relaxed) on every mode switch.
+   Picked independently of pickTrack/lastPick — going through pickTrack here
+   would mark this track as "just played" and make the real pick at attempt
+   start actively avoid the one we just spent bandwidth warming. Fire-and-
+   forget: these elements are never played, just left to buffer. */
+function warmTrack(src){
+  if(!src || warmed.has(src)) return;
+  warmed.add(src);
+  const a = new Audio(src);
+  a.preload = 'auto';
+  a.volume = 0;
+  a.load();
+}
+
 function warmPool(mode){
   const pool = TRACK_POOLS[mode];
-  if(!pool) return;
-  for(const src of pool){
-    if(warmed.has(src)) continue;
-    warmed.add(src);
-    const a = new Audio(src);
-    a.preload = 'auto';
-    a.volume = 0;
-    a.load();
-  }
+  if(!pool || !pool.length) return;
+  const first = pool[Math.floor(Math.random() * pool.length)];
+  warmTrack(first);
+  const rest = pool.filter(src => src !== first);
+  if(!rest.length) return;
+  const warmRest = () => rest.forEach(warmTrack);
+  if('requestIdleCallback' in window) requestIdleCallback(warmRest, { timeout: 4000 });
+  else setTimeout(warmRest, 1500);
 }
 
 /* Plays `audio`, retrying on the next pointerdown/keydown if the browser's
