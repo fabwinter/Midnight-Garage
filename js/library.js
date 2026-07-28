@@ -26,9 +26,30 @@ let LIB = {
 };
 let version = 0;
 
+/* The July '26 art pass converted assets/cars/ from PNG to WebP (see
+   tools/optimize-art.mjs). An admin's persisted library still points at
+   the old .png paths — `disabledBase` entries would silently stop
+   matching (a retired asset quietly returning to rotation) and a
+   `heroPhotos` override would 404 to a broken hero. Rewriting the
+   extension on load fixes both. Data: URLs (an upload not yet promoted)
+   are untouched — only real asset paths are rewritten. */
+function migrateArtPaths(lib){
+  // NB: the ".png" here is load-bearing legacy data, not a live asset
+  // path — tools/optimize-art.mjs deliberately does NOT rewrite this file
+  // (it would turn this into a no-op), see its REF_FILES comment.
+  const fix = p => (typeof p === 'string' && /^assets\/cars\/.+\.png$/i.test(p))
+    ? p.replace(/\.png$/i, '.webp') : p;
+  lib.disabledBase = (lib.disabledBase || []).map(fix);
+  for(const carId of Object.keys(lib.heroPhotos || {})) lib.heroPhotos[carId] = fix(lib.heroPhotos[carId]);
+  for(const cat of ['sedans', 'trucks', 'trailers']){
+    for(const entry of lib[cat] || []) if(entry){ entry.img = fix(entry.img); entry.editOf = fix(entry.editOf); }
+  }
+  return lib;
+}
+
 export async function loadLibrary(){
   const saved = await load(KEY);
-  if(saved) LIB = Object.assign(LIB, saved);
+  if(saved) LIB = migrateArtPaths(Object.assign(LIB, saved));
   version++;
   return LIB;
 }

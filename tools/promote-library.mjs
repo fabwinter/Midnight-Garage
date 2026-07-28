@@ -116,8 +116,8 @@ function promoteCategory(category, arrayName){
         console.error(`✗ ${category}[${i}] (${entry.color}): img isn't a data URL — skipped (already promoted?)`);
         return;
       }
-      if(!/^assets\/cars\/[^/]+\.png$/.test(entry.editOf)){
-        console.error(`✗ ${category}[${i}] (${entry.color}): editOf '${entry.editOf}' isn't a plain assets/cars/*.png path — skipped`);
+      if(!/^assets\/cars\/[^/]+\.webp$/.test(entry.editOf)){
+        console.error(`✗ ${category}[${i}] (${entry.color}): editOf '${entry.editOf}' isn't a plain assets/cars/*.webp path — skipped`);
         return;
       }
       if(!DRY_RUN) writeFileSync(join(ROOT, entry.editOf), Buffer.from(m[1], 'base64'));
@@ -126,7 +126,7 @@ function promoteCategory(category, arrayName){
       console.log(`✓ ${arrayName}: overwrote ${entry.editOf} in place (${entry.color})`);
       return;
     }
-    const filename = `library-${category}-${stamp}-${i}-${slugify(entry.color)}.png`;
+    const filename = `library-${category}-${stamp}-${i}-${slugify(entry.color)}.webp`;
     const path = decodeDataUrlToFile(entry.img, filename);
     if(!path){
       console.error(`✗ ${category}[${i}] (${entry.color}): img isn't a data URL — skipped (already promoted?)`);
@@ -168,7 +168,7 @@ promoteCategory('trailers', 'TRAILER_PHOTOS');
 
 let heroCount = 0;
 Object.entries(lib.heroPhotos || {}).forEach(([carId, dataUrl]) => {
-  const filename = `hero-library-${carId}-${stamp}.png`;
+  const filename = `hero-library-${carId}-${stamp}.webp`;
   const path = decodeDataUrlToFile(dataUrl, filename);
   if(!path){
     console.error(`✗ hero photo for '${carId}': img isn't a data URL — skipped (already promoted?)`);

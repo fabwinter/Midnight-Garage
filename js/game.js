@@ -116,6 +116,10 @@ const wrapEl = document.querySelector('.wrap');
 const stageEl = document.querySelector('.stage');
 let CELL = 64;
 
+// Total wall-clock window the board's drop-in cascade is spread over, no
+// matter how many vehicles are on it (see buildPieces).
+const ENTER_STAGGER_MS = 180;
+
 // A cell any bigger than this needs an arm-swing, not a thumb-drag, to get
 // a piece across the board — see css/game.css's --board-col-max comment
 // (docs/MOBILE-LAYOUT-PLAN.md item 2). Independent of the width cap below:
@@ -385,7 +389,14 @@ function buildPieces(){
       towCar,
     });
     el.classList.add('enter');
-    el.style.animationDelay = (i * 0.028) + 's';
+    /* Spread the drop-in across a FIXED window rather than a fixed
+       per-piece step. At a flat 28ms/piece the stagger ran as long as the
+       board was busy — a 14-vehicle level took ~390ms before the last car
+       even started its 420ms drop, which read as "the cars are loading
+       one by one" rather than as a flourish. Dividing a constant window
+       by the piece count means every board finishes settling at the same
+       moment, and a denser board just cascades faster. */
+    el.style.animationDelay = ((i / Math.max(1, pieces.length)) * ENTER_STAGGER_MS / 1000) + 's';
     el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
     board.appendChild(el);
     attachDrag(el, i);

@@ -695,7 +695,7 @@ input[type=range]::-moz-range-thumb{
 .plate-sheet .close-x:hover{color:#fff}
 
 /* ---------- First-launch mode picker (intro sheet) ---------- */
-.intro-sheet{max-width:520px;background-color:#292228;background-image:url('../assets/start/intro-plate.jpg')}
+.intro-sheet{max-width:520px;background-color:#292228;background-image:url('../assets/start/intro-plate.webp')}
 .intro-modes-title{
   font-family:var(--disp);font-weight:700;letter-spacing:.08em;font-size:12px;
   text-transform:uppercase;color:var(--muted);margin:14px 0 8px;
@@ -720,7 +720,7 @@ input[type=range]::-moz-range-thumb{
 }
 
 /* ---------- Pro sheet ---------- */
-.pro-sheet{text-align:center;background-color:#222024;background-image:url('../assets/start/pro-plate.jpg')}
+.pro-sheet{text-align:center;background-color:#222024;background-image:url('../assets/start/pro-plate.webp')}
 .pro-feats{list-style:none;margin:12px 0 16px;padding:0;text-align:left}
 .pro-feats li{
   display:flex;gap:10px;align-items:center;padding:9px 4px;font-size:14px;
@@ -757,14 +757,14 @@ input[type=range]::-moz-range-thumb{
   #startOverlay{
     background-image:
       linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-landscape.jpg');
+      url('../assets/start/start-landscape.webp');
   }
 }
 @media (orientation:portrait){
   #startOverlay{
     background-image:
       linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-portrait.jpg');
+      url('../assets/start/start-portrait.webp');
   }
 }
 .start-cta{
