@@ -112,12 +112,52 @@ async function persist(){
 /* ================== BOARD RENDER ================== */
 const board = $('board');
 const gate = $('gate');
+const wrapEl = document.querySelector('.wrap');
+const stageEl = document.querySelector('.stage');
 let CELL = 64;
 
+// A cell any bigger than this needs an arm-swing, not a thumb-drag, to get
+// a piece across the board — see css/game.css's --board-col-max comment
+// (docs/MOBILE-LAYOUT-PLAN.md item 2). Independent of the width cap below:
+// this is the actual safety net if some future viewport is wider still.
+const MAX_CELL = 110;
+
+// Real height used by everything in .wrap EXCEPT .stage (header/hud/coach/
+// controls/ad-slot, their gaps, and .wrap's own padding) — measured
+// live rather than a second hardcoded "chrome is about this tall" guess,
+// so it can't drift out of sync with the actual markup/CSS the way the
+// old flat `- 320` did the moment docs/MOBILE-LAYOUT-PLAN.md item 1's
+// auto-margin split changed how that space gets used. This is a MINIMUM
+// footprint check (could the board fit at all without overflowing), not a
+// "fill the rest of the screen" target — the .hud/.controls auto-margins
+// already own turning any leftover space into breathing room.
+function chromeHeight(){
+  let h = 0;
+  let visible = 0;
+  for(const el of wrapEl.children){
+    if(getComputedStyle(el).display === 'none') continue;
+    visible++;
+    if(el === stageEl) continue;
+    h += el.getBoundingClientRect().height;
+  }
+  const cs = getComputedStyle(wrapEl);
+  h += parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const gapPx = parseFloat(cs.rowGap) || 12;
+  h += gapPx * Math.max(0, visible - 1);
+  return h;
+}
+
 function layout(){
-  const vw = Math.min(window.innerWidth, 560) - 28 - 32;
-  const vh = window.innerHeight - 320;
-  CELL = Math.floor(Math.max(40, Math.min(vw, Math.max(vh, 240))) / 6);
+  // 28 = .wrap's own 14px×2 horizontal/vertical-analogue padding; 32 =
+  // .frame's 16px×2 — neither is the board's own size, both are chrome
+  // around it. chromeHeight() covers everything ELSE in .wrap (it
+  // explicitly excludes .stage), so vh needs this same 32 subtracted too,
+  // or it's solving for .stage's size (frame + board) while dividing by 6
+  // as if it were the board alone — that under-subtracts and overflows.
+  const maxColWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--board-col-max')) || 560;
+  const vw = Math.min(window.innerWidth, maxColWidth) - 28 - 32;
+  const vh = window.innerHeight - chromeHeight() - 32;
+  CELL = Math.min(MAX_CELL, Math.floor(Math.max(40, Math.min(vw, Math.max(vh, 240))) / 6));
   document.documentElement.style.setProperty('--cell', CELL + 'px');
   gate.style.top = (16 + EXIT_ROW * CELL - 4) + 'px';
   gate.style.height = (CELL + 8) + 'px';

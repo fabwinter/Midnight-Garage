@@ -78,10 +78,24 @@ and stay tappable, or admin mode becomes unreachable.
 
 ---
 
-## 2. iPad — wasted space
+## 2. iPad — wasted space ✅ done
 
-**Problem.** Two hard 560px caps mean an iPad renders a phone-width column
-centred in a sea of background:
+Fixed: the 560px cap is now `--board-col-max:720px` (a single CSS custom
+property, read by `layout()` via `getComputedStyle` instead of a second
+hardcoded literal), and the `vh` chrome reserve is computed live by a new
+`chromeHeight()` — the sum of every other `.wrap` child's real rendered
+height, rather than a flat `- 320` guess that was already stale the
+moment item 1's auto-margin split shipped. Portrait iPad (820×1180) goes
+from an 83px cell to 110px (`MAX_CELL`, chosen so it's still a thumb-drag
+not an arm-swing); verified no overflow at 390×844, 375×667 (iPhone SE),
+820×1180, 1180×820 (iPad landscape), and 1440×900 (desktop browser).
+Landscape tablet still uses the same portrait-shaped column rather than a
+side-rail — that stretch goal from below was left undone; worth a follow-up
+if it's wanted, but out of scope for this pass.
+
+**Problem (original diagnosis, kept for context).** Two hard 560px caps
+meant an iPad rendered a phone-width column centred in a sea of
+background:
 
 - `.wrap{max-width:560px}` — `css/game.css:53`
 - `Math.min(window.innerWidth, 560)` in `layout()` — `js/game.js:118`

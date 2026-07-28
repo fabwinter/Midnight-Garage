@@ -23,6 +23,15 @@
   --accent:#ffb454;          /* chapter palette swap hooks in here */
   --cell:64px;
   --radius:18px;
+  /* Single source of truth for the board column's max width — read back
+     by js/game.js's layout() (getComputedStyle) instead of a second
+     hardcoded 560/etc. literal there, so the two can't drift out of sync
+     (docs/MOBILE-LAYOUT-PLAN.md item 2). 720px = 60px of .wrap+.frame
+     chrome padding either side of a 660px board, i.e. a 110px cell at
+     most — comfortably bigger than a phone's ~55-65px cells (uses far
+     more of an iPad's screen) without ever asking for an arm-swing-sized
+     drag on a large tablet or desktop browser window. */
+  --board-col-max:720px;
   --disp:'Chakra Petch', 'Avenir Next Condensed', 'Arial Narrow', system-ui, sans-serif;
   --body:'Inter', -apple-system, system-ui, 'Segoe UI', sans-serif;
 }
@@ -60,7 +69,7 @@ body::before{
    device/browser-chrome actually leaves — never a fixed px guess that
    under- or over-shoots on a shorter viewport (e.g. Safari's own toolbar). */
 .wrap{
-  width:100%;max-width:560px;min-height:100dvh;box-sizing:border-box;
+  width:100%;max-width:var(--board-col-max);min-height:100dvh;box-sizing:border-box;
   padding:14px 14px calc(18px + env(safe-area-inset-bottom));
   display:flex;flex-direction:column;align-items:center;gap:12px;
   padding-top:calc(14px + env(safe-area-inset-top));
