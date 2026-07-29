@@ -97,6 +97,14 @@
   <div class="skip-row" id="skipRow">
     <button class="btn" id="skipBtn">Skip (1★)</button>
   </div>
+  <!-- Reserved footprint for a bottom banner ad — kept as permanent layout
+       space (docs/MOBILE-LAYOUT-PLAN.md item 3) rather than something an
+       ad pops in/out of, so the board never jumps when one loads or
+       unloads. Empty for now: js/ads.js's setBannerVisible is disabled by
+       default (MONETIZATION-PLAN.md §5.2) and, when it is on, currently
+       renders as its own position:fixed overlay rather than into this
+       element — reconcile that if/when a real banner actually ships here. -->
+  <div class="ad-slot" id="adSlot" aria-hidden="true"></div>
 </div>
 
 <canvas id="fx"></canvas>

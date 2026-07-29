@@ -16,8 +16,46 @@ let attemptAudio = null;
 let attemptTrackSrc = null;
 let attemptActive = false; // true only while a level attempt is in progress
 let duckAttempt = false;   // true while menu/tab music has priority over the attempt track
+/* Declared here rather than down with the menu/theme players because the
+   Heist set list opens on the very same file the start screen plays — see
+   HEIST_SET_LIST. `const` isn't hoisted, so this has to precede it. */
+const VELVET_GLOVE = 'assets/audio/velvet-glove.m4a';
+const CLEAN_GETAWAY = 'assets/audio/clean-getaway.m4a';
+
+/* Heist is a single continuous set list, not a per-attempt track, and it is
+   played in this exact order rather than shuffled — hence the array order
+   below is load-bearing, not incidental.
+
+   Velvet Glove is deliberately index 0: it's the theme the start screen is
+   already playing, and entering a job adopts that very element mid-playback
+   (adoptMenuAsAttempt) instead of restarting anything, so the music runs
+   unbroken from app launch through the first job and on into the rest of
+   the list.
+
+   The order alternates character so no two neighbours feel alike — measured
+   rather than guessed, since these tracks all sit in a narrow 115-129 BPM
+   band and tempo alone can't separate them. The axes that do: onset density
+   (attacks/sec) and dynamic variation (RMS spread). That gives four groups
+   — steady/driving, dynamic/sectional, sparse/airy, and mid — and the list
+   never places two of the same group back to back, including across the
+   wrap from the last track back to Velvet Glove. Cherry Buick Run closes at
+   85 BPM as a deliberate cool-down before the theme restates.
+   ~28 minutes before anything repeats. */
+const HEIST_SET_LIST = [
+  VELVET_GLOVE,                                   // 115 BPM  sparse   (theme)
+  'assets/audio/heist-silver-getaway.m4a',        // 129      steady
+  'assets/audio/heist-glovebox-prayer.m4a',       // 123      dynamic
+  'assets/audio/heist-midnight-joyride.m4a',      // 115      mid
+  'assets/audio/heist-speeding-away.m4a',         // 129      steady
+  'assets/audio/heist-let-them-go.m4a',           // 123      sparse
+  'assets/audio/heist-chrome-getaway.m4a',        // 126      dynamic
+  'assets/audio/heist-time-is-ticking.m4a',       // 129      mid
+  'assets/audio/heist-new-town-somehow.m4a',      // 120      sparse
+  'assets/audio/heist-cherry-buick-run.m4a',      //  85      steady  (cool-down)
+];
+
 const TRACK_POOLS = {
-  heist: ['assets/audio/midnight-in-the-vault.mp3'],
+  heist: HEIST_SET_LIST,
   pursuit: [
     'assets/audio/pursuit-1.mp3',
     'assets/audio/pursuit-2.mp3',
@@ -35,6 +73,20 @@ const TRACK_POOLS = {
     'assets/audio/relaxed-velvet-after-hours.mp3',
   ],
 };
+/* Modes whose music is one continuous session-long stream rather than a
+   fresh track per attempt: a level boundary (load, retry, reset, win, even
+   a bust) must never cut it or restart it. Heist joined Relaxed here when
+   it went from a single looping track to a real set list. */
+const CONTINUOUS_MODES = new Set(['relaxed', 'heist']);
+export function isContinuousMode(mode){ return CONTINUOUS_MODES.has(mode); }
+
+/* Heist plays its list in the authored order (see HEIST_SET_LIST); the
+   other pools shuffle. The cursor is where the set list has got to, so
+   leaving Heist for another mode and coming back resumes the running order
+   rather than restarting it. */
+const SEQUENCED_MODES = new Set(['heist']);
+const seqCursor = { heist: 0 };
+
 const lastPick = { heist: null, pursuit: null, relaxed: null };   // avoids back-to-back repeats
 let curAttemptTrack = null;   // the src chosen for the attempt in progress — stable across duck/resume
 const warmed = new Set();     // srcs already nudged to preload, so a pool only warms once per session
@@ -57,6 +109,11 @@ let continuousPoolMode = null;
 function pickTrack(mode){
   const pool = TRACK_POOLS[mode];
   if(!pool || !pool.length) return null;
+  if(SEQUENCED_MODES.has(mode)){
+    const pick = pool[seqCursor[mode] % pool.length];
+    seqCursor[mode] = (seqCursor[mode] + 1) % pool.length;
+    return pick;
+  }
   if(pool.length === 1) return pool[0];
   let pick;
   do{ pick = pool[Math.floor(Math.random() * pool.length)]; }while(pick === lastPick[mode]);
@@ -64,25 +121,52 @@ function pickTrack(mode){
   return pick;
 }
 
-/* Nudges the browser to start fetching/buffering every track in a mode's
-   pool ahead of an actual attempt. Pursuit shuffles across 4 different
-   files (unlike Heist's single, quickly-warm-cached track), so on a slow
-   connection the very first attempt after switching to Pursuit can pick a
-   track that's still mid-download when the (often short, timer-driven)
-   attempt already ends — this makes that "silent because it never
-   finished loading" case rare instead of routine. Fire-and-forget: these
-   elements are never played, just left to buffer in the background. */
+/* Nudges the browser to start fetching/buffering one track from a mode's
+   pool ahead of an actual attempt, then lets the rest of the pool warm in
+   the background once the browser is idle. Pursuit shuffles across 4
+   different files (unlike Heist's single, quickly-warm-cached track), so
+   on a slow connection the very first attempt after switching to Pursuit
+   can pick a track that's still mid-download when the (often short,
+   timer-driven) attempt already ends — warming one track immediately keeps
+   that "silent because it never finished loading" case rare, without
+   pulling a whole pool (up to ~16 MB for Relaxed) on every mode switch.
+   Picked independently of pickTrack/lastPick — going through pickTrack here
+   would mark this track as "just played" and make the real pick at attempt
+   start actively avoid the one we just spent bandwidth warming. Fire-and-
+   forget: these elements are never played, just left to buffer. */
+function warmTrack(src){
+  if(!src || warmed.has(src)) return;
+  warmed.add(src);
+  const a = new Audio(src);
+  a.preload = 'auto';
+  a.volume = 0;
+  a.load();
+}
+
 function warmPool(mode){
   const pool = TRACK_POOLS[mode];
-  if(!pool) return;
-  for(const src of pool){
-    if(warmed.has(src)) continue;
-    warmed.add(src);
-    const a = new Audio(src);
-    a.preload = 'auto';
-    a.volume = 0;
-    a.load();
-  }
+  if(!pool || !pool.length) return;
+  // Only ever the ONE track that plays next. An earlier version warmed the
+  // whole remaining pool on an idle callback, which was tolerable at 4-5
+  // tracks and is not at Heist's 10 — that would pull ~32 MB of set list
+  // nobody has asked to hear yet. warmNextInSequence() keeps exactly one
+  // track ahead instead, which is all a continuous playlist ever needs.
+  warmTrack(SEQUENCED_MODES.has(mode)
+    ? pool[seqCursor[mode] % pool.length]
+    : pool[Math.floor(Math.random() * pool.length)]);
+}
+
+/* Buffers the track after the one now playing, so a continuous playlist
+   never advances into something that hasn't started downloading. Deferred
+   to idle: the current track has minutes left to run, so this has no reason
+   to compete with anything the player is actually looking at. */
+function warmNextInSequence(mode){
+  const pool = TRACK_POOLS[mode];
+  if(!pool || !pool.length || !SEQUENCED_MODES.has(mode)) return;
+  const next = pool[seqCursor[mode] % pool.length];
+  const go = () => warmTrack(next);
+  if('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 4000 });
+  else setTimeout(go, 1500);
 }
 
 /* Plays `audio`, retrying on the next pointerdown/keydown if the browser's
@@ -109,11 +193,10 @@ function playWithRetry(audio, targetVol, fadeMs, isStale, onPlaying){
   attempt();
 }
 
-// Menu/theme music
+// Menu/theme music (VELVET_GLOVE/CLEAN_GETAWAY are declared up with
+// HEIST_SET_LIST, which needs the former as its opening track).
 let menuAudio = null;
 let settingsAudio = null;
-const VELVET_GLOVE = 'assets/audio/velvet-glove.mp3';
-const CLEAN_GETAWAY = 'assets/audio/clean-getaway.mp3';
 
 /* The Settings "Play" button is a deliberate, full-length listen to the
    theme — distinct from menuAudio's ambient pre-intro loop of the same
@@ -197,11 +280,23 @@ function ensureAttemptAudio(src){
    crossfadeOutOtherTracks — so there's never a silent gap between them. */
 export function startAttemptTrack(mode){
   attemptActive = true;
-  if(mode === 'relaxed' && attemptContinuous && attemptAudio && !attemptAudio.paused
-     && TRACK_POOLS.relaxed.includes(attemptTrackSrc)){
+  if(isContinuousMode(mode) && attemptContinuous && continuousPoolMode === mode
+     && attemptAudio && !attemptAudio.paused
+     && TRACK_POOLS[mode].includes(attemptTrackSrc)){
     return;
   }
-  attemptContinuous = mode === 'relaxed';
+  // Heist opens on the theme the start screen is already playing, so the
+  // first job of a session takes that element over mid-note rather than
+  // starting anything: no restart, no crossfade, no gap. Only valid while
+  // the menu track really is the audible one — any other entry into Heist
+  // (switching modes mid-session, returning after Pursuit) falls through
+  // and resumes the set list from its cursor.
+  if(mode === 'heist' && !duckAttempt && menuAudio && !menuAudio.paused
+     && menuAudio.currentSrc && menuAudio.currentSrc.endsWith(VELVET_GLOVE)){
+    adoptMenuAsAttempt();
+    return;
+  }
+  attemptContinuous = isContinuousMode(mode);
   continuousPoolMode = mode;
   curAttemptTrack = pickTrack(mode);
   const src = curAttemptTrack;
@@ -217,11 +312,44 @@ export function startAttemptTrack(mode){
   }
 }
 
-/* Relaxed-only: fires when the current playlist track reaches its own
-   natural end. Picks the next track (never repeating the one that just
-   played) and crossfades into it — the playlist keeps going indefinitely,
-   independent of whatever level is loaded, until something actually stops
-   it (switching modes, muting, or a genuine stopAttemptTrack). */
+/* Takes ownership of the still-playing menu element and makes it the head
+   of the Heist set list. The element itself is reused rather than its src
+   copied to a new Audio, because only the original element holds the
+   decoded buffer and playback position — recreating it is exactly the gap
+   this exists to avoid.
+
+   menuAudio is dropped to null immediately so the menu no longer considers
+   it its own: stopMenuMusic() would otherwise fade out and rewind the set
+   list the moment anything navigated. The volume lift is a fade rather than
+   a jump because the menu mixes at 0.7x while an attempt track sits at
+   full; fadeIn() clears any in-flight fade and ramps from the live volume,
+   so catching the element mid-fade is safe. */
+function adoptMenuAsAttempt(){
+  const a = menuAudio;
+  menuAudio = null;
+  const stale = attemptAudio;
+  if(stale && stale !== a){
+    stale.onended = null;
+    fadeOut(stale, 300).then(() => { stale.pause(); stale.currentTime = 0; });
+  }
+  a.loop = false;                    // the set list advances instead of repeating
+  a.onended = advanceContinuousTrack;
+  attemptAudio = a;
+  attemptTrackSrc = VELVET_GLOVE;
+  curAttemptTrack = VELVET_GLOVE;
+  attemptContinuous = true;
+  continuousPoolMode = 'heist';
+  seqCursor.heist = 1;               // Velvet Glove is index 0 and is playing now
+  if(musicVol > 0) fadeIn(a, Math.max(0, Math.min(1, musicVol)), 600);
+  warmNextInSequence('heist');
+}
+
+/* Continuous modes only (Heist/Relaxed): fires when the current playlist
+   track reaches its own natural end. Picks the next track — the next in
+   authored order for Heist, a fresh shuffle for Relaxed — and crossfades
+   into it. The playlist keeps going indefinitely, independent of whatever
+   level is loaded, until something actually stops it (switching modes,
+   muting, or a genuine stopAttemptTrack). */
 function advanceContinuousTrack(){
   if(!attemptContinuous || !attemptActive || duckAttempt) return;
   const next = pickTrack(continuousPoolMode);
@@ -232,6 +360,7 @@ function advanceContinuousTrack(){
   if(musicVol > 0){
     playWithRetry(a, Math.max(0, Math.min(1, musicVol)), 600, () => a !== attemptAudio || duckAttempt || !attemptActive);
   }
+  warmNextInSequence(continuousPoolMode);
 }
 
 /* Hands the foreground to whichever attempt/menu track just started
@@ -295,6 +424,11 @@ export function startMenuMusic(){
   // attempt track genuinely IS playing, crossfadeOutOtherTracks already
   // fades this one out, so the "don't play both" property still holds.
   if(attemptAudio && !attemptAudio.paused) return;
+  // A running set list owns the theme even while briefly silent (ducked
+  // behind Settings, or awaiting its autoplay-gesture retry). Without this,
+  // startMenuMusic would build a second element on the same file and play
+  // Velvet Glove over the top of the set list's own copy of it.
+  if(attemptActive && attemptContinuous) return;
   if(!menuAudio){
     menuAudio = new Audio(VELVET_GLOVE);
     menuAudio.preload = 'auto';

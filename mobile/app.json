@@ -25,7 +25,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "gameUrl": "http://localhost:8080"
+      "gameUrl": "https://midnight-garage-cufol1qwc-fabian-winterbines-projects.vercel.app"
     }
   }
 }

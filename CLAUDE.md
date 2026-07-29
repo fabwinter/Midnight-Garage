@@ -97,6 +97,34 @@ need a real headless-browser check — see "Testing UI changes" below.
   development; the browser smoke test in "Testing UI changes" below is
   what catches this class of bug, `verify-levels.mjs` doesn't touch this
   render-time path at all).
+- **Ship audio as AAC in `.m4a` — never Opus, whatever the extension says.**
+  Safari (macOS *and* iOS) does not support Opus in an MP4 container in the
+  `<audio>` element; Safari 18.4 added Opus-in-Ogg only. Since the game runs
+  in WKWebView on iOS, an Opus stream in a `.m4a` wrapper is silent on the
+  primary ship target while playing fine in Chromium — so a headless check
+  here proves nothing about the device. Verify the codec, not the file
+  extension: `ffprobe -show_entries stream=codec_name` must say `aac`.
+  (The Playwright Chromium is the exact inverse — an open-source build with
+  *no* AAC support that plays Opus happily. To exercise audio logic headless,
+  temporarily swap Opus copies in under the shipped filenames, then restore.)
+- **Heist and Relaxed music is one continuous set list, not per-attempt
+  music** (`CONTINUOUS_MODES` in `js/audio.js`). No level boundary — load,
+  retry, reset, win, or bust — may cut or restart it; `js/game.js` gates both
+  its `stopAttemptTrack()` calls on `isContinuousMode()`. Heist additionally
+  plays in *authored order* (`SEQUENCED_MODES`/`seqCursor`), so the array
+  order of `HEIST_SET_LIST` is load-bearing: it alternates measured track
+  character so no two neighbours feel alike, including across the wrap back
+  to index 0. Its index 0 is Velvet Glove — the same file the start screen
+  plays — and entering a Heist job *adopts that live element*
+  (`adoptMenuAsAttempt`) rather than starting a new one, which is the only
+  way the position and decoded buffer survive the transition. Anything that
+  nulls `menuAudio`, recreates it, or reorders that array will either restart
+  the theme at the door or silently break the pacing.
+- **Never warm a whole track pool.** `warmPool()` buffers exactly the one
+  track that plays next, and `warmNextInSequence()` keeps one ahead of the
+  playlist. An earlier version warmed the rest of the pool on an idle
+  callback; at Heist's 10 tracks that is ~32 MB of music the player has not
+  asked to hear.
 - **Tonight's Mark (bounty) forces its own pacing for the whole attempt —
   no switching to Relaxed, or any other mode, mid-job.** `loadBountyLevel`
   sets `save.settings.mode` to the mark's own pacing and remembers whatever

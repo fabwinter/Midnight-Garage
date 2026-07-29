@@ -23,6 +23,15 @@
   --accent:#ffb454;          /* chapter palette swap hooks in here */
   --cell:64px;
   --radius:18px;
+  /* Single source of truth for the board column's max width — read back
+     by js/game.js's layout() (getComputedStyle) instead of a second
+     hardcoded 560/etc. literal there, so the two can't drift out of sync
+     (docs/MOBILE-LAYOUT-PLAN.md item 2). 720px = 60px of .wrap+.frame
+     chrome padding either side of a 660px board, i.e. a 110px cell at
+     most — comfortably bigger than a phone's ~55-65px cells (uses far
+     more of an iPad's screen) without ever asking for an arm-swing-sized
+     drag on a large tablet or desktop browser window. */
+  --board-col-max:720px;
   --disp:'Chakra Petch', 'Avenir Next Condensed', 'Arial Narrow', system-ui, sans-serif;
   --body:'Inter', -apple-system, system-ui, 'Segoe UI', sans-serif;
 }
@@ -50,7 +59,21 @@ body::before{
   content:"";position:fixed;inset:0;pointer-events:none;opacity:.35;
   background:repeating-linear-gradient(90deg, transparent 0 140px, rgba(255,255,255,.012) 140px 142px);
 }
-.wrap{width:100%;max-width:560px;padding:14px 14px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:calc(14px + env(safe-area-inset-top))}
+/* min-height + border-box turn .wrap into a full-viewport flex column with
+   real leftover space to distribute — without it, .wrap only ever sizes to
+   its content and the auto-margin split below (.hud/.controls) has nothing
+   to split. header/hud stay pinned to the top and .ad-slot pinned to the
+   bottom; the slack in between is what pushes the board down into
+   one-handed thumb reach (docs/MOBILE-LAYOUT-PLAN.md item 1) while keeping
+   a real gap above and below it, in proportion to whatever height the
+   device/browser-chrome actually leaves — never a fixed px guess that
+   under- or over-shoots on a shorter viewport (e.g. Safari's own toolbar). */
+.wrap{
+  width:100%;max-width:var(--board-col-max);min-height:100dvh;box-sizing:border-box;
+  padding:14px 14px calc(18px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  padding-top:calc(14px + env(safe-area-inset-top));
+}
 
 /* ---------- Header ---------- */
 header{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
@@ -96,7 +119,10 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 }
 
 /* ---------- HUD ---------- */
-.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:stretch}
+/* margin-bottom:auto is the first half of the slack split described on
+   .wrap above — it claims the free space between the HUD and the board
+   rather than the 12px gap every other pair of children gets. */
+.hud{width:100%;display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:stretch;margin-bottom:auto}
 .hud .chip{
   border:1px solid var(--line);border-radius:12px;padding:7px 12px;
   background:linear-gradient(180deg,#181e2a,#131824);
@@ -342,7 +368,13 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 @keyframes pulsehint{0%,100%{opacity:0;transform:scale(.85)}20%,80%{opacity:1;transform:scale(1)}}
 
 /* ---------- Controls ---------- */
-.controls{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+/* margin-bottom:auto is the second half of the .wrap slack split — an
+   equal (flexbox splits free space evenly across every auto margin in the
+   same flex line) share of leftover height lands here too, so the board
+   gets breathing room on BOTH sides rather than being shoved to one edge
+   (see docs/MOBILE-LAYOUT-PLAN.md item 1 and item 3's mockup — variant
+   "C", chosen over pushing the board all the way down). */
+.controls{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:auto}
 .controls.two{grid-template-columns:repeat(2,1fr)}
 .controls.one{grid-template-columns:1fr}
 .btn{
@@ -389,6 +421,12 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 .skip-row{width:100%;display:none;justify-content:center;margin-top:-2px}
 .skip-row.show{display:flex}
 .skip-row .btn{padding:9px 22px;font-size:12px;color:var(--muted);border-style:dashed;background:none;box-shadow:none}
+
+/* Reserved ad footprint — see the comment on the element in index.html.
+   flex:none so it never shrinks or grows: a real banner (standard mobile
+   size) always gets exactly this much room, independent of the .hud/
+   .controls auto-margin split above it. */
+.ad-slot{width:100%;height:50px;flex:none;border-top:1px solid rgba(255,255,255,.06)}
 
 /* ---------- Overlays ---------- */
 .overlay{
@@ -657,7 +695,7 @@ input[type=range]::-moz-range-thumb{
 .plate-sheet .close-x:hover{color:#fff}
 
 /* ---------- First-launch mode picker (intro sheet) ---------- */
-.intro-sheet{max-width:520px;background-color:#292228;background-image:url('../assets/start/intro-plate.jpg')}
+.intro-sheet{max-width:520px;background-color:#292228;background-image:url('../assets/start/intro-plate.webp')}
 .intro-modes-title{
   font-family:var(--disp);font-weight:700;letter-spacing:.08em;font-size:12px;
   text-transform:uppercase;color:var(--muted);margin:14px 0 8px;
@@ -682,7 +720,7 @@ input[type=range]::-moz-range-thumb{
 }
 
 /* ---------- Pro sheet ---------- */
-.pro-sheet{text-align:center;background-color:#222024;background-image:url('../assets/start/pro-plate.jpg')}
+.pro-sheet{text-align:center;background-color:#222024;background-image:url('../assets/start/pro-plate.webp')}
 .pro-feats{list-style:none;margin:12px 0 16px;padding:0;text-align:left}
 .pro-feats li{
   display:flex;gap:10px;align-items:center;padding:9px 4px;font-size:14px;
@@ -719,14 +757,14 @@ input[type=range]::-moz-range-thumb{
   #startOverlay{
     background-image:
       linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-landscape.jpg');
+      url('../assets/start/start-landscape.webp');
   }
 }
 @media (orientation:portrait){
   #startOverlay{
     background-image:
       linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-portrait.jpg');
+      url('../assets/start/start-portrait.webp');
   }
 }
 .start-cta{

@@ -8,7 +8,7 @@ import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { LEGACY_CAMPAIGN_KEYS_V1 } from './legacy-campaign-keys-v1.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener, isContinuousMode } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -112,12 +112,56 @@ async function persist(){
 /* ================== BOARD RENDER ================== */
 const board = $('board');
 const gate = $('gate');
+const wrapEl = document.querySelector('.wrap');
+const stageEl = document.querySelector('.stage');
 let CELL = 64;
 
+// Total wall-clock window the board's drop-in cascade is spread over, no
+// matter how many vehicles are on it (see buildPieces).
+const ENTER_STAGGER_MS = 180;
+
+// A cell any bigger than this needs an arm-swing, not a thumb-drag, to get
+// a piece across the board — see css/game.css's --board-col-max comment
+// (docs/MOBILE-LAYOUT-PLAN.md item 2). Independent of the width cap below:
+// this is the actual safety net if some future viewport is wider still.
+const MAX_CELL = 110;
+
+// Real height used by everything in .wrap EXCEPT .stage (header/hud/coach/
+// controls/ad-slot, their gaps, and .wrap's own padding) — measured
+// live rather than a second hardcoded "chrome is about this tall" guess,
+// so it can't drift out of sync with the actual markup/CSS the way the
+// old flat `- 320` did the moment docs/MOBILE-LAYOUT-PLAN.md item 1's
+// auto-margin split changed how that space gets used. This is a MINIMUM
+// footprint check (could the board fit at all without overflowing), not a
+// "fill the rest of the screen" target — the .hud/.controls auto-margins
+// already own turning any leftover space into breathing room.
+function chromeHeight(){
+  let h = 0;
+  let visible = 0;
+  for(const el of wrapEl.children){
+    if(getComputedStyle(el).display === 'none') continue;
+    visible++;
+    if(el === stageEl) continue;
+    h += el.getBoundingClientRect().height;
+  }
+  const cs = getComputedStyle(wrapEl);
+  h += parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const gapPx = parseFloat(cs.rowGap) || 12;
+  h += gapPx * Math.max(0, visible - 1);
+  return h;
+}
+
 function layout(){
-  const vw = Math.min(window.innerWidth, 560) - 28 - 32;
-  const vh = window.innerHeight - 320;
-  CELL = Math.floor(Math.max(40, Math.min(vw, Math.max(vh, 240))) / 6);
+  // 28 = .wrap's own 14px×2 horizontal/vertical-analogue padding; 32 =
+  // .frame's 16px×2 — neither is the board's own size, both are chrome
+  // around it. chromeHeight() covers everything ELSE in .wrap (it
+  // explicitly excludes .stage), so vh needs this same 32 subtracted too,
+  // or it's solving for .stage's size (frame + board) while dividing by 6
+  // as if it were the board alone — that under-subtracts and overflows.
+  const maxColWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--board-col-max')) || 560;
+  const vw = Math.min(window.innerWidth, maxColWidth) - 28 - 32;
+  const vh = window.innerHeight - chromeHeight() - 32;
+  CELL = Math.min(MAX_CELL, Math.floor(Math.max(40, Math.min(vw, Math.max(vh, 240))) / 6));
   document.documentElement.style.setProperty('--cell', CELL + 'px');
   gate.style.top = (16 + EXIT_ROW * CELL - 4) + 'px';
   gate.style.height = (CELL + 8) + 'px';
@@ -345,7 +389,14 @@ function buildPieces(){
       towCar,
     });
     el.classList.add('enter');
-    el.style.animationDelay = (i * 0.028) + 's';
+    /* Spread the drop-in across a FIXED window rather than a fixed
+       per-piece step. At a flat 28ms/piece the stagger ran as long as the
+       board was busy — a 14-vehicle level took ~390ms before the last car
+       even started its 420ms drop, which read as "the cars are loading
+       one by one" rather than as a flourish. Dividing a constant window
+       by the piece count means every board finishes settling at the same
+       moment, and a denser board just cascades faster. */
+    el.style.animationDelay = ((i / Math.max(1, pieces.length)) * ENTER_STAGGER_MS / 1000) + 's';
     el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
     board.appendChild(el);
     attachDrag(el, i);
@@ -691,7 +742,13 @@ function busted(kind){
   solvedAnim = true;
   clearHint(); clearHand();
   clearPursuitTimer();
-  stopAttemptTrack();
+  // Same continuity rule as the win path: Heist's set list plays through a
+  // bust and on into the retry, because stopping here would rewind the
+  // current track and restart it from the top on the next attempt — the
+  // "starts and stops at every level" behaviour the set list replaced. The
+  // bust still reads as a bust; sfx('busted') lands over the music exactly
+  // as every other cue does. Pursuit stops, as its music always has.
+  if(!isContinuousMode(save.settings.mode)) stopAttemptTrack();
   sfx('busted');
   haptic('thudHeavy');
   track(kind === 'pursuit' ? 'pursuit_busted' : 'alarm_busted', {
@@ -1695,12 +1752,12 @@ function winSequence(){
   solvedAnim = true;
   clearHint(); clearHand();
   clearPursuitTimer();
-  // Relaxed's music is a continuous session-long playlist (see
-  // attemptContinuous in js/audio.js), not tied to any one level — a win
-  // must let it keep playing straight into whatever's next, same as it
-  // already does through Retry/Reset. Heist/Pursuit still stop clean: the
-  // tension music belongs to that one attempt.
-  if(save.settings.mode !== 'relaxed') stopAttemptTrack();
+  // Relaxed and Heist both run a continuous session-long set list (see
+  // CONTINUOUS_MODES in js/audio.js), not music tied to any one level — a
+  // win must let it keep playing straight into whatever's next, same as it
+  // already does through Retry/Reset. Only Pursuit still stops clean: its
+  // tension music genuinely belongs to that one timed attempt.
+  if(!isContinuousMode(save.settings.mode)) stopAttemptTrack();
   updateHud();
   sfx('win');
   haptic('success');
