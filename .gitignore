@@ -6,3 +6,4 @@ www/
 *.log
 .genwork/
 .env
+.scratch-*
