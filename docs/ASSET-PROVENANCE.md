@@ -61,6 +61,34 @@ a few carry readable third-party wordmarks. See "Known exposures" below.
 Renaming does not reduce legal exposure. It only stops the repo from
 documenting the problem on our behalf.
 
+### How complete is this list? It isn't.
+
+Two automated sweeps were attempted over all 71 renders (2026-07-30) and
+**neither can certify a file as clean**:
+
+- **Edge-energy detection** (high-pass luminance, tile scoring, flood-fill
+  into candidate boxes). Ranked body creases, chrome trim and window frames
+  above actual lettering. It surfaced the large text already known
+  (`POLICE`, `K-9`, a race number) and buried every small badge.
+- **OCR** (Tesseract 5.3.4, sparse-text mode, 4 rotations × 2
+  magnifications — plan-view cars carry text at every angle). Roughly 95% of
+  its output is letter-soup from panel gaps, engine louvres and speckle
+  texture. It *did* hit the real marks, but too garbled for automated
+  matching: `Superformance` came out `EASUPERFORMANEE`, the `GTO` badge as
+  `OTO`, medallion text as `MEDALLION`/`WEDALLION`, `1Z92` as `1282`. Exact
+  searches for `NYC`, `TAXI`, `GIRLING` and `MARCHAL` returned **zero** hits
+  on files where all four are plainly legible by eye.
+
+So: a file with no automated hit has not been cleared. The only reliable
+check performed so far is direct visual inspection, and that has covered
+roughly 20 of 71 assets — turning up marks or badges in about a third of
+them, including two found *after* the "none of them have badges" assumption
+was recorded. Assume the ~50 un-zoomed assets hide more at a similar rate.
+
+The audit is now costing more than the fix. Replacing the vehicle set with
+art drawn from no specific real vehicle both resolves the exposure and ends
+the need to prove a negative across 71 photoreal renders.
+
 ### Known exposures, worst first
 
 1. **`traffic-sedan-11.webp`** — racing livery carrying readable third-party
@@ -77,6 +105,15 @@ documenting the problem on our behalf.
    the badge at minimum.
 4. **`hero-hyper-carbon.webp`** — carries a race number and a small visible
    emblem.
+4b. **`traffic-sedan-3.webp`** — chrome **model-designation badge** on the
+   rear deck, legible when zoomed. Found while evaluating this file as a
+   *replacement* for exposure 1, which is how it came to light. Remove the
+   badge, or don't promote this one into use.
+4c. **`hero-vintage-white.webp`** — two lines of small **dealer-decal text**
+   on the engine lid (a shop name and location, as classic-car photography
+   often carries). Third-party text. The car is also a highly recognisable
+   rounded rear-engine silhouette whose maker does enforce it, so this
+   belongs in group 5 as well.
 5. **Recognisable silhouettes with no visible branding.** Lower risk than
    1-4 but not zero, because body shape can itself be protected trade dress
    and several of these marques enforce it: `hero-wedge-green`,
@@ -84,7 +121,8 @@ documenting the problem on our behalf.
    `hero-hyper-champagne`, `hero-roadster-blue`, `hero-coupe-gold`,
    `hero-offroad-orange`, the 12 `*-wedge` library recolours (all one
    model), `traffic-sedan-5` (national-flag racing stripe),
-   `traffic-sedan-12`, `traffic-sedan-4`, `traffic-sedan-8`.
+   `traffic-sedan-12`, `traffic-sedan-4`, `traffic-sedan-8`,
+   `hero-vintage-white`.
 
    Mitigating: every render is a **plan view**. Top-down hides the grille,
    badges and profile that carry most of a vehicle's recognisable identity,
