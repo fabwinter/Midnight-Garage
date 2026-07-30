@@ -97,6 +97,15 @@ need a real headless-browser check — see "Testing UI changes" below.
   development; the browser smoke test in "Testing UI changes" below is
   what catches this class of bug, `verify-levels.mjs` doesn't touch this
   render-time path at all).
+- **Asset filenames and `color` tags never name a real vehicle marque.**
+  Use body-type words instead (wedge / roadster / midship / coupe / hatch /
+  offroad / racer / spyder / hyper). Marque-named files were retired on
+  2026-07-30; `RENAMED_STEMS` in `js/library.js` migrates an admin's
+  persisted paths forward and must not be "tidied up" (same legacy-data
+  situation as the `.png` entries beside it). Renaming is a hygiene measure,
+  **not** an IP fix — the art itself is still unresolved, see
+  [docs/ASSET-PROVENANCE.md](docs/ASSET-PROVENANCE.md), which is also where
+  any new asset's source and licence gets recorded before it ships.
 - **Ship audio as AAC in `.m4a` — never Opus, whatever the extension says.**
   Safari (macOS *and* iOS) does not support Opus in an MP4 container in the
   `<audio>` element; Safari 18.4 added Opus-in-Ogg only. Since the game runs
