@@ -33,12 +33,52 @@ let version = 0;
    `heroPhotos` override would 404 to a broken hero. Rewriting the
    extension on load fixes both. Data: URLs (an upload not yet promoted)
    are untouched — only real asset paths are rewritten. */
+/* Assets renamed when marque-derived filenames were retired for IP reasons
+   (Countach/Ferrari/lambo/... -> body-type words). Keys are the OLD stems.
+   An admin's persisted library holds absolute asset paths, so without this
+   their disabled-base list and hero-photo picks would silently point at
+   files that no longer exist. Same "legacy data to match against, not a
+   live path" situation as the .png entries below — leave both alone. */
+const RENAMED_STEMS = {
+  'hero-cobra-nobadge': 'hero-roadster-blue',
+  'hero-countach-nobadge': 'hero-wedge-green',
+  'hero-ferrari-nobadge': 'hero-midship-red',
+  'hero-ferrari-red-stripe': 'hero-hyper-carbon',
+  'hero-jeep-rubicon-nobadge': 'hero-offroad-orange',
+  'hero-mclaren-nobadge': 'hero-racer-orange',
+  'hero-miura-nobadge': 'hero-spyder-blue',
+  'hero-pagani-nobadge': 'hero-hyper-teal',
+  'hero-porsche-911-silver': 'hero-hyper-champagne',
+  'hero-porsche-nobadge': 'hero-coupe-gold',
+  'library-sedans-1785066252701-0-pink-lambo': 'library-sedans-1785066252701-0-pink-wedge',
+  'library-sedans-1785067674835-1-aqua-lambo': 'library-sedans-1785067674835-1-aqua-wedge',
+  'library-sedans-1785067674835-11-green-lambo': 'library-sedans-1785067674835-11-green-wedge',
+  'library-sedans-1785067674835-12-orange-porche': 'library-sedans-1785067674835-12-orange-coupe',
+  'library-sedans-1785067674835-13-red-mini': 'library-sedans-1785067674835-13-red-hatch',
+  'library-sedans-1785067674835-14-green-mini': 'library-sedans-1785067674835-14-green-hatch',
+  'library-sedans-1785067674835-15-green-porsche': 'library-sedans-1785067674835-15-green-coupe',
+  'library-sedans-1785067674835-2-yellow-lambo': 'library-sedans-1785067674835-2-yellow-wedge',
+  'library-sedans-1785067674835-3-silver-lambo': 'library-sedans-1785067674835-3-silver-wedge',
+  'library-sedans-1785067674835-4-yellow-taxi': 'library-sedans-1785067674835-4-yellow-cab',
+  'library-sedans-1785067674835-8-blue-lambo': 'library-sedans-1785067674835-8-blue-wedge',
+  'library-sedans-1785067674835-9-gold-lambo': 'library-sedans-1785067674835-9-gold-wedge',
+  'library-sedans-1785070794205-0-purple-lambo': 'library-sedans-1785070794205-0-purple-wedge',
+  'library-sedans-1785070794205-1-bronze-lambo': 'library-sedans-1785070794205-1-bronze-wedge',
+  'library-sedans-1785070794205-2-pink-pale-lambo': 'library-sedans-1785070794205-2-pink-pale-wedge',
+};
+
 function migrateArtPaths(lib){
   // NB: the ".png" here is load-bearing legacy data, not a live asset
   // path — tools/optimize-art.mjs deliberately does NOT rewrite this file
   // (it would turn this into a no-op), see its REF_FILES comment.
-  const fix = p => (typeof p === 'string' && /^assets\/cars\/.+\.png$/i.test(p))
-    ? p.replace(/\.png$/i, '.webp') : p;
+  const fix = p => {
+    if(typeof p !== 'string' || !p.startsWith('assets/cars/')) return p;
+    // Extension first, so a path carrying both legacy shapes lands correctly.
+    let out = /\.png$/i.test(p) ? p.replace(/\.png$/i, '.webp') : p;
+    const m = out.match(/^assets\/cars\/(.+)\.webp$/i);
+    if(m && RENAMED_STEMS[m[1]]) out = `assets/cars/${RENAMED_STEMS[m[1]]}.webp`;
+    return out;
+  };
   lib.disabledBase = (lib.disabledBase || []).map(fix);
   for(const carId of Object.keys(lib.heroPhotos || {})) lib.heroPhotos[carId] = fix(lib.heroPhotos[carId]);
   for(const cat of ['sedans', 'trucks', 'trailers']){

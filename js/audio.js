@@ -38,7 +38,7 @@ const CLEAN_GETAWAY = 'assets/audio/clean-getaway.m4a';
    (attacks/sec) and dynamic variation (RMS spread). That gives four groups
    — steady/driving, dynamic/sectional, sparse/airy, and mid — and the list
    never places two of the same group back to back, including across the
-   wrap from the last track back to Velvet Glove. Cherry Buick Run closes at
+   wrap from the last track back to Velvet Glove. The closing track drops to
    85 BPM as a deliberate cool-down before the theme restates.
    ~28 minutes before anything repeats. */
 const HEIST_SET_LIST = [
@@ -51,7 +51,7 @@ const HEIST_SET_LIST = [
   'assets/audio/heist-chrome-getaway.m4a',        // 126      dynamic
   'assets/audio/heist-time-is-ticking.m4a',       // 129      mid
   'assets/audio/heist-new-town-somehow.m4a',      // 120      sparse
-  'assets/audio/heist-cherry-buick-run.m4a',      //  85      steady  (cool-down)
+  'assets/audio/heist-cherry-run.m4a',            //  85      steady  (cool-down)
 ];
 
 const TRACK_POOLS = {

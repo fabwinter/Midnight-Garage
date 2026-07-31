@@ -35,9 +35,9 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.webp';
 // so it's left out of rotation rather than shipping a visibly dirty edge.
 /* One entry per real-world car model — no duplicate models. When the same
    car existed in several source colors, one recolorable cutout was kept and
-   the rest deleted; the near-dupes (Countach, yellow-striped Ferrari, navy
+   the rest deleted; the near-dupes (the wedge, the yellow-striped midship, navy
    GT, striped silver GT, GT3 RS) were pruned in the July '26 pass, and the
-   Countach itself went next — its only cutout had a baked grey shadow strip
+   the wedge itself went next — its only cutout had a baked grey shadow strip
    that survived recoloring. Index 0 is the Garage-skin body — keep it a
    clean recolorable cutout.
 
@@ -78,7 +78,7 @@ const CLASSIC_CAR_IMG = 'assets/cars/classic.webp';
    the hero cars below doubling as traffic.
 
    The olive G-wagon (sedan-9) stays dropped: too stubby (~1.7:1) for the
-   shared 97%-of-length norm. Same call as the shadowed Countach cutout. */
+   shared 97%-of-length norm. Same call as the shadowed wedge cutout. */
 /* The one and only broken-down-car asset (see vehicleSVG's brokenDown
    branch): a len-2 hitch trailer is always this specific rust-weathered
    sedan, never a random pick off the rotation — "needs a tow" should read
@@ -91,57 +91,63 @@ const BROKEN_DOWN_SEDAN_PHOTO = { img: 'assets/cars/library-sedans-1785067674835
 const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-6.webp', hue: 29, color: 'blue' },                 // skin body, recolors
   { img: 'assets/cars/traffic-sedan-13.webp', fixed: true, color: 'white-plain' },
-  { img: 'assets/cars/traffic-sedan-5.webp', fixed: true, color: 'yellow-tricolor' },  // Ferrari, tricolor stripe
-  { img: 'assets/cars/hero-mclaren-nobadge.webp', fixed: true, color: 'orange-f1' },
+  { img: 'assets/cars/traffic-sedan-5.webp', fixed: true, color: 'yellow-race-stripe' },  // race stripe over yellow
+  { img: 'assets/cars/hero-racer-orange.webp', fixed: true, color: 'orange-racer' },
   { img: 'assets/cars/hero-sports-cyan.webp', fixed: true, color: 'cyan-track' },
   { img: 'assets/cars/traffic-sedan-new-lightblue.webp', fixed: true, color: 'blue-plain' },
-  { img: 'assets/cars/hero-ferrari-nobadge.webp', fixed: true, color: 'red' },
+  { img: 'assets/cars/hero-midship-red.webp', fixed: true, color: 'red' },
   { img: 'assets/cars/hero-classic-white-green.webp', fixed: true, color: 'white-green-stripe' },
   { img: 'assets/cars/hero-sedan-green.webp', fixed: true, color: 'green-sedan' },
   { img: 'assets/cars/hero-convertible-brown.webp', fixed: true, color: 'brown' },
-  { img: 'assets/cars/traffic-sedan-11.webp', fixed: true, color: 'blue-gulf-race' },  // numbered Gulf GT40
-  { img: 'assets/cars/hero-ferrari-red-stripe.webp', fixed: true, color: 'carbon-red-stripe' },
+  { img: 'assets/cars/traffic-sedan-11.webp', fixed: true, color: 'blue-race-stripe' },  // numbered race livery
+  { img: 'assets/cars/hero-hyper-carbon.webp', fixed: true, color: 'carbon-red-stripe' },
   { img: 'assets/cars/hero-fluro-cyan.webp', fixed: true, color: 'cyan-fluro' },
-  { img: 'assets/cars/hero-vintage-white.webp', fixed: true, color: 'ivory-bug' },
-  { img: 'assets/cars/traffic-sedan-12.webp', fixed: true, color: 'silver-plain' },    // 300SL
+  { img: 'assets/cars/hero-vintage-white.webp', fixed: true, color: 'ivory-classic' },
+  { img: 'assets/cars/traffic-sedan-12.webp', fixed: true, color: 'silver-plain' },    // classic gullwing coupe
   { img: 'assets/cars/hero-fluro-green.webp', fixed: true, color: 'green-fluro' },
-  { img: 'assets/cars/hero-cobra-nobadge.webp', fixed: true, color: 'blue-white-stripe' },
-  { img: 'assets/cars/hero-porsche-nobadge.webp', fixed: true, color: 'yellow-911-pale' },
+  { img: 'assets/cars/hero-roadster-blue.webp', fixed: true, color: 'blue-white-stripe' },
+  { img: 'assets/cars/hero-coupe-gold.webp', fixed: true, color: 'yellow-pale' },
   { img: 'assets/cars/hero-red-exotic.webp', fixed: true, color: 'red' },
   { img: 'assets/cars/hero-fluro-pink.webp', fixed: true, color: 'pink-fluro' },
   { img: 'assets/cars/hero-classic-cream.webp', fixed: true, color: 'cream-coupe' },
   { img: 'assets/cars/hero-muscle.webp', fixed: true, color: 'grey-muscle' },
   BROKEN_DOWN_SEDAN_PHOTO,
-  { img: 'assets/cars/hero-pagani-nobadge.webp', fixed: true, color: 'teal' },
-  { img: 'assets/cars/hero-miura-nobadge.webp', fixed: true, color: 'blue-classic' },
+  { img: 'assets/cars/hero-hyper-teal.webp', fixed: true, color: 'teal' },
+  { img: 'assets/cars/hero-spyder-blue.webp', fixed: true, color: 'blue-classic' },
   { img: 'assets/cars/hero-muscle-sage.webp', fixed: true, color: 'green-sage' },
   { img: 'assets/cars/hero-fluro-orange.webp', fixed: true, color: 'orange-fluro' },
   { img: 'assets/cars/hero-fluro-yellow.webp', fixed: true, color: 'yellow-fluro' },
-  { img: 'assets/cars/traffic-sedan-7.webp', fixed: true, color: 'white-black-stripe' }, // 911
-  { img: 'assets/cars/hero-porsche-911-silver.webp', fixed: true, color: 'silver-track' }, // longtail
+  { img: 'assets/cars/traffic-sedan-7.webp', fixed: true, color: 'white-black-stripe' }, // classic rear-engine coupe
+  { img: 'assets/cars/hero-hyper-champagne.webp', fixed: true, color: 'silver-track' },
   { img: 'assets/cars/hero-sedan-bronze.webp', fixed: true, color: 'bronze' },
   { img: 'assets/cars/traffic-sedan-8.webp', hue: 90, color: 'green' },                // lime GT3 RS
   { img: 'assets/cars/hero-classic-blue-stripe.webp', fixed: true, color: 'blue-white-stripe' },
   { img: 'assets/cars/hero-muscle-grey-stripe.webp', fixed: true, color: 'grey-stripe-muscle' },
-  { img: 'assets/cars/hero-countach-nobadge.webp', fixed: true, color: 'green-wedge' },
-  { img: 'assets/cars/library-sedans-1785066252701-0-pink-lambo.webp', fixed: true, color: 'Pink lambo' },
+  { img: 'assets/cars/hero-wedge-green.webp', fixed: true, color: 'green-wedge' },
+  { img: 'assets/cars/library-sedans-1785066252701-0-pink-wedge.webp', fixed: true, color: 'Pink wedge' },
   { img: 'assets/cars/library-sedans-1785066252701-1-silver-yellow-stripe.webp', fixed: true, color: 'silver-yellow-stripe' },
-  { img: 'assets/cars/library-sedans-1785067674835-1-aqua-lambo.webp', fixed: true, color: 'Aqua lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-2-yellow-lambo.webp', fixed: true, color: 'Yellow lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-3-silver-lambo.webp', fixed: true, color: 'Silver lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-4-yellow-taxi.webp', fixed: true, color: 'yellow-taxi' },
+  { img: 'assets/cars/library-sedans-1785067674835-1-aqua-wedge.webp', fixed: true, color: 'Aqua wedge' },
+  { img: 'assets/cars/library-sedans-1785067674835-2-yellow-wedge.webp', fixed: true, color: 'Yellow wedge' },
+  { img: 'assets/cars/library-sedans-1785067674835-3-silver-wedge.webp', fixed: true, color: 'Silver wedge' },
+  { img: 'assets/cars/library-sedans-1785067674835-4-yellow-cab.webp', fixed: true, color: 'yellow-taxi' },
   { img: 'assets/cars/library-sedans-1785067674835-6-police.webp', fixed: true, color: 'police' },
   { img: 'assets/cars/library-sedans-1785067674835-7-orange-suv.webp', fixed: true, color: 'Orange-suv' },
-  { img: 'assets/cars/library-sedans-1785067674835-8-blue-lambo.webp', fixed: true, color: 'Blue lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-9-gold-lambo.webp', fixed: true, color: 'Gold lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-11-green-lambo.webp', fixed: true, color: 'Green lambo' },
-  { img: 'assets/cars/library-sedans-1785067674835-12-orange-porche.webp', fixed: true, color: 'Orange porche' },
-  { img: 'assets/cars/library-sedans-1785067674835-13-red-mini.webp', fixed: true, color: 'Red mini' },
-  { img: 'assets/cars/library-sedans-1785067674835-14-green-mini.webp', fixed: true, color: 'Green mini' },
-  { img: 'assets/cars/library-sedans-1785067674835-15-green-porsche.webp', fixed: true, color: 'Green Porsche' },
-  { img: 'assets/cars/library-sedans-1785070794205-0-purple-lambo.webp', fixed: true, color: 'Purple lambo' },
-  { img: 'assets/cars/library-sedans-1785070794205-1-bronze-lambo.webp', fixed: true, color: 'Bronze lambo' },
-  { img: 'assets/cars/library-sedans-1785070794205-2-pink-pale-lambo.webp', fixed: true, color: 'Pink pale lambo' },
+  { img: 'assets/cars/library-sedans-1785067674835-8-blue-wedge.webp', fixed: true, color: 'Blue wedge' },
+  { img: 'assets/cars/library-sedans-1785067674835-9-gold-wedge.webp', fixed: true, color: 'Gold wedge' },
+  { img: 'assets/cars/library-sedans-1785067674835-11-green-wedge.webp', fixed: true, color: 'Green wedge' },
+  { img: 'assets/cars/library-sedans-1785067674835-12-orange-coupe.webp', fixed: true, color: 'Orange coupe' },
+  { img: 'assets/cars/library-sedans-1785067674835-13-red-hatch.webp', fixed: true, color: 'Red mini' },
+  { img: 'assets/cars/library-sedans-1785067674835-14-green-hatch.webp', fixed: true, color: 'Green mini' },
+  { img: 'assets/cars/library-sedans-1785067674835-15-green-coupe.webp', fixed: true, color: 'Green coupe' },
+  { img: 'assets/cars/library-sedans-1785070794205-0-purple-wedge.webp', fixed: true, color: 'Purple wedge' },
+  { img: 'assets/cars/library-sedans-1785070794205-1-bronze-wedge.webp', fixed: true, color: 'Bronze wedge' },
+  { img: 'assets/cars/library-sedans-1785070794205-2-pink-pale-wedge.webp', fixed: true, color: 'Pink pale wedge' },
+  { img: 'assets/cars/hero-canopy-green.webp', fixed: true, color: 'green' },
+  { img: 'assets/cars/hero-airtail-blue.webp', fixed: true, color: 'blue' },
+  { img: 'assets/cars/hero-airtail-stripe.webp', fixed: true, color: 'white-green-stripe' },
+  { img: 'assets/cars/hero-airtail-pink.webp', fixed: true, color: 'pink' },
+  { img: 'assets/cars/hero-airtail-red.webp', fixed: true, color: 'red' },
+  { img: 'assets/cars/hero-airtail-purple-yellow.webp', fixed: true, color: 'purple-yellow-stripe' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
@@ -169,6 +175,12 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-new-rusty.webp', fixed: true, color: 'rust-flatbed' },
   { img: 'assets/cars/traffic-truck-new-white.webp', fixed: true, color: 'white-box' },
   TOW_TRUCK_PHOTO,
+  { img: 'assets/cars/truck-offroad-pickup-grey.webp', fixed: true, color: 'grey-pickup' },
+  { img: 'assets/cars/truck-tanker-steel.webp', fixed: true, color: 'steel-tanker' },
+  { img: 'assets/cars/truck-flatbed-green.webp', fixed: true, color: 'green-flatbed' },
+  { img: 'assets/cars/truck-rollback-orange.webp', fixed: true, color: 'orange-rollback' },
+  { img: 'assets/cars/truck-panel-orange.webp', fixed: true, color: 'orange-panel' },
+  { img: 'assets/cars/truck-mixer-cream.webp', fixed: true, color: 'cream-mixer' },
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a
@@ -230,8 +242,8 @@ function seedHash(seed, salt){
 
 /* Strict per-level colour dedup (July '26 "no double-ups" pass). The
    per-entry `color` tag above is finer than a human calls "a colour" —
-   it distinguishes liveries/models (e.g. 'blue-gulf-race' vs 'blue-classic'
-   vs 'Blue lambo') that all still read as "a blue car" at a glance. That
+   it distinguishes liveries/models (e.g. 'blue-race-stripe' vs 'blue-classic'
+   vs 'Blue wedge') that all still read as "a blue car" at a glance. That
    finer tag remains the bucket key for VARIETY (no two identical liveries
    back to back — see bucketize below), but the actual same-colour
    guarantee groups tags into one of these 12 basic-colour families first,
