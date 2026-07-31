@@ -176,7 +176,6 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/truck-offroad-pickup-grey.webp', fixed: true, color: 'grey-pickup' },
   { img: 'assets/cars/truck-tanker-steel.webp', fixed: true, color: 'steel-tanker' },
   { img: 'assets/cars/truck-flatbed-green.webp', fixed: true, color: 'green-flatbed' },
-  { img: 'assets/cars/truck-rollback-orange.webp', fixed: true, color: 'orange-rollback' },
   { img: 'assets/cars/truck-panel-orange.webp', fixed: true, color: 'orange-panel' },
   { img: 'assets/cars/truck-mixer-cream.webp', fixed: true, color: 'cream-mixer' },
 ];
