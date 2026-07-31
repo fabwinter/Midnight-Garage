@@ -173,6 +173,10 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-new-rusty.webp', fixed: true, color: 'rust-flatbed' },
   { img: 'assets/cars/traffic-truck-new-white.webp', fixed: true, color: 'white-box' },
   TOW_TRUCK_PHOTO,
+  { img: 'assets/cars/truck-offroad-pickup-grey.webp', fixed: true, color: 'grey-pickup' },
+  { img: 'assets/cars/truck-tanker-steel.webp', fixed: true, color: 'steel-tanker' },
+  { img: 'assets/cars/truck-flatbed-green.webp', fixed: true, color: 'green-flatbed' },
+  { img: 'assets/cars/truck-rollback-orange.webp', fixed: true, color: 'orange-rollback' },
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a

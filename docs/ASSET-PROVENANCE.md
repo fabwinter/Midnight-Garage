@@ -165,6 +165,55 @@ exact parameters `js/library.js`'s `renderToCanvas` uses for an admin
 upload), so these behave identically to a normal admin-added asset at
 runtime. Verified in a live board with zero console errors.
 
+### 2026-07-31 addition: 5 truck renders, 4 added (2 retouched), 1 held
+
+Five new top-down truck renders were submitted. Same close-inspection pass
+as the sedan batch, at the nose/badge/panel areas — this time it actually
+found problems worth fixing rather than just ruling out.
+
+**Added as-is** — no marks found:
+- `truck-flatbed-green.webp` — canvas-bed cargo truck, khaki/olive, no badge
+  or text anywhere on the cab or bed.
+- `truck-tanker-steel.webp` — multi-compartment fuel tanker. Carries a blue
+  rectangular hazmat/ADR-style placard with a stacked number code. This is
+  a generic regulatory placard, not a brand mark — comparable risk to the
+  existing `police` livery already in the pool — so it shipped unedited.
+
+**Added after a retouch** — one small mark each, cleanly removable because
+the surrounding surface was uniform enough to patch invisibly:
+- `truck-offroad-pickup-grey.webp` — had a chrome oval model-designation
+  badge on the tailgate trim. Filled with the trim's own sampled colour
+  (flat fill, not a clone from elsewhere, since the trim right around the
+  badge is uniformly black) — the styling groove the badge sat in is still
+  there (that's original design, not a mark), just the badge itself is
+  gone. Checked at 5x zoom afterward; no seam visible.
+- `truck-rollback-orange.webp` — a car-carrier/rollback tow truck (this is
+  ordinary traffic art, unrelated to `TOW_TRUCK_PHOTO`, the one specific
+  file `js/art.js` hardcodes for the hitch-mechanic's dedicated tow role —
+  see `traffic-truck-4.webp`). Original carried a full third-party company
+  logo (mascot bird + wordmark) on the flatbed panel — a vendor's own
+  marketing watermark baked into their stock render, not a manufacturer
+  badge. Sampled the panel's flat colour from a confirmed-blank strip
+  elsewhere on the same panel and filled the logo's bounding box; the panel
+  is CAD-flat-shaded there, so a flat fill matches better than attempting a
+  clone-from-elsewhere would.
+
+**Held, not added** — a cement-mixer render carries a manufacturer wordmark
+(reads as **HOWO**, the Sinotruk truck brand) directly on the mixer drum.
+Unlike the two retouches above, this text sits right at the seam between
+the drum and the chassis frame behind it, not on a uniform surface — a
+patch there risked a visible mismatch rather than a clean fix, so it was
+left out rather than shipped with a shaky edit. Source file wasn't kept;
+ask again if it's worth finishing properly (redraw the drum panel rather
+than patch around the seam).
+
+All four added trucks: rotated to landscape where needed and fit into the
+1200x400 truck canvas at 97% scale (`renderToCanvas`'s truck-category
+parameters). Verified in a live board — 3 of 4 directly observed rendering
+with zero console errors; the 4th runs the identical code path and was
+confirmed correct in the pre-ship composite, just not statistically
+sampled before the verification script's own timeout.
+
 **Held, not added** — a fifth render (purple/yellow) carries a **full
 manufacturer crest on the nose** and **the exact model designation spelled
 out in text on both rear wing endplates**. This is not a silhouette
