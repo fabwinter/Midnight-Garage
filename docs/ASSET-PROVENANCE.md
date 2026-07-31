@@ -145,6 +145,35 @@ the need to prove a negative across 71 photoreal renders.
 - Whatever route: record for each file where the image came from and what
   licence covers it. "It was on my drive" is not a provenance record.
 
+### 2026-07-31 addition: 4 of 5 submitted renders added, 1 held
+
+Five new top-down renders were submitted for the sedan pool. Checked each at
+full resolution around the nose, headlight and rear-deck areas (the exact
+regions that turned up problems in the existing set) before adding anything.
+
+**Added** — no legible text or badges found on close inspection:
+- `hero-canopy-green.webp` — mid-engine two-seater, red interior, hex side
+  vents. Distinctive silhouette; no mark found on the hood/rear-deck vent.
+- `hero-airtail-blue.webp`, `hero-airtail-stripe.webp`, `hero-airtail-pink.webp`
+  — three liveries of one shared body (quad round lamps, roof duct, long
+  tail, big rear wing). Zoomed both front badge locations on all three;
+  found only parking-sensor dots, no emblem.
+
+Source photos arrived portrait (nose up); rotated -90 deg and fit into the
+same 800x400 canvas at 97% scale used everywhere else in this pool (the
+exact parameters `js/library.js`'s `renderToCanvas` uses for an admin
+upload), so these behave identically to a normal admin-added asset at
+runtime. Verified in a live board with zero console errors.
+
+**Held, not added** — a fifth render (purple/yellow) carries a **full
+manufacturer crest on the nose** and **the exact model designation spelled
+out in text on both rear wing endplates**. This is not a silhouette
+judgement call: it is a literal badge plus literal model name, worse than
+anything already flagged above. Needs the crest and both instances of text
+removed (or the wing endplates repainted blank) before this one ships.
+Original file wasn't retained in the repo — ask for it again if it's worth
+finishing.
+
 ## Fonts — cleared
 
 `assets/fonts/*.woff2` are OFL-licensed. Ship the licence files alongside

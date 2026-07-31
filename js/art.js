@@ -118,7 +118,7 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-fluro-orange.webp', fixed: true, color: 'orange-fluro' },
   { img: 'assets/cars/hero-fluro-yellow.webp', fixed: true, color: 'yellow-fluro' },
   { img: 'assets/cars/traffic-sedan-7.webp', fixed: true, color: 'white-black-stripe' }, // classic rear-engine coupe
-  { img: 'assets/cars/hero-hyper-champagne.webp', fixed: true, color: 'silver-track' }, // longtail
+  { img: 'assets/cars/hero-hyper-champagne.webp', fixed: true, color: 'silver-track' },
   { img: 'assets/cars/hero-sedan-bronze.webp', fixed: true, color: 'bronze' },
   { img: 'assets/cars/traffic-sedan-8.webp', hue: 90, color: 'green' },                // lime GT3 RS
   { img: 'assets/cars/hero-classic-blue-stripe.webp', fixed: true, color: 'blue-white-stripe' },
@@ -142,6 +142,10 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/library-sedans-1785070794205-0-purple-wedge.webp', fixed: true, color: 'Purple wedge' },
   { img: 'assets/cars/library-sedans-1785070794205-1-bronze-wedge.webp', fixed: true, color: 'Bronze wedge' },
   { img: 'assets/cars/library-sedans-1785070794205-2-pink-pale-wedge.webp', fixed: true, color: 'Pink pale wedge' },
+  { img: 'assets/cars/hero-canopy-green.webp', fixed: true, color: 'green' },
+  { img: 'assets/cars/hero-airtail-blue.webp', fixed: true, color: 'blue' },
+  { img: 'assets/cars/hero-airtail-stripe.webp', fixed: true, color: 'white-green-stripe' },
+  { img: 'assets/cars/hero-airtail-pink.webp', fixed: true, color: 'pink' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
