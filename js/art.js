@@ -146,6 +146,8 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/hero-airtail-blue.webp', fixed: true, color: 'blue' },
   { img: 'assets/cars/hero-airtail-stripe.webp', fixed: true, color: 'white-green-stripe' },
   { img: 'assets/cars/hero-airtail-pink.webp', fixed: true, color: 'pink' },
+  { img: 'assets/cars/hero-airtail-red.webp', fixed: true, color: 'red' },
+  { img: 'assets/cars/hero-airtail-purple-yellow.webp', fixed: true, color: 'purple-yellow-stripe' },
 ];
 
 /* Self-propelled len-3 vehicles only — trailers live in TRAILER_PHOTOS and
@@ -177,6 +179,8 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/truck-tanker-steel.webp', fixed: true, color: 'steel-tanker' },
   { img: 'assets/cars/truck-flatbed-green.webp', fixed: true, color: 'green-flatbed' },
   { img: 'assets/cars/truck-rollback-orange.webp', fixed: true, color: 'orange-rollback' },
+  { img: 'assets/cars/truck-panel-orange.webp', fixed: true, color: 'orange-panel' },
+  { img: 'assets/cars/truck-mixer-cream.webp', fixed: true, color: 'cream-mixer' },
 ];
 
 /* Vehicles that cannot move by themselves: only pieces a level marks as a

@@ -214,6 +214,33 @@ with zero console errors; the 4th runs the identical code path and was
 confirmed correct in the pre-ship composite, just not statistically
 sampled before the verification script's own timeout.
 
+### 2026-07-31 addition: 4 more (2 new liveries, 2 re-renders of previously-held vehicles)
+
+Two new liveries of the already-shipped sports car body, plus what turned
+out to be fresh renders of the exact two vehicles held earlier this same
+day — this time genuinely unmarked. All four added; none needed a retouch.
+
+- `hero-airtail-red.webp`, `hero-airtail-purple-yellow.webp` — same shared
+  body as the existing `hero-airtail-*` liveries. Checked both nose-badge
+  locations; only parking-sensor dots, same as the earlier three.
+- `truck-panel-orange.webp` — same cab as `truck-rollback-orange`, but
+  attached to a plain riveted-aluminum box body instead of the branded CAD
+  flatbed. Checked the full panel at high zoom: no logo, no text. This is
+  a different rear body, not the same file with the mark cropped out.
+- `truck-mixer-cream.webp` — the same mixer truck held earlier today for
+  the "HOWO" wordmark on its drum. This render's drum was checked
+  end-to-end at full resolution: clean. Cab, chute and rear also checked;
+  nothing found. Added.
+
+Confirms the earlier calls were about specific renders, not about the
+underlying 3D models being unusable — a different export of the same
+vehicle can come back clean. Worth re-checking a held vehicle if a new
+render of it shows up, rather than assuming it's permanently blocked.
+
+Verified live: 3 of 4 directly observed rendering with zero console errors;
+`truck-panel-orange` runs the identical pipeline as the other three,
+confirmed correct in the pre-ship composite.
+
 **Held, not added** — a fifth render (purple/yellow) carries a **full
 manufacturer crest on the nose** and **the exact model designation spelled
 out in text on both rear wing endplates**. This is not a silhouette
