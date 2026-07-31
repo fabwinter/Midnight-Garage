@@ -114,6 +114,11 @@ the need to prove a negative across 71 photoreal renders.
    often carries). Third-party text. The car is also a highly recognisable
    rounded rear-engine silhouette whose maker does enforce it, so this
    belongs in group 5 as well.
+   **Still present as of the 2026-07-31 library promotion** — that update
+   overwrote this file with an admin-edited version (recolour/reposition
+   via the in-game Library panel) that rotated the composition 180° but
+   carries the same decal text, now at the opposite end. Not fixed by that
+   edit; still open.
 5. **Recognisable silhouettes with no visible branding.** Lower risk than
    1-4 but not zero, because body shape can itself be protected trade dress
    and several of these marques enforce it: `hero-wedge-green`,

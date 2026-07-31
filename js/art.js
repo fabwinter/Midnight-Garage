@@ -123,7 +123,6 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/traffic-sedan-8.webp', hue: 90, color: 'green' },                // lime GT3 RS
   { img: 'assets/cars/hero-classic-blue-stripe.webp', fixed: true, color: 'blue-white-stripe' },
   { img: 'assets/cars/hero-muscle-grey-stripe.webp', fixed: true, color: 'grey-stripe-muscle' },
-  { img: 'assets/cars/hero-wedge-green.webp', fixed: true, color: 'green-wedge' },
   { img: 'assets/cars/library-sedans-1785066252701-0-pink-wedge.webp', fixed: true, color: 'Pink wedge' },
   { img: 'assets/cars/library-sedans-1785066252701-1-silver-yellow-stripe.webp', fixed: true, color: 'silver-yellow-stripe' },
   { img: 'assets/cars/library-sedans-1785067674835-1-aqua-wedge.webp', fixed: true, color: 'Aqua wedge' },
@@ -171,7 +170,6 @@ const TRUCK_PHOTOS = [
   { img: 'assets/cars/traffic-truck-new.webp', fixed: true, color: 'blue-pickup' },
   { img: 'assets/cars/traffic-truck-2.webp', fixed: true, color: 'yellow-bus' },
   { img: 'assets/cars/traffic-truck-1.webp', fixed: true, color: 'green-garbage' },
-  { img: 'assets/cars/traffic-truck-5.webp', fixed: true, color: 'chrome-tanker' },
   { img: 'assets/cars/traffic-truck-new-rusty.webp', fixed: true, color: 'rust-flatbed' },
   { img: 'assets/cars/traffic-truck-new-white.webp', fixed: true, color: 'white-box' },
   TOW_TRUCK_PHOTO,
