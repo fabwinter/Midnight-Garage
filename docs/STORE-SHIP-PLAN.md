@@ -246,24 +246,30 @@ Trademark/handle check for "Midnight Garage" (PLAN-STATUS 0.1's open
 flag) belongs here too — do it **before** creating store listings, since
 a rename after listing creation is far more work than before.
 
-### P0-10. Vehicle art IP clearance — new, from this session's audit
-Not previously tracked anywhere in this plan. Full detail lives in
-[ASSET-PROVENANCE.md](ASSET-PROVENANCE.md); summary for this checklist:
+### P0-10. Vehicle art IP clearance — ✅ every flagged asset removed, replacements pending
+Not previously tracked anywhere in this plan until this session's audit.
+Full detail lives in [ASSET-PROVENANCE.md](ASSET-PROVENANCE.md).
 - Filenames/color-tags/comments naming real marques were neutralised
-  (hygiene only — changed no pixels).
-- Several assets carrying legible third-party wordmarks or a
-  manufacturer crest have been deleted or held out of the shipped pool
-  rather than fixed; a couple of small, isolated marks (a chrome badge,
-  a vendor logo baked into stock art) were successfully retouched out.
-- **At least one held asset — a livery carrying a full manufacturer
-  crest plus the model name spelled out in text — is still outstanding**,
-  and the original file wasn't retained; it needs either a redo (crest +
-  text removed) or to stay excluded permanently.
-- A tier of "recognisable silhouette, no visible branding" assets (an
-  angular supercar wedge, a hypercar shape, a couple of others) was
-  identified as lower-but-nonzero trade-dress risk and has not been
-  resolved either way — that's a judgment call for the developer, not
-  something further automated inspection can close out.
+  (hygiene only — changed no pixels; this alone didn't clear anything).
+- 2026-08-02: **every flagged asset was removed from the shipped pool at
+  the developer's direction** — 29 files deleted (24 pool entries + 5
+  already-orphaned files sharing a flagged model), `verify-levels.mjs`
+  still green, live render confirmed zero errors. `ASSET-PROVENANCE.md`
+  has the full removed-file list with body-type descriptions for
+  briefing replacements — roughly 15 distinct designs cover the 29 files
+  (two are many-to-one: an 11-file wedge-body recolor set, and a
+  2-file same-model hypercar pair).
+- **Blocking**: the game now needs replacement art for those ~15
+  silhouettes before it has its previous variety back — this isn't
+  release-blocking in the sense of "can't ship," since the pool still
+  passes every invariant with 34 sedans, but it's a real content gap
+  worth closing before launch, not after.
+- Two items were surfaced but deliberately **not** auto-resolved —
+  see ASSET-PROVENANCE.md's "intentionally NOT removed" note: two
+  library recolors sharing a just-removed body's silhouette (never
+  explicitly named as flagged, so left for a decision rather than swept
+  up by inference), and the generic police livery (always framed as
+  low-risk/confirm-only, not a flagged exposure).
 - The audit itself is **not proven exhaustive** — it covers the assets
   actually looked at closely, not a guaranteed-clean sweep of all 71
   files; ASSET-PROVENANCE.md says plainly where its own coverage stops.
@@ -397,16 +403,16 @@ rejection.
 | Item | Status |
 |---|---|
 | P0-1 build step (`tools/build-www.mjs`, `webDir` fixed) | ✅ done |
-| P0-2 real fonts | ✅ fonts done; OFL license files still owed |
+| P0-2 real fonts + OFL licenses | ✅ done — `assets/fonts/{Inter,ChakraPetch}-OFL.txt` added |
 | P0-7 back-button handler | ✅ done (logic verified via a temporary test hook, not a shipped keyboard shim) |
 | P0-8 admin kill switch (`js/build-flags.js`) | ✅ done, verified |
 | `@capacitor/android` + `@capacitor/app` deps | ✅ done |
 | P0-5 icon/splash **source images** | ✅ done (`resources/`) — not yet run through `@capacitor/assets generate` |
 | P1 audio re-encode | 🟡 partial — Heist's 10 tracks + menu/settings themes done (AAC/m4a); Pursuit (4) + Relaxed (5) still MP3 |
-| P0-10 vehicle art IP audit | 🟡 in progress — several fixes landed, one flagged asset still outstanding, coverage not proven exhaustive; see ASSET-PROVENANCE.md |
-| P0-11 ads decision | ⬜ not yet decided — recommend (a) cut from v1.0 |
-| P0-12 privacy manifest | ⬜ not started |
-| P0-9 store-listing text + privacy/support pages | ⬜ not started — table in §2 lists every deliverable needed |
+| P0-10 vehicle art IP audit | ✅ every flagged asset removed (29 files); 🟡 ~15 replacement designs needed before variety is back to where it was — see ASSET-PROVENANCE.md |
+| P0-11 ads decision | ✅ decided — integrating a real network (AdMob), not cutting ads; see P0-11's own status for how far the code-level integration got in this environment |
+| P0-12 privacy manifest | ✅ drafted, staged at `resources/PrivacyInfo.xcprivacy` pending P0-4 |
+| P0-9 store-listing text + privacy/support pages | ✅ drafted in `docs/store-listing/` — search for `[FILL IN]` before submitting |
 
 Note on P0-7's testing: rather than shipping a keyboard shim into
 production code (Escape-key-triggers-back is exactly the kind of

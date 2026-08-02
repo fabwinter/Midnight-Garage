@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Staged here until P0-4 (`npx cap add ios`) creates the Xcode project.
+  Once ios/ exists, copy this file into ios/App/App/ and add it as a
+  resource in the App target (Xcode: right-click App/ -> Add Files ->
+  select this file -> check "Copy items if needed" + the App target).
+  Xcode validates the filename exactly as PrivacyInfo.xcprivacy; don't
+  rename it in transit.
+
+  Reflects the CURRENT shipped behavior only (js/config.js blank —
+  analytics off, no accounts, no third-party SDKs). This file MUST be
+  revisited, not just copied over unchanged, the moment either of these
+  lands:
+    - Analytics turned on (js/config.js gets real Supabase credentials —
+      PLAN-STATUS "v1.0.1" item). Add an NSPrivacyCollectedDataTypes
+      entry for whatever analytics.js actually sends (currently: a random
+      device id + game-event facts, not linked to identity, not used for
+      tracking — but the declaration must describe what's ACTUALLY sent
+      at the time analytics goes live, not this note's summary of it).
+    - AdMob lands (js/ads.js, this same sprint's P0-11 work). Google's
+      AdMob SDK ships its own PrivacyInfo.xcprivacy that merges in
+      automatically via CocoaPods/SPM — that part is automatic. What is
+      NOT automatic: this app's own NSPrivacyTracking flag flips to true
+      the moment ads use the advertising identifier for personalized
+      ads, an NSPrivacyTrackingDomains entry is needed for AdMob's
+      domains, an NSUserTrackingUsageDescription string is needed in
+      Info.plist for the ATT prompt, and the App Privacy nutrition
+      label (P0-9) needs a "Data Used to Track You" entry. None of that
+      is done by this file alone — see STORE-SHIP-PLAN.md P0-11.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- @capacitor/preferences: Capacitor's Preferences plugin
+			     persists save data via UserDefaults, sandboxed to this
+			     app only — never reads another app's or the system's
+			     defaults, so CA92.1 (own app's data) is the correct
+			     reason code, not C56D.1/1C8F.1 (which cover reading
+			     data written by other apps/extensions in an app group). -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
