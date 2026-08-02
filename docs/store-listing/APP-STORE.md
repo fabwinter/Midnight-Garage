@@ -11,10 +11,14 @@ Two things this depends on that aren't finished yet:
   prices. Update this doc's numbers once those are set at console level,
   since whatever's typed into the App Store description should match
   what the paywall actually shows.
-- **Ads language** below describes the intended P0-11 end state (banner +
-  interstitial, both removable via Pro Garage; rewarded video always
-  optional). Don't submit this copy if P0-11 ships as "ads removed
-  entirely" instead — reconcile with whichever P0-11 actually shipped.
+- **Ads language** below matches the P0-11 decision actually made and
+  code-integrated (2026-08-02): Google AdMob, banner + interstitial both
+  removable via Pro Garage/Remove Ads, rewarded video always optional and
+  never gated by those unlocks. The AdMob integration itself still needs
+  a real ad account and on-device verification before submission (see
+  STORE-SHIP-PLAN.md P0-11) — this copy doesn't depend on that finishing,
+  since the ad *behavior* described here is already what the shipped code
+  does.
 
 ---
 

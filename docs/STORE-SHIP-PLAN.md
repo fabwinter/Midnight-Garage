@@ -74,12 +74,13 @@ before now:**
   detail, per-file exposure list, and what's been resolved vs. still open
   lives in [ASSET-PROVENANCE.md](ASSET-PROVENANCE.md) — **read it before
   submitting; this is now P0-10 below.**
-- **Ads are complete stubs**, not a partial integration. `js/ads.js`'s
-  interstitial renders a literal on-screen label reading "Ad stub — no
-  mediation SDK wired in"; `adsAvailable()` is hardcoded `true` so every
-  "Watch a video" button is live and clickable with nothing behind it.
-  This was never called out as a P0 item before — it's Guideline 2.1
-  (App Completeness) the moment a reviewer taps one. See new P0-11.
+- **Ads were complete stubs**, not a partial integration — `js/ads.js`'s
+  interstitial used to render a literal on-screen label reading "Ad stub
+  — no mediation SDK wired in", with nothing behind any "Watch a video"
+  button. That would have been Guideline 2.1 (App Completeness) the
+  moment a reviewer tapped one. **2026-08-02: resolved at the code level**
+  — `js/ads.js` now bridges to a real AdMob plugin on native builds; see
+  P0-11 for what's done vs. still blocked on native bring-up.
 - **IAP are also complete stubs** (already partially known — P0-6 below
   covers the fix), confirmed again this session: `purchase()` resolves
   `{success:true}` after a fixed 500 ms timer with no StoreKit/Play
@@ -277,26 +278,69 @@ Full detail lives in [ASSET-PROVENANCE.md](ASSET-PROVENANCE.md).
 This is a real Guideline 5.2 exposure, not a style nit — treat it as
 release-gating alongside the IAP/ads work, not as post-launch cleanup.
 
-### P0-11. Ads: ship without them, or actually integrate a network
-`js/ads.js` is a complete stub end to end — not partially wired, not
-missing polish, functionally absent. Two honest paths for v1.0, pick one
-rather than shipping the stub as-is:
-- **(a) Recommended: cut ads from v1.0 entirely.** The banner already
-  defaults off (`BANNER_ENABLED = false`), and rewarded-video hint refill
-  is separately noted in this plan (§4) as something that "fights the
-  premium positioning; likely never." Removing interstitial/rewarded
-  call sites (or leaving them present but permanently non-functional
-  behind a build flag, mirroring `ADMIN_ENABLED`'s pattern) removes an
-  entire class of review risk and an SDK integration for a revenue
-  stream this plan already treats as secondary to Pro Garage.
-- **(b) Integrate a real mediation SDK** (AdMob is the common Capacitor
-  path) if ads are actually wanted for v1.0 — this is a real scope
-  addition, comparable in size to P0-6's IAP work, and should be
-  budgeted as such rather than assumed to be a small follow-up to the
-  stub already being "mostly done."
-Either way, this needs an explicit decision before submission; shipping
-the stub unmodified is not a real third option — a reviewer who taps
-"Watch a video" sees literal placeholder text.
+### P0-11. Ads: integrate a real network — ✅ code-level integration done, native bring-up still blocked
+Decided 2026-08-02 by the developer: **integrate AdMob for real**, not cut
+ads. `js/ads.js` now bridges to `@capacitor-community/admob` (added to
+`package.json`, `^6.2.0` — matched to this repo's Capacitor 6 core, not
+the plugin's own latest `8.0.0`, which requires Capacitor 8) on native
+builds, while keeping the exact original dev/web stub behavior when no
+native bridge is present, so nothing above `js/ads.js` in the call chain
+(`js/game.js`'s rescue/offer/shop-watch and interstitial-eligibility
+flows) needed to change — verified by re-reading every call site against
+the new file's exported contract.
+
+What's actually implemented, read out of the real installed package
+(`node_modules/@capacitor-community/admob/dist/esm/**`, not guessed or
+summarized from docs — the sandbox's outbound proxy blocks GitHub/unpkg/
+jsdelivr but not `registry.npmjs.org`, which is how the real source got
+fetched):
+- `initialize()` + the full consent (UMP) and ATT (iOS 14.5+) flow before
+  any ad is requested. Default is deliberately closed: no personalized
+  ads unless consent is affirmatively `OBTAINED`/`NOT_REQUIRED` **and**
+  ATT is `authorized`; if consent info can't even be read (offline,
+  misconfigured), no ads are requested at all rather than guessing a
+  region doesn't need one.
+- Rewarded (`prepareRewardVideoAd`/`showRewardVideoAd`), interstitial
+  (`prepareInterstitial`/`showInterstitial`), and banner
+  (`showBanner`/`hideBanner`) all wired to real plugin calls, gated on
+  the resolved consent state. Events (`onRewardedVideoAdReward`,
+  `interstitialAdDismissed`, etc.) are real enum string values read from
+  the package source, not assumed from README prose.
+- Google's official public TEST ad unit IDs ship as the working default
+  (`AD_TEST_MODE = true` in `js/ads.js`) — safe to build/submit as-is,
+  since they only ever serve clearly-labelled test creatives. Each
+  platform/format slot has a `[FILL IN production ID]` marker next to it
+  for when this app's own AdMob account exists.
+- Banner stays `BANNER_ENABLED = false` — integrating the SDK is a
+  separate decision from turning the banner on, per MONETIZATION-PLAN.md
+  §5.2's "default it off until data justifies it."
+
+**Still blocked on M2 (native platform bring-up, needs a Mac + real
+accounts — not available in this environment):**
+- An actual AdMob account + registered app to get real (non-test) ad
+  unit IDs and an AdMob App ID.
+- The AdMob App ID has to go into `ios/App/App/Info.plist`
+  (`GADApplicationIdentifier`) and `android/app/src/main/
+  AndroidManifest.xml` (`com.google.android.gms.ads.APPLICATION_ID`
+  meta-data) — unlike `PrivacyInfo.xcprivacy`, this can't be staged as a
+  standalone file in `resources/` ahead of time, since `ios/`/`android/`
+  don't exist yet (P0-3/P0-4). Do this as part of that native bring-up,
+  not forgotten as a separate later step.
+- iOS also needs the `SKAdNetworkItems` list in `Info.plist` for AdMob's
+  mediated networks — same blocker, same timing.
+- Real-device verification of the whole flow: does the UMP consent form
+  actually render for an EEA-simulated test device, does the ATT prompt
+  fire correctly on a real iOS build, do real (test-ID) ads actually
+  load and show. None of this is checkable in this headless sandbox —
+  the web/dev path was verified with Playwright (stub renders, resolves,
+  no console errors; `npm run verify` still green), but that only proves
+  the non-native branch and the call contract, not the AdMob bridge
+  itself.
+- `docs/store-listing/data-safety.md` and `privacy-policy.html`'s
+  "Advertising" sections still say `[FILL IN once P0-11 is finalized]` —
+  now fillable in outline (AdMob, non-personalized-by-default, consent
+  form shown where required) but worth a final pass once the above
+  native testing confirms the flow actually behaves as coded.
 
 ### P0-12. Privacy manifest (`PrivacyInfo.xcprivacy`)
 Mandatory for every App Store submission since May 2024: a manifest
@@ -352,8 +396,10 @@ rejection.
   (Preferences → iCloud KV / Play backup) — PLAN-STATUS 1.2.
 - Analytics-on (Supabase) + updated privacy labels — v1.0.1.
 - App preview video / ASO iteration — post-launch.
-- Rewarded-video hint refill — stays cut until an ad-SDK decision (see
-  P0-11 — this is the same decision, not a separate one).
+- Rewarded-video hint refill — the ad-SDK decision this was blocked on
+  is now made (P0-11, AdMob integrated), but adding a new rewarded
+  placement is a separate product call the developer hasn't made; stays
+  deferred until asked for.
 - Chapters 8–10 gate/hitch variety (see VARIETY-PLAN §10 — needs a new
   generator strategy, not release-gating).
 
@@ -366,7 +412,7 @@ rejection.
 | Agreements, tax, banking complete | blocks paid IAP silently if skipped |
 | IAP product `pro_garage` (non-consumable) approved | submit WITH the binary first time; P0-6 |
 | Restore purchases functional | 3.1.1 — currently a stub, P0-6 |
-| Ads decision made and shipped (real SDK or removed) | not the stub as-is; P0-11 |
+| AdMob real ad unit IDs + App ID in `Info.plist`/`SKAdNetworkItems` | code-level integration done; needs a real AdMob account during M2 native bring-up — P0-11 |
 | Vehicle art IP exposure resolved or accepted as a known risk | P0-10, ASSET-PROVENANCE.md |
 | `PrivacyInfo.xcprivacy` present | P0-12 |
 | Privacy nutrition labels: "Data not collected" | true only with blank config (P0-9) |
@@ -388,7 +434,7 @@ rejection.
 | targetSdk 35 (plan 36 by ~Aug 2026) | P0-3 |
 | Upload keystore backed up somewhere safe outside this repo | generated on first `android/` signing setup — **lose it and you can never update the app under the same listing**; Play App Signing means Google can help recover the *signing* key but not this *upload* key |
 | IAP product `pro_garage` + license testers | test purchases without spending; P0-6 |
-| Ads decision made and shipped | same P0-11 decision as Apple's checklist |
+| AdMob App ID + real ad unit IDs wired into `AndroidManifest.xml` | code-level integration done; needs a real AdMob account during M2 native bring-up — P0-11 |
 | Data safety form: no data collected/shared | true only with blank config |
 | Content rating (IARC questionnaire) → Everyone | |
 | Feature graphic (1024×500px) + app icon (512×512px) + phone screenshots | store listing requirements, separate from the App Store assets |
@@ -410,7 +456,7 @@ rejection.
 | P0-5 icon/splash **source images** | ✅ done (`resources/`) — not yet run through `@capacitor/assets generate` |
 | P1 audio re-encode | 🟡 partial — Heist's 10 tracks + menu/settings themes done (AAC/m4a); Pursuit (4) + Relaxed (5) still MP3 |
 | P0-10 vehicle art IP audit | ✅ every flagged asset removed (29 files); 🟡 ~15 replacement designs needed before variety is back to where it was — see ASSET-PROVENANCE.md |
-| P0-11 ads decision | ✅ decided — integrating a real network (AdMob), not cutting ads; see P0-11's own status for how far the code-level integration got in this environment |
+| P0-11 ads integration | ✅ code-level integration done (`js/ads.js` bridges to `@capacitor-community/admob`, web/dev stub preserved, `npm run verify` + Playwright smoke test both green); 🟡 real AdMob account, App ID in native manifests, and on-device testing still needed at M2 — see P0-11 |
 | P0-12 privacy manifest | ✅ drafted, staged at `resources/PrivacyInfo.xcprivacy` pending P0-4 |
 | P0-9 store-listing text + privacy/support pages | ✅ drafted in `docs/store-listing/` — search for `[FILL IN]` before submitting |
 
@@ -462,8 +508,10 @@ weeks calendar time from starting M2, mostly waiting, not working.
 - [x] Admin mode unreachable in release builds (or disclosed in notes).
       Verified with Playwright: 5 taps on the title in a `--release`
       build leaves the admin chip/bar hidden.
-- [ ] Ads either genuinely functional or genuinely absent — not the
-      current stub. (P0-11.)
+- [x] Ads: code-level AdMob integration done, not the old stub. (P0-11.)
+- [ ] AdMob App ID/real ad unit IDs wired into native manifests and
+      verified on a real device (consent form, ATT prompt, actual ad
+      fill). Blocked on M2. (P0-11.)
 - [ ] Vehicle art IP exposure resolved or knowingly accepted, not
       silently shipped. (P0-10.)
 - [ ] `PrivacyInfo.xcprivacy` present and accurate. (P0-12.)

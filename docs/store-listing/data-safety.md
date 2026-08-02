@@ -16,15 +16,18 @@ storage.js`), not by guessing at what a puzzle game "probably" collects.
 | Random device id + gameplay-event analytics | **No, in the current build** | — | — | `js/analytics.js` generates this and would batch it to Supabase, but `js/config.js` ships with blank credentials — the code path exists but is inert. This flips to "Yes, not linked to identity, not used for tracking" the moment `js/config.js` is filled in (planned for v1.0.1, not v1.0) — **re-answer this row when that happens, don't leave it stale** |
 | Purchase history | Handled entirely by Apple/Google | — | — | `js/iap.js` reads entitlement state from the platform's own store APIs; this app never sees or stores payment details itself |
 
-## Ads-dependent: only applies once P0-11 (AdMob) is actually active
+## Ads-dependent: AdMob is now integrated at the code level (P0-11)
 
-This section describes what **Google's AdMob SDK** itself collects once
-wired in — this app's own code doesn't collect anything for ads beyond
-what the SDK does automatically. Google publishes updated declarations
-for AdMob itself (its own bundled `PrivacyInfo.xcprivacy` for iOS, its own
-Play Data Safety guidance for Android) — treat the rows below as a
-starting point to confirm against Google's current published guidance at
-submission time, not a permanent fact:
+2026-08-02: `js/ads.js` bridges to `@capacitor-community/admob` on native
+builds (still needs a real AdMob account + on-device verification before
+submission — see STORE-SHIP-PLAN.md P0-11). This section describes what
+**Google's AdMob SDK** itself collects — this app's own code doesn't
+collect anything for ads beyond what the SDK does automatically. Google
+publishes updated declarations for AdMob itself (its own bundled
+`PrivacyInfo.xcprivacy` for iOS, its own Play Data Safety guidance for
+Android) — treat the rows below as a starting point to confirm against
+Google's current published guidance at submission time, not a permanent
+fact:
 
 | Data type | Collected? | Linked to identity? | Used for tracking? | Notes |
 |---|---|---|---|---|
@@ -33,23 +36,24 @@ submission time, not a permanent fact:
 | Device/app info (for ad fraud + frequency capping) | Yes | No | Only if tracking is enabled | |
 
 **The personalized-vs-non-personalized choice changes the "used for
-tracking" answer and the App Store Connect declaration together:**
-- **Non-personalized ads only**: no ATT prompt needed on iOS, "used for
-  tracking" = No across the board, simpler declaration, generally lower
-  eCPM.
-- **Personalized ads**: requires the iOS App Tracking Transparency prompt
-  (`NSUserTrackingUsageDescription` in Info.plist, plus Google's UMP SDK
-  for the actual consent flow — neither exists yet, that's part of the
-  real P0-11 native work, not just the `js/ads.js` code layer), "used for
-  tracking" = Yes, and App Store Connect's nutrition label needs a "Data
-  Used to Track You" section that isn't needed for the non-personalized
-  path.
-
-**This plan does not make that call for you.** Whichever is chosen
-determines both consoles' actual form answers — update this file once
-decided, and make sure `resources/PrivacyInfo.xcprivacy`'s
-`NSPrivacyTracking` flag (currently `false`, correct only for the
-no-ads/non-personalized case) gets flipped to match.
+tracking" answer and the App Store Connect declaration together.**
+`js/ads.js`'s shipped behavior is: default to non-personalized (no
+tracking) for every user, but request ATT + show Google's UMP consent
+form where required, and use personalized ads (tracking = Yes for that
+user) only if both are affirmatively granted. That means the *capability*
+to track exists in the shipped code even though most users, by default
+or by declining, will get non-personalized ads — so the honest App Store
+Connect answer is the personalized-path one:
+- iOS: App Tracking Transparency prompt required
+  (`NSUserTrackingUsageDescription` in `Info.plist` — still needs adding
+  once `ios/` exists, P0-11), nutrition label needs a "Data Used to
+  Track You" section, `resources/PrivacyInfo.xcprivacy`'s
+  `NSPrivacyTracking` is already flipped to `true` to match (see that
+  file's own comment for why).
+- If the ads decision later changes to strictly non-personalized with no
+  ATT prompt at all, both of those need to flip back — this file, the
+  Info.plist string, and `PrivacyInfo.xcprivacy` together, not just one
+  of them.
 
 ## Target audience / children's category (both stores)
 

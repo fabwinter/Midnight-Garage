@@ -7,36 +7,61 @@
   Xcode validates the filename exactly as PrivacyInfo.xcprivacy; don't
   rename it in transit.
 
-  Reflects the CURRENT shipped behavior only (js/config.js blank —
-  analytics off, no accounts, no third-party SDKs). This file MUST be
-  revisited, not just copied over unchanged, the moment either of these
-  lands:
-    - Analytics turned on (js/config.js gets real Supabase credentials —
+  Reflects the CURRENT shipped behavior: js/config.js is blank
+  (analytics off, no accounts) but js/ads.js (P0-11) now bridges to a
+  real AdMob plugin on native builds, so this manifest is no longer the
+  "no third-party SDKs" baseline it started as. This file MUST be
+  revisited again, not just copied over unchanged, the moment:
+    - Analytics turns on (js/config.js gets real Supabase credentials —
       PLAN-STATUS "v1.0.1" item). Add an NSPrivacyCollectedDataTypes
       entry for whatever analytics.js actually sends (currently: a random
       device id + game-event facts, not linked to identity, not used for
       tracking — but the declaration must describe what's ACTUALLY sent
       at the time analytics goes live, not this note's summary of it).
-    - AdMob lands (js/ads.js, this same sprint's P0-11 work). Google's
-      AdMob SDK ships its own PrivacyInfo.xcprivacy that merges in
-      automatically via CocoaPods/SPM — that part is automatic. What is
-      NOT automatic: this app's own NSPrivacyTracking flag flips to true
-      the moment ads use the advertising identifier for personalized
-      ads, an NSPrivacyTrackingDomains entry is needed for AdMob's
-      domains, an NSUserTrackingUsageDescription string is needed in
-      Info.plist for the ATT prompt, and the App Privacy nutrition
-      label (P0-9) needs a "Data Used to Track You" entry. None of that
-      is done by this file alone — see STORE-SHIP-PLAN.md P0-11.
+    - This app's own AdMob account exists and the code-level integration
+      is verified on a real device (P0-11's remaining native-bring-up
+      work — see STORE-SHIP-PLAN.md). NSPrivacyTracking is already
+      flipped to true below because js/ads.js's consent flow CAN request
+      personalized ads (and therefore use the advertising identifier for
+      tracking) once a user affirmatively consents via ATT + UMP — that's
+      a capability of the shipped code, not a hypothetical, so it must be
+      declared even before a real ad account exists. If the ads decision
+      is later changed to non-personalized-only with no ATT prompt at
+      all, flip this back to false. NSPrivacyTrackingDomains stays empty
+      on purpose: this app's own code never contacts an AdMob domain
+      directly, only through the SDK, and Google's AdMob SDK ships its
+      own PrivacyInfo.xcprivacy that Apple merges in automatically via
+      CocoaPods/SPM — don't duplicate the SDK's own domain list here.
+      Still needed once ios/ exists: an NSUserTrackingUsageDescription
+      string in Info.plist for the ATT prompt, and the App Privacy
+      nutrition label (P0-9) needs a "Data Used to Track You" entry.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
-	<false/>
+	<true/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
+	<array>
+		<dict>
+			<!-- IDFA, only when the user has consented via ATT + AdMob's
+			     UMP consent form (js/ads.js: personalizedAdsAllowed).
+			     Non-personalized ads (the default when consent/ATT
+			     isn't affirmatively obtained) don't use this. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>

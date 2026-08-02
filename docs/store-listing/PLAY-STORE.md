@@ -2,8 +2,9 @@
 
 Same disclaimers as APP-STORE.md: pricing matches `js/iap.js`'s current
 placeholder USD strings (update once P0-6 sets real localized prices),
-and ads copy assumes P0-11 ships as "banner + interstitial, removable via
-Pro Garage" — reconcile if that decision changes.
+and ads copy matches the P0-11 decision actually made and code-integrated
+(2026-08-02): Google AdMob, banner + interstitial removable via Pro
+Garage/Remove Ads, rewarded video always optional.
 
 ---
 

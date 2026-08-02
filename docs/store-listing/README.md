@@ -19,12 +19,14 @@ publish dates, and the final ad-network name once P0-11 settles).
 
 1. Fill in every `[FILL IN]` marker (legal/company name, support email,
    governing jurisdiction, publish dates).
-2. **Reconcile the ads sections** (`privacy-policy.html`'s "Advertising"
-   section, `data-safety.md`'s ads-dependent table, both stores'
-   "does the app have ads" answers) against whatever P0-11 actually
-   ships — these were written assuming AdMob banner + interstitial +
-   optional rewarded, all removable via Pro Garage. If that changes,
-   these need to change with it.
+2. **Ads sections are filled in** (`privacy-policy.html`'s "Advertising"
+   section, `data-safety.md`'s ads-dependent table, both stores' "does
+   the app have ads" answers) for the P0-11 decision actually made and
+   code-integrated: Google AdMob, banner + interstitial removable via
+   Pro Garage/Remove Ads, rewarded video always optional, non-personalized
+   ads by default with an ATT/UMP consent path to personalized. If that
+   decision changes later, all of these need to change with it —
+   `resources/PrivacyInfo.xcprivacy`'s `NSPrivacyTracking` flag too.
 3. Host `privacy-policy.html`, `support.html`, and `terms.html` at
    stable URLs on infrastructure you control — a GitHub Pages site off
    this same repo works fine, or any static host. The exact URLs then
