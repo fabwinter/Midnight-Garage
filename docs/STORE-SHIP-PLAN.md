@@ -135,13 +135,12 @@ before now:**
 `assets/` into `www/` (gitignored); `capacitor.config.json`'s `webDir` is
 `"www"`. `npm run build` / `npm run build:release` both confirmed working.
 
-### P0-2. Fix the fonts (repo work) — ✅ fonts fixed, licenses still owed
+### P0-2. Fix the fonts (repo work) — ✅ done
 Real Inter (Variable) and Chakra Petch (500/600/700) woff2 files are in
-`assets/fonts/`, verified via `file` as genuine WOFF2. Still owed: the
-OFL license text for both families should ship alongside them (a
-`LICENSE` file per family, or one combined file) — cheap, and Apple/Google
-don't require it, but it's the honest thing to do for an OFL font and
-costs nothing to add before submission.
+`assets/fonts/`, verified via `file` as genuine WOFF2. OFL license text
+for both families now ships alongside them (`assets/fonts/Inter-OFL.txt`,
+`assets/fonts/ChakraPetch-OFL.txt`) — not required by Apple/Google, but
+the honest thing to do for an OFL font.
 
 ### P0-3. Android platform bring-up
 `@capacitor/android` dep is present; `npx cap add android` has not been
