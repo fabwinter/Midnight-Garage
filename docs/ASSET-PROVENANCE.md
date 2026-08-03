@@ -37,7 +37,10 @@ turnaround expected is days, not weeks. Note which of the two applies:
 | `heist-time-is-ticking.m4a` | Heist set list 8 |
 | `heist-new-town-somehow.m4a` | Heist set list 9 |
 | `heist-cherry-run.m4a` | Heist set list 10 |
-| `pursuit-1..4.mp3` | Pursuit attempt pool (still MP3 — pending AAC re-export) |
+| `pursuit-1.m4a` | Pursuit attempt pool |
+| `pursuit-2.m4a` | Pursuit attempt pool |
+| `pursuit-3.m4a` | Pursuit attempt pool |
+| `pursuit-4.m4a` | Pursuit attempt pool |
 | `relaxed-velvet-drift.m4a` | Relaxed shuffle pool |
 | `relaxed-velvet-midnight-loop.m4a` | Relaxed shuffle pool |
 | `relaxed-glassroom-stroll.m4a` | Relaxed shuffle pool |
@@ -54,8 +57,18 @@ stream=codec_name` (all `aac`, ~130 kbps, 48 kHz stereo) before wiring
 confirmed in a headless Playwright pass that `startAttemptTrack()` in
 Relaxed mode requests the new files with a 200/206 response and no
 console errors (real AAC decode still can't be verified in this
-sandbox's Chromium — see CLAUDE.md's audio-testing note). Pursuit's 4
-tracks are still the pending MP3→AAC item.
+sandbox's Chromium — see CLAUDE.md's audio-testing note).
+
+Same day, Pursuit's 4 tracks were **re-encoded** (not replaced — same
+underlying recordings, unlike Relaxed) from the original MP3s to AAC via
+`ffmpeg -c:a aac -b:a 128k -ar 48000 -ac 2`, matching the Heist set's
+measured settings. Durations matched the source MP3s to within ~40 ms
+(normal encoder-framing rounding); each output verified via `ffprobe` as
+real `aac` at ~131-132 kbps, 48 kHz stereo — then the same headless
+Playwright check confirmed Pursuit mode's `startAttemptTrack()` requests
+the new `.m4a` files with a 200/206 response and no console errors.
+Original MP3s deleted, not kept alongside. **This closes the P1 audio
+re-encode item — Heist, Relaxed, and Pursuit are all AAC/`.m4a` now.**
 
 Filenames are deliberately neutral and need not match the tracks' actual
 titles; the shipped name is just a path. Track titles are never displayed

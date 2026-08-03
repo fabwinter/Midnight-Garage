@@ -98,18 +98,26 @@ before now:**
   an MP4 wrapper is silent on iOS/macOS Safari's `<audio>` element even
   though it plays fine in Chromium, so verifying the codec (not just the
   file extension) genuinely mattered here and is now a standing rule in
-  `CLAUDE.md`. **2026-08-03: Relaxed's 5 tracks are done** — replaced
-  with new AAC/`.m4a` masters the developer supplied directly (not a
-  re-encode of the old MP3s; the old files were deleted, not kept
-  alongside), verified via `ffprobe` (all real `aac`, ~130 kbps) and a
-  headless Playwright pass confirming `js/audio.js`'s Relaxed pool
-  requests the new files with 200/206 responses and no console errors.
-  Pursuit's 4 tracks are **still MP3, not yet re-encoded.** Net effect on
-  size: audio grew from ~40 MB to **59 MB** in an earlier window (Heist
-  went from 1 track to a 10-track continuous set list — a deliberate
-  music/UX decision, independent of the store-prep work); the P1
-  "≤15 MB audio" target below still needs re-baselining once Pursuit is
-  converted too.
+  `CLAUDE.md`. **2026-08-03: all remaining audio is done — Relaxed's 5
+  tracks were replaced** with new AAC/`.m4a` masters the developer
+  supplied directly (not a re-encode of the old MP3s; the old files were
+  deleted, not kept alongside), **and Pursuit's 4 tracks were re-encoded**
+  from their original MP3s via `ffmpeg -c:a aac -b:a 128k -ar 48000 -ac 2`
+  (matching the Heist set's measured settings; durations matched the
+  source MP3s to within ~40 ms). Every file verified via `ffprobe` (all
+  real `aac`, ~128-133 kbps, 48 kHz stereo — not Opus-in-`.m4a`) and a
+  headless Playwright pass confirming `js/audio.js`'s Relaxed and
+  Pursuit pools request the new files with 200/206 responses and no
+  console errors. **The whole P1 "finish the audio re-encode" item is
+  closed** — every shipped track (Heist, menu/Settings, Relaxed,
+  Pursuit) is AAC in `.m4a` now, none Opus. Net effect on size: the 9
+  converted files measured ~31 MB as MP3, ~21 MB as AAC (`du -ch`,
+  actually measured, not estimated) — a real ~10 MB reduction, not the
+  "roughly matches or beats MP3 size" wash predicted earlier in this
+  section. `assets/audio/` now totals **49 MB** (measured 2026-08-03),
+  down from the ~59 MB noted after Heist's 10-track expansion — so the
+  P1 "≤15 MB audio" target below should be re-baselined against this
+  49 MB figure, not the original 40→15 MB estimate.
 
 **Scaffolded only / stubbed (carried over, still accurate):**
 - `npx cap add ios` has never been run — no `ios/` project exists.
@@ -357,14 +365,14 @@ rejection.
 
 ## 3. P1 — polish that should precede review
 
-- **Finish the audio re-encode.** Relaxed's 5 tracks are done (2026-08-03,
-  new AAC masters, not a re-encode — see ASSET-PROVENANCE.md). Pursuit's
-  4 tracks are still MP3; re-encode to AAC in `.m4a` (~160 kbps, matching
-  the Heist set — see ASSET-PROVENANCE.md's music section for the
-  measured null-test numbers behind that choice) for the same iOS-Safari
-  reason the others needed it. Re-baseline the size target after — see
-  §1's note on why "≤15 MB audio" no longer reflects the current
-  10-track Heist set list.
+- ~~Finish the audio re-encode.~~ **Done 2026-08-03.** Relaxed's 5 tracks
+  were replaced with new AAC masters the developer supplied; Pursuit's 4
+  were re-encoded from their original MP3s via `ffmpeg -c:a aac -b:a
+  128k -ar 48000 -ac 2`, matching the Heist set. See ASSET-PROVENANCE.md
+  and §1 above for verification detail and the re-baselined size figure
+  (`assets/audio/` now 49 MB, measured — the P1 "≤15 MB audio" target
+  predates the 10-track Heist set list and is stale; treat 49 MB as the
+  real current baseline to shrink from, not 15 MB).
 - **Background/interruption QA**: backgrounding mid-Pursuit (timer must
   freeze or the level must fail gracefully, not silently keep counting),
   phone-call interruption during music, resume after lock screen.
@@ -458,7 +466,7 @@ rejection.
 | P0-8 admin kill switch (`js/build-flags.js`) | ✅ done, verified |
 | `@capacitor/android` + `@capacitor/app` deps | ✅ done |
 | P0-5 icon/splash **source images** | ✅ done (`resources/`) — not yet run through `@capacitor/assets generate` |
-| P1 audio re-encode | 🟡 partial — Heist's 10 tracks + menu/settings themes + Relaxed's 5 tracks done (AAC/m4a); Pursuit (4) still MP3 |
+| P1 audio re-encode | ✅ done — every shipped track (Heist's 10 + menu/Settings + Relaxed's 5 + Pursuit's 4) is AAC in `.m4a`, verified via `ffprobe` |
 | P0-10 vehicle art IP audit | ✅ every flagged asset removed (29 files); 🟡 ~15 replacement designs needed before variety is back to where it was — see ASSET-PROVENANCE.md |
 | P0-11 ads integration | ✅ code-level integration done (`js/ads.js` bridges to `@capacitor-community/admob`, web/dev stub preserved, `npm run verify` + Playwright smoke test both green); 🟡 real AdMob account, App ID in native manifests, and on-device testing still needed at M2 — see P0-11 |
 | P0-12 privacy manifest | ✅ drafted, staged at `resources/PrivacyInfo.xcprivacy` pending P0-4 |
@@ -479,10 +487,9 @@ this environment):**
 `cap add ios` / `cap add android`, native config (P0-3/4), running
 `@capacitor/assets generate` against the sources already prepared in
 `resources/` and checking the result on a simulator/device, RevenueCat +
-store products (P0-6), physical-device QA matrix, background/audio QA
-(now including the Heist continuous-set-list behavior specifically), and
-finishing the audio re-encode with real `ffmpeg` (available in this
-environment now, if that work happens here rather than on the Mac).
+store products (P0-6), physical-device QA matrix, and background/audio
+QA (now including the Heist continuous-set-list behavior specifically —
+the audio re-encode itself is done, see P1 above).
 
 **M3 — store operations (parallel with M2's tail):**
 Trademark check → listings, screenshots, privacy policy + support page
@@ -519,9 +526,9 @@ weeks calendar time from starting M2, mostly waiting, not working.
 - [ ] Vehicle art IP exposure resolved or knowingly accepted, not
       silently shipped. (P0-10.)
 - [ ] `PrivacyInfo.xcprivacy` present and accurate. (P0-12.)
-- [ ] All Heist/Pursuit/Relaxed audio ships as AAC, none as Opus-in-.m4a;
-      verified via `ffprobe`, not by file extension. (P1, currently
-      Heist-only.)
+- [x] All Heist/Pursuit/Relaxed/menu/Settings audio ships as AAC, none as
+      Opus-in-.m4a; verified via `ffprobe`, not by file extension. (P1,
+      done 2026-08-03.)
 - [ ] Both privacy forms filed as "no data collected"; policy URL live.
 - [ ] Pursuit timer behaves across backgrounding on both platforms; Heist
       set-list music survives backgrounding without cutting/restarting.

@@ -57,10 +57,10 @@ const HEIST_SET_LIST = [
 const TRACK_POOLS = {
   heist: HEIST_SET_LIST,
   pursuit: [
-    'assets/audio/pursuit-1.mp3',
-    'assets/audio/pursuit-2.mp3',
-    'assets/audio/pursuit-3.mp3',
-    'assets/audio/pursuit-4.mp3',
+    'assets/audio/pursuit-1.m4a',
+    'assets/audio/pursuit-2.m4a',
+    'assets/audio/pursuit-3.m4a',
+    'assets/audio/pursuit-4.m4a',
   ],
   // Instrumental, lower-intensity cousins of the Heist/Pursuit pool — no
   // countdown/budget pressure in this mode, so the music shouldn't imply
