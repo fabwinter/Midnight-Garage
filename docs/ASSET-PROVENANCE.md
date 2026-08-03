@@ -38,7 +38,24 @@ turnaround expected is days, not weeks. Note which of the two applies:
 | `heist-new-town-somehow.m4a` | Heist set list 9 |
 | `heist-cherry-run.m4a` | Heist set list 10 |
 | `pursuit-1..4.mp3` | Pursuit attempt pool (still MP3 — pending AAC re-export) |
-| `relaxed-*.mp3` (5) | Relaxed shuffle pool (still MP3 — pending AAC re-export) |
+| `relaxed-velvet-drift.m4a` | Relaxed shuffle pool |
+| `relaxed-velvet-midnight-loop.m4a` | Relaxed shuffle pool |
+| `relaxed-glassroom-stroll.m4a` | Relaxed shuffle pool |
+| `relaxed-velvet-after-midnight.m4a` | Relaxed shuffle pool |
+| `relaxed-velvet-after-hours.m4a` | Relaxed shuffle pool |
+
+2026-08-03: the Relaxed pool's 5 tracks were replaced with new AAC/`.m4a`
+masters supplied by the developer (same rights coverage as the rest of
+this table — owned/licensed by Fabian Winterbine), superseding the old
+MP3 files 1:1 by slot; the old `relaxed-*.mp3` files were deleted, not
+kept alongside. Verified each via `ffprobe -show_entries
+stream=codec_name` (all `aac`, ~130 kbps, 48 kHz stereo) before wiring
+`js/audio.js`'s `TRACK_POOLS.relaxed` to the new filenames, then
+confirmed in a headless Playwright pass that `startAttemptTrack()` in
+Relaxed mode requests the new files with a 200/206 response and no
+console errors (real AAC decode still can't be verified in this
+sandbox's Chromium — see CLAUDE.md's audio-testing note). Pursuit's 4
+tracks are still the pending MP3→AAC item.
 
 Filenames are deliberately neutral and need not match the tracks' actual
 titles; the shipped name is just a path. Track titles are never displayed

@@ -66,11 +66,11 @@ const TRACK_POOLS = {
   // countdown/budget pressure in this mode, so the music shouldn't imply
   // any either. Same shuffle-without-repeat treatment as Pursuit's pool.
   relaxed: [
-    'assets/audio/relaxed-velvet-drift.mp3',
-    'assets/audio/relaxed-velvet-midnight-loop.mp3',
-    'assets/audio/relaxed-glassroom-stroll.mp3',
-    'assets/audio/relaxed-velvet-after-midnight.mp3',
-    'assets/audio/relaxed-velvet-after-hours.mp3',
+    'assets/audio/relaxed-velvet-drift.m4a',
+    'assets/audio/relaxed-velvet-midnight-loop.m4a',
+    'assets/audio/relaxed-glassroom-stroll.m4a',
+    'assets/audio/relaxed-velvet-after-midnight.m4a',
+    'assets/audio/relaxed-velvet-after-hours.m4a',
   ],
 };
 /* Modes whose music is one continuous session-long stream rather than a
