@@ -81,11 +81,14 @@ before now:**
   moment a reviewer tapped one. **2026-08-02: resolved at the code level**
   — `js/ads.js` now bridges to a real AdMob plugin on native builds; see
   P0-11 for what's done vs. still blocked on native bring-up.
-- **IAP are also complete stubs** (already partially known — P0-6 below
-  covers the fix), confirmed again this session: `purchase()` resolves
-  `{success:true}` after a fixed 500 ms timer with no StoreKit/Play
-  Billing behind it, `restorePurchases()` always returns `{restored:[]}`,
-  and prices are hardcoded USD strings rather than store-localized.
+- **IAP were also complete stubs** (already partially known — P0-6 below
+  covers the fix): `purchase()` used to resolve `{success:true}` after a
+  fixed 500 ms timer with no StoreKit/Play Billing behind it,
+  `restorePurchases()` always returned `{restored:[]}`, and prices were
+  hardcoded USD strings rather than store-localized. **2026-08-03:
+  resolved at the code level** — `js/iap.js` now bridges to RevenueCat's
+  Capacitor plugin on native builds; see P0-6 for what's done vs. still
+  blocked on native bring-up.
 - **No `PrivacyInfo.xcprivacy`.** Mandatory for all App Store submissions
   since May 2024 (required-reason API declarations). `MONETIZATION-
   PLAN.md` mentions this once, in passing, under deferred work — it was
@@ -181,32 +184,73 @@ assets generate` is what needs to flatten it for the final Store icon,
 not the source itself). **Not yet run through the actual generate →
 device/simulator pipeline** — needs P0-3/P0-4's platforms to exist first.
 
-### P0-6. Real IAP: one non-consumable, "Pro Garage"
-The single most substantive remaining feature. Recommendation:
-**RevenueCat's Capacitor plugin** (free tier covers this volume, wraps
-StoreKit 2 + Play Billing 7+, entitlement checks survive
-reinstall/multi-device) — alternative is `cordova-plugin-purchase` v13
-if a third-party dependency is unwanted.
-- Product: non-consumable / one-time in-app product `pro_garage`, both
-  consoles, same id. (`js/iap.js`'s `PRODUCTS` also lists `remove_ads`
-  and three consumable wrench packs — same treatment, same file.)
-- Replace `purchase()`/`restorePurchases()`'s fixed-delay stubs: native →
-  plugin purchase flow → entitlement check sets `save.pro` (and the
-  matching flags for the other products); keep the stub **web-only**
-  (gate on `Capacitor.isNativePlatform()`), it's how the flow stays
-  testable in a browser — this pattern (one file owns the fake-vs-real
-  split, callers never branch on platform themselves) is already how
-  `js/ads.js` is written too, so `js/iap.js` should follow the same shape.
-- **Restore must really work** — Apple Guideline 3.1.1 requires a
-  functioning restore mechanism for non-consumables; the current
-  `{restored:[]}` stub is a guaranteed rejection the moment a reviewer
-  tests it with a prior purchase. Both `restoreBtn`s call the plugin's
-  restore and re-check entitlement.
-- Prices are currently hardcoded USD strings in `PRODUCTS` (`'$6.99'`
-  etc.) — these need to become store-localized prices read from the
-  platform at runtime, not shipped as fixed English-locale text; a
-  German or Japanese buyer should see their own currency and formatting.
-- Price the localized tiers at console level; the paywall UI is done.
+### P0-6. Real IAP: one non-consumable, "Pro Garage" — ✅ code-level integration done, native bring-up still blocked
+Decided/built 2026-08-03, same shape as P0-11's AdMob work: `js/iap.js`
+now bridges to `@revenuecat/purchases-capacitor` (added to
+`package.json`, `^9.2.2` — the latest version whose peer dependency is
+`@capacitor/core ^6.0.0`, matching this repo's Capacitor 6; the plugin's
+own "latest" tag, 13.x, requires Capacitor 8) on native builds, while
+keeping the exact original dev/web stub behavior when no native bridge is
+present, so nothing above `js/iap.js` in the call chain (`js/game.js`'s
+`purchaseProduct()` and `restore()`) needed to change — verified by
+re-reading every call site against the new file's exported contract, and
+by a headless Playwright pass confirming the stub path (`purchase()`,
+`restorePurchases()`, `PRODUCTS` mutation) behaves identically to before.
+
+What's actually implemented, read out of the real installed package
+(`node_modules/@revenuecat/purchases-capacitor/dist/esm/definitions.d.ts`
++ `node_modules/@revenuecat/purchases-typescript-internal-esm/dist/*.d.ts`,
+fetched the same way as P0-11's AdMob source — via `registry.npmjs.org`,
+which the sandbox's outbound proxy allows even though GitHub/unpkg/
+jsdelivr are blocked):
+- `configure({apiKey})` + `getProducts({productIdentifiers, type:
+  'NON_SUBSCRIPTION'})` fetched once at module load (fire-and-forget, not
+  awaited by any caller) so real store-localized `priceString` values are
+  ready before a player is likely to reach any paywall — `PRODUCTS[sku]
+  .price` is mutated in place (never reassigning the exported object
+  itself), so `js/game.js`'s existing `updateShopUI()` picks the real
+  price up automatically the next time it renders. No more hardcoded USD
+  strings once a real project exists.
+- `purchase(sku)` → `purchaseStoreProduct({product})` using the cached
+  real product object (RevenueCat needs the full product, not just an id
+  string); any failure — real error or the user cancelling the sheet —
+  resolves `{success: false}`, matching `js/game.js`'s existing silent-
+  no-op handling of a failed purchase exactly.
+- `restorePurchases()` → RevenueCat's own `restorePurchases()`, checking
+  `customerInfo.entitlements.active[sku]?.isActive` for each
+  non-consumable sku. **This assumes the RevenueCat dashboard defines one
+  entitlement per non-consumable product, named identically to the
+  product's own sku** (`pro_garage`, `remove_ads`) — a standard, simple
+  setup for an app with no subscription tiers; if the real project uses
+  different entitlement names, `js/iap.js`'s lookup needs to match.
+  Consumables (Wrench packs) are correctly never part of restore, same as
+  any other store's non-consumable-only restore behavior.
+
+**Still blocked on M2 (native platform bring-up, needs a Mac + real
+accounts — not available in this environment), same boundary as P0-11:**
+- An actual RevenueCat project + both platforms' apps configured there,
+  to get real (non-placeholder) SDK keys — `js/iap.js` currently ships
+  `[FILL IN RevenueCat iOS/Android SDK key]` markers.
+- The 5 real products (`remove_ads`, `pro_garage`, 3 wrench packs)
+  created in App Store Connect / Play Console AND mapped in RevenueCat's
+  dashboard, plus the entitlement-identifier assumption above actually
+  confirmed against whatever the real dashboard ends up using.
+- Real-device verification: does `purchaseStoreProduct()` actually
+  complete a StoreKit/Play Billing sandbox purchase, does `restore()`
+  correctly recover a prior non-consumable after reinstall, do the
+  fetched `priceString` values render correctly for a non-US locale. None
+  of this is checkable in this headless sandbox.
+- **Receipt validation / server-side entitlement check.** `save.pro` is
+  still a client-side boolean in editable local storage even after this
+  integration — RevenueCat's own backend is the source of truth for
+  `customerInfo`, but nothing here pushes that back through a server
+  check (the Supabase project already exists, per MONETIZATION-PLAN.md
+  §5.3) before trusting the local flag. Explicitly out of scope for this
+  pass — it's a separate, larger initiative (a Supabase edge function +
+  RevenueCat webhook), not part of "integrate the plugin."
+- `starter_bundle` SKU (from MONETIZATION-PLAN.md's product table) was
+  never added to `PRODUCTS` in the first place — still not shipped,
+  unrelated to this integration.
 
 ### P0-7. Android back button — ✅ implemented, unverified on-device
 `@capacitor/app` is installed; `backButton` handling exists in
@@ -421,8 +465,8 @@ rejection.
 | Developer Program account active | $99/yr, needs D-U-N-S if company |
 | App record, bundle id `app.midnightgarage` | matches capacitor.config.json — **and is permanent once set, cannot change after first submission** |
 | Agreements, tax, banking complete | blocks paid IAP silently if skipped |
-| IAP product `pro_garage` (non-consumable) approved | submit WITH the binary first time; P0-6 |
-| Restore purchases functional | 3.1.1 — currently a stub, P0-6 |
+| IAP product `pro_garage` (non-consumable) approved | submit WITH the binary first time; code-level integration done, real RevenueCat project + App Store Connect product still needed — P0-6 |
+| Restore purchases functional | 3.1.1 — code-level integration done (`js/iap.js` calls RevenueCat's real `restorePurchases()`), on-device verification still needed — P0-6 |
 | AdMob real ad unit IDs + App ID in `Info.plist`/`SKAdNetworkItems` | code-level integration done; needs a real AdMob account during M2 native bring-up — P0-11 |
 | Vehicle art IP exposure resolved or accepted as a known risk | P0-10, ASSET-PROVENANCE.md |
 | `PrivacyInfo.xcprivacy` present | P0-12 |
@@ -444,7 +488,7 @@ rejection.
 | AAB build, Play App Signing enrolled | AAB mandatory |
 | targetSdk 35 (plan 36 by ~Aug 2026) | P0-3 |
 | Upload keystore backed up somewhere safe outside this repo | generated on first `android/` signing setup — **lose it and you can never update the app under the same listing**; Play App Signing means Google can help recover the *signing* key but not this *upload* key |
-| IAP product `pro_garage` + license testers | test purchases without spending; P0-6 |
+| IAP product `pro_garage` + license testers | test purchases without spending; code-level integration done, real RevenueCat project + Play Console product still needed — P0-6 |
 | AdMob App ID + real ad unit IDs wired into `AndroidManifest.xml` | code-level integration done; needs a real AdMob account during M2 native bring-up — P0-11 |
 | Data safety form: no data collected/shared | true only with blank config |
 | Content rating (IARC questionnaire) → Everyone | |
@@ -470,6 +514,7 @@ rejection.
 | P0-11 ads integration | ✅ code-level integration done (`js/ads.js` bridges to `@capacitor-community/admob`, web/dev stub preserved, `npm run verify` + Playwright smoke test both green); 🟡 real AdMob account, App ID in native manifests, and on-device testing still needed at M2 — see P0-11 |
 | P0-12 privacy manifest | ✅ drafted, staged at `resources/PrivacyInfo.xcprivacy` pending P0-4 |
 | P0-9 store-listing text + privacy/support pages | ✅ drafted in `docs/store-listing/` — search for `[FILL IN]` before submitting |
+| P0-6 real IAP | ✅ code-level integration done (`js/iap.js` bridges to `@revenuecat/purchases-capacitor`, web/dev stub preserved, `npm run verify` + Playwright smoke test both green); 🟡 real RevenueCat project, both platforms' store products, and on-device testing still needed at M2 — see P0-6 |
 
 Note on P0-7's testing: rather than shipping a keyboard shim into
 production code (Escape-key-triggers-back is exactly the kind of
@@ -509,9 +554,12 @@ weeks calendar time from starting M2, mostly waiting, not working.
       disables admin mode.)
 - [x] Real fonts load with zero console errors (verified via
       `document.fonts` + a Playwright console-error check).
+- [x] IAP: code-level RevenueCat integration done, not the old stub.
+      (P0-6.)
 - [ ] Fresh-install purchase AND restore succeed in Apple sandbox and
-      Play license testing; web build still sandbox-unlocks. (IAP itself
-      — P0-6 — hasn't been built yet; needs M2.)
+      Play license testing; web build still sandbox-unlocks. Needs a
+      real RevenueCat project + store products + on-device testing.
+      Blocked on M2. (P0-6.)
 - [x] Android back button never hard-exits from an overlay or mid-level.
       (Logic verified in Chrome; the real native `backButton` event
       still needs an actual Android build to confirm end-to-end.)
