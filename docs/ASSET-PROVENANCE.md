@@ -392,6 +392,58 @@ modern longtail GT (`traffic-sedan-4`), and the off-roader
 wedge + 1 hypercar + 1 taxi + 12 one-offs) — not 29, and not a round
 number worth treating as more precise than "about 15."
 
+### 2026-08-04: a second Ferrari/Lambo sweep of the *remaining* pool — one real finding, one over-call corrected
+
+Prompted by the developer asking specifically about any Ferrari/
+Lamborghini look-alikes still left in `assets/cars/` after the removal
+above. Two files were initially flagged by silhouette alone
+(`hero-airtail-*` × 5 as "Ferrari 488/458 Spider", `hero-canopy-green`
+as "Lamborghini") — the developer pushed back, correctly. Re-examined at
+pixel level rather than re-asserting the first read:
+
+- **The `hero-airtail-*` body is not a Ferrari 488/458.** Round
+  headlights rule it out outright (the 488/458 Spider's are angular);
+  it also carries a fixed rear wing the real car doesn't have. Silhouette
+  match was a thumbnail-scale pattern-match, not a verified one — kept as
+  a design, no replacement needed.
+- **`hero-canopy-green` is not conclusively Lamborghini either** —
+  proportions differ and (see below) there's no badge, contrary to what
+  was first claimed.
+- **The one thing that *did* hold up:** a ~10×10px yellow shield badge on
+  the steering-wheel hub, found via pixel-level crop-and-zoom (not
+  assumed) on 4 of the 5 `hero-airtail-*` colorways (blue, pink,
+  purple-yellow, stripe — **not** red, confirmed absent there after a
+  targeted check, not skipped) and on `hero-convertible-brown`. `hero-
+  canopy-green`'s dash was re-checked at the same zoom specifically for
+  this correction and is genuinely clean — the original badge claim on
+  that file was wrong.
+
+**Fixed by retouch, not replacement** — these badges are real marks but
+tiny and isolated, so the same in-place-patch approach as the truck
+retouches above (2026-07-31 entry) applied cleanly:
+- `hero-airtail-blue.webp`, `-purple-yellow.webp`, `-stripe.webp`: flat
+  fill sampled from a ring around the badge (dark, fairly uniform hub
+  material — a ring average matched cleanly).
+- `hero-airtail-pink.webp`, `hero-convertible-brown.webp`: the ring
+  method picked up dark spoke shadows and left a visible grey smudge on
+  the lighter cream hub — redone as a clone-stamp from a same-material
+  patch directly above the badge instead. Both re-verified clean after.
+- All five verified at three scales (badge-tight crop, full-car crop,
+  and a live headless render through 10 board resets) before the real
+  files were overwritten — zero console errors, zero failed asset loads.
+- `hero-airtail-red.webp` needed no edit — confirmed by direct pixel
+  inspection that no badge is visible on that colorway at all, not an
+  oversight.
+
+**Still open, unchanged by this correction:** `start-portrait.webp` /
+`start-landscape.webp` (legible "FERRARI" wordmark, three recognizable
+Lamborghini Huracáns, a scene-level exposure no silhouette argument
+touches), `intro-plate.webp` (a photoreal Ferrari Enzo), and `pro-
+plate.webp` (a Porsche 718 Cayman GT4) are all still flagged and still
+awaiting replacement art — see the image reference sheet shared with the
+developer for the current full list, tagged R1–R11 and L1–L5 by
+confidence tier rather than by filename.
+
 ## Fonts — cleared
 
 `assets/fonts/*.woff2` are OFL-licensed. Ship the licence files alongside
