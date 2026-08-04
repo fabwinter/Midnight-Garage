@@ -663,12 +663,18 @@ weeks calendar time from starting M2, mostly waiting, not working.
       Verified with Playwright: 5 taps on the title in a `--release`
       build leaves the admin chip/bar hidden.
 - [x] Ads: code-level AdMob integration done, not the old stub. (P0-11.)
-- [ ] AdMob App ID/real ad unit IDs wired into native manifests and
-      verified on a real device (consent form, ATT prompt, actual ad
-      fill). Blocked on M2. (P0-11.)
-- [ ] Vehicle art IP exposure resolved or knowingly accepted, not
-      silently shipped. (P0-10.)
-- [ ] `PrivacyInfo.xcprivacy` present and accurate. (P0-12.)
+- [x] AdMob App ID wired into both platforms' native manifests — Google's
+      test App ID, crash-safe, not a placeholder string. (P0-11.)
+- [ ] Real (non-test) AdMob App ID + ad unit IDs, verified on a real
+      device (consent form, ATT prompt, actual ad fill). Needs a real
+      AdMob account. Blocked on M2. (P0-11.)
+- [x] Vehicle art IP exposure resolved: every flagged asset removed from
+      the shipped pool (29 files, 2026-08-02) — knowingly accepted that
+      ~15 replacement designs are still needed for variety, not that any
+      exposure was silently shipped. (P0-10, ASSET-PROVENANCE.md.)
+- [x] `PrivacyInfo.xcprivacy` present and accurate — placed in
+      `ios/App/App/` and registered in the Xcode project's Resources
+      build phase, not just staged in `resources/`. (P0-12.)
 - [x] All Heist/Pursuit/Relaxed/menu/Settings audio ships as AAC, none as
       Opus-in-.m4a; verified via `ffprobe`, not by file extension. (P1,
       done 2026-08-03.)
