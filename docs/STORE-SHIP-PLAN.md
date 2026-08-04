@@ -1,13 +1,16 @@
 # STORE-SHIP-PLAN: remaining work to ship on the App Store + Google Play
 
-Status: **plan — not started.** Originally written 2026-07-26 from a fresh
-audit of the repo; revised 2026-07-31 after a second audit (asset IP,
-ads/IAP stubs, privacy manifest) and after reconciling against a generic
-"Expo app → App Store" guide the user supplied (§9 below explains what did
-and didn't carry over). Read [CLAUDE.md](../CLAUDE.md) first.
+Status: **all M1 (repo-only) work done as of 2026-08-04; M2 (real
+accounts + an actual compile) is next** — see §7's M1 table for the
+itemized list. Originally written 2026-07-26 from a fresh audit of the
+repo; revised 2026-07-31 after a second audit (asset IP, ads/IAP stubs,
+privacy manifest) and after reconciling against a generic "Expo app →
+App Store" guide the user supplied (§9 below explains what did and
+didn't carry over). Read [CLAUDE.md](../CLAUDE.md) first.
 [PLAN-STATUS.md](PLAN-STATUS.md) tracks the game itself;
 [ASSET-PROVENANCE.md](ASSET-PROVENANCE.md) tracks art/audio rights in
-detail; this doc covers only the distance between "the web game is done"
+detail; [CI-SETUP.md](CI-SETUP.md) covers building/submitting without a
+Mac; this doc covers only the distance between "the web game is done"
 and "approved and live on both stores."
 
 ## 0. This app ships via Capacitor, not Expo/EAS — read this first
@@ -122,14 +125,13 @@ before now:**
   P1 "≤15 MB audio" target below should be re-baselined against this
   49 MB figure, not the original 40→15 MB estimate.
 
-**Scaffolded only / stubbed (carried over, still accurate):**
-- `npx cap add ios` has never been run — no `ios/` project exists.
-- `npx cap add android` has never been run either — the dependency is
-  present but no `android/` project has been generated.
-- No native app icons or splash assets generated yet — source art exists
-  in `resources/` (see P0-5's status in §7), but nothing has gone through
-  `@capacitor/assets generate` because that needs a platform to exist
-  first.
+**2026-08-04: `ios/` and `android/` both now exist, generated and
+configured (P0-3/P0-4/P0-5 below) — the "not started, needs a Mac"
+framing throughout the rest of this doc is now specifically about
+*compiling and signing*, not about generating the projects in the first
+place.** Neither has ever been compiled — no Xcode/macOS or Android SDK
+exists in this environment to do that — but the projects, native config
+files, and generated icon/splash assets are real and committed.
 
 ## 2. P0 — blockers, in dependency order
 
@@ -145,23 +147,66 @@ for both families now ships alongside them (`assets/fonts/Inter-OFL.txt`,
 `assets/fonts/ChakraPetch-OFL.txt`) — not required by Apple/Google, but
 the honest thing to do for an OFL font.
 
-### P0-3. Android platform bring-up
-`@capacitor/android` dep is present; `npx cap add android` has not been
-run. Once it is: commit the `android/` project, set applicationId
-(`app.midnightgarage`), portrait-lock the activity, min SDK per Capacitor
-6 default (22/23), **targetSdk 35** (Play's current floor for new apps;
-36 becomes the floor ~Aug 2026 — building against 35+ now keeps both
-dates safe). Play App Signing at console setup.
+### P0-3. Android platform bring-up — ✅ generated + configured, unverified compile
+Done 2026-08-04: `npx cap add android` was run (confirmed cross-platform —
+it's pure templating, no Android SDK needed for this step) and
+`android/` is now committed, not gitignored (`.gitignore` updated —
+this app has real hand-maintained native config that a fresh `cap add`
+wouldn't reproduce). `applicationId` is already `app.midnightgarage`
+via `capacitor.config.json`. Configured: `android:screenOrientation=
+"portrait"` on `MainActivity`, `targetSdkVersion`/`compileSdkVersion`
+bumped to **35** in `android/variables.gradle` (min SDK stays the
+Capacitor 6 default, 22), a `com.google.android.gms.ads.APPLICATION_ID`
+meta-data entry using Google's public test App ID (verified via search,
+not guessed — see P0-11's own AdMob work) so the app doesn't crash on
+first launch before a real AdMob account exists.
 
-### P0-4. iOS platform bring-up (needs a Mac + Xcode)
-`npx cap add ios` → commit `ios/`. Portrait lock, launch storyboard from
-the splash assets, `AVAudioSession` category `.ambient` (music apps keep
-playing — this matters concretely now that Heist runs a real continuous
-set list, not a single loop), `ITSAppUsesNonExemptEncryption = NO` in
-Info.plist (HTTPS-only → export-compliance exempt, and the app is fully
-offline by default anyway).
+**Not done / blocked:** Play App Signing enrollment (console-side).
+**Not verified:** this environment has no Android SDK/JDK toolchain
+beyond bare `java`/`javac`, so `./gradlew assembleDebug` was never run —
+the manifest/gradle edits are believed correct (validated as
+well-formed XML, matches documented Capacitor/AdMob conventions) but
+unverified to actually compile. First real build should happen in CI
+(Codemagic/GitHub Actions) or Android Studio, whichever comes first.
 
-### P0-5. Icons + splash for both platforms
+### P0-4. iOS platform bring-up — ✅ generated + configured, unverified compile (still needs a Mac to actually build)
+Done 2026-08-04, same caveat structure as P0-3: `npx cap add ios` also
+runs fine outside macOS (confirmed empirically — it's templating, only
+the actual Xcode build step is Mac-locked) and `ios/` is now committed.
+Configured in `Info.plist`: `UISupportedInterfaceOrientations` trimmed
+to portrait-only on iPhone (iPad kept portrait + upside-down, per the
+P1 "iPhone-only for v1.0" recommendation not yet being a final
+decision), `ITSAppUsesNonExemptEncryption = false`,
+`NSUserTrackingUsageDescription` (needed for P0-11's ATT flow),
+`GADApplicationIdentifier` set to Google's public test App ID (same
+crash-avoidance reasoning as Android — the Mobile Ads SDK validates
+this key's format at init and a `[FILL IN]`-style placeholder string
+would crash the app on first native launch, confirmed via research, not
+assumed), and a minimal `SKAdNetworkItems` array (Google's own
+`cstr6suwn9.skadnetwork` ID only — the dozens of additional
+third-party-buyer IDs Google publishes are a living list, deliberately
+not hardcoded stale; pull the current set from
+developers.google.com/admob/ios/ios14 before submission). `AppDelegate.
+swift` now sets `AVAudioSession` category `.ambient` + `.mixWithOthers`
+at launch, addressing the Heist-continuous-set-list concern this item
+originally flagged. `resources/PrivacyInfo.xcprivacy` was copied into
+`ios/App/App/` **and** properly registered in the Xcode project's
+Resources build phase — using the `xcodeproj` Ruby gem (the same tool
+fastlane/CocoaPods use internally) rather than hand-editing
+`project.pbxproj`'s UUIDs directly, then round-trip-verified by
+re-opening the project and confirming the file appears in the target's
+resources list.
+
+**Still needs an actual Mac (or cloud equivalent)** for: `pod install`
+(CocoaPods isn't installable in this environment), `xcodebuild`
+archive/build, code signing, and any real device/simulator
+verification. None of the above has been compiled even once — it's
+believed structurally correct (valid plist/XML, `xcodeproj` gem
+round-trip passed) but that is not the same as "builds." See the "no
+Mac" discussion below (§7) for how to close this gap without owning
+Apple hardware.
+
+### P0-5. Icons + splash for both platforms — ✅ done, generated and verified (not yet seen on a device/simulator)
 Use `@capacitor/assets` with `assets/icon.svg` as source. Concrete specs,
 worth stating explicitly since getting this wrong is an easy silent
 rejection:
@@ -177,12 +222,18 @@ rejection:
   mark — not the photographic start-screen stills (those are already
   the in-app start screen; splash should be quieter and load-time-
   neutral).
-Status: source images exist in `resources/` and were verified by direct
-inspection (readable at 1024px, adaptive-icon safe zone respected, real
-alpha transparency on the *source* — which is fine, since `@capacitor/
-assets generate` is what needs to flatten it for the final Store icon,
-not the source itself). **Not yet run through the actual generate →
-device/simulator pipeline** — needs P0-3/P0-4's platforms to exist first.
+
+Done 2026-08-04: `npx @capacitor/assets generate` was actually run
+against the real `ios/`/`android/` projects (previously blocked on
+those existing — now unblocked, since P0-3/P0-4 above generated them).
+The App Store icon was verified directly — not just assumed correct —
+by reading the PNG's own IHDR chunk: 1024×1024, color type 2 (RGB, no
+alpha channel), exactly matching Apple's requirement. Modern single-size
+`AppIcon.appiconset/Contents.json` format (Xcode 14+), not the old
+full-matrix icon set. Android adaptive icon layers + all splash density
+variants generated for both platforms. **Still not seen rendered on an
+actual device or simulator** — that needs the same Mac/CI access as
+P0-4.
 
 ### P0-6. Real IAP: one non-consumable, "Pro Garage" — ✅ code-level integration done, native bring-up still blocked
 Decided/built 2026-08-03, same shape as P0-11's AdMob work: `js/iap.js`
@@ -300,6 +351,30 @@ privacy labels are ready together.
 Trademark/handle check for "Midnight Garage" (PLAN-STATUS 0.1's open
 flag) belongs here too — do it **before** creating store listings, since
 a rename after listing creation is far more work than before.
+
+**Done 2026-08-04 (web search, not a paid trademark-clearance search —
+treat as a first pass, not a legal opinion):**
+- **No exact-title collision** on either the App Store or Play Store —
+  no app currently listed as "Midnight Garage" on either platform, so
+  the store-level name reservation itself should go through cleanly.
+- **No federal USPTO trademark registration found** for "Midnight
+  Garage" specifically.
+- **Real risk found anyway: multiple existing automotive businesses
+  already trade under this exact name**, most notably an active car
+  customization shop in Fremont, CA (midnight77.com, operating since
+  2020, Yelp/Instagram/Facebook presence, D&B company profile) plus
+  several smaller car-culture brands/shops (MidnightGarageShop.com,
+  garagemidnight.com, "Midnight Garage LTD"). None of these appear to
+  hold a registered federal trademark, but common-law trademark rights
+  exist from actual commercial use regardless of registration — and
+  "Midnight Garage" being independently reused by several unrelated
+  car-themed businesses already suggests it's a generically appealing
+  phrase in this exact space, not a distinctive, ownable-feeling name.
+  Low near-term risk (a local auto shop is unlikely to pursue a mobile
+  game over a name), but not zero, and worth being aware of rather than
+  assuming the name is clean because no exact app-store collision
+  turned up. A real decision for the developer, not something this
+  research resolves on its own.
 
 ### P0-10. Vehicle art IP clearance — ✅ every flagged asset removed, replacements pending
 Not previously tracked anywhere in this plan until this session's audit.
@@ -467,7 +542,7 @@ rejection.
 | Agreements, tax, banking complete | blocks paid IAP silently if skipped |
 | IAP product `pro_garage` (non-consumable) approved | submit WITH the binary first time; code-level integration done, real RevenueCat project + App Store Connect product still needed — P0-6 |
 | Restore purchases functional | 3.1.1 — code-level integration done (`js/iap.js` calls RevenueCat's real `restorePurchases()`), on-device verification still needed — P0-6 |
-| AdMob real ad unit IDs + App ID in `Info.plist`/`SKAdNetworkItems` | code-level integration done; needs a real AdMob account during M2 native bring-up — P0-11 |
+| AdMob real ad unit IDs + App ID in `Info.plist`/`SKAdNetworkItems` | code-level integration done, `Info.plist` wired with Google's test App ID + Google's own SKAdNetwork ID (crash-safe default); real AdMob account still needed to swap in production values — P0-11 |
 | Vehicle art IP exposure resolved or accepted as a known risk | P0-10, ASSET-PROVENANCE.md |
 | `PrivacyInfo.xcprivacy` present | P0-12 |
 | Privacy nutrition labels: "Data not collected" | true only with blank config (P0-9) |
@@ -489,7 +564,7 @@ rejection.
 | targetSdk 35 (plan 36 by ~Aug 2026) | P0-3 |
 | Upload keystore backed up somewhere safe outside this repo | generated on first `android/` signing setup — **lose it and you can never update the app under the same listing**; Play App Signing means Google can help recover the *signing* key but not this *upload* key |
 | IAP product `pro_garage` + license testers | test purchases without spending; code-level integration done, real RevenueCat project + Play Console product still needed — P0-6 |
-| AdMob App ID + real ad unit IDs wired into `AndroidManifest.xml` | code-level integration done; needs a real AdMob account during M2 native bring-up — P0-11 |
+| AdMob App ID + real ad unit IDs wired into `AndroidManifest.xml` | code-level integration done, manifest wired with Google's test App ID (crash-safe default); real AdMob account still needed to swap in production values — P0-11 |
 | Data safety form: no data collected/shared | true only with blank config |
 | Content rating (IARC questionnaire) → Everyone | |
 | Feature graphic (1024×500px) + app icon (512×512px) + phone screenshots | store listing requirements, separate from the App Store assets |
@@ -508,11 +583,13 @@ rejection.
 | P0-7 back-button handler | ✅ done (logic verified via a temporary test hook, not a shipped keyboard shim) |
 | P0-8 admin kill switch (`js/build-flags.js`) | ✅ done, verified |
 | `@capacitor/android` + `@capacitor/app` deps | ✅ done |
-| P0-5 icon/splash **source images** | ✅ done (`resources/`) — not yet run through `@capacitor/assets generate` |
+| P0-5 icon/splash | ✅ done — generated for real via `@capacitor/assets`, App Store icon verified 1024×1024/no-alpha at the byte level |
 | P1 audio re-encode | ✅ done — every shipped track (Heist's 10 + menu/Settings + Relaxed's 5 + Pursuit's 4) is AAC in `.m4a`, verified via `ffprobe` |
 | P0-10 vehicle art IP audit | ✅ every flagged asset removed (29 files); 🟡 ~15 replacement designs needed before variety is back to where it was — see ASSET-PROVENANCE.md |
-| P0-11 ads integration | ✅ code-level integration done (`js/ads.js` bridges to `@capacitor-community/admob`, web/dev stub preserved, `npm run verify` + Playwright smoke test both green); 🟡 real AdMob account, App ID in native manifests, and on-device testing still needed at M2 — see P0-11 |
-| P0-12 privacy manifest | ✅ drafted, staged at `resources/PrivacyInfo.xcprivacy` pending P0-4 |
+| P0-3 Android platform bring-up | ✅ `android/` generated + committed, portrait lock + targetSdk 35 + AdMob test App ID configured; 🟡 never compiled (no Android SDK in this environment) |
+| P0-4 iOS platform bring-up | ✅ `ios/` generated + committed, portrait lock + ATT string + AVAudioSession + PrivacyInfo.xcprivacy (properly registered in Xcode's Resources build phase, not just copied) configured; 🟡 never compiled (no macOS/Xcode in this environment) — see §7's "no Mac" plan for closing this specific gap |
+| P0-11 ads integration | ✅ code-level integration done AND real AdMob test App ID wired into both platforms' native config (crash-safe default, not a placeholder string); 🟡 real AdMob account + on-device testing still needed at M2 — see P0-11 |
+| P0-12 privacy manifest | ✅ done — staged **and** now actually placed in `ios/App/App/` with real Xcode-project resource membership, not just staged in `resources/` |
 | P0-9 store-listing text + privacy/support pages | ✅ drafted in `docs/store-listing/` — search for `[FILL IN]` before submitting |
 | P0-6 real IAP | ✅ code-level integration done (`js/iap.js` bridges to `@revenuecat/purchases-capacitor`, web/dev stub preserved, `npm run verify` + Playwright smoke test both green); 🟡 real RevenueCat project, both platforms' store products, and on-device testing still needed at M2 — see P0-6 |
 
@@ -524,16 +601,35 @@ temporarily exposing the handler function on `window`, driving all four
 branches with Playwright, then removing the expose before committing.
 The plugin-access pattern itself (`globalThis.Capacitor?.Plugins?.App`)
 means the real native event is still what's untested — that only
-becomes possible once P0-3/P0-4 produce an actual Android build.
+becomes possible once P0-3/P0-4's projects actually get **compiled**,
+not just generated and configured (see below — that's now the whole
+remaining gap, not native config work).
 
-**M2 — platform bring-up (Mac + developer accounts, not available in
-this environment):**
-`cap add ios` / `cap add android`, native config (P0-3/4), running
-`@capacitor/assets generate` against the sources already prepared in
-`resources/` and checking the result on a simulator/device, RevenueCat +
-store products (P0-6), physical-device QA matrix, and background/audio
+**M2 — the part that actually needs Xcode/a Mac (or a cloud equivalent
+— see the dedicated "no Mac" plan a few sections down):** everything
+that requires *compiling*, not just generating/configuring, is now
+concentrated here: `pod install`, `xcodebuild`/Gradle actually building
+both platforms, code signing, TestFlight/Play upload, and on-device or
+simulator verification (icon/splash rendering, audio session behavior,
+the AdMob/RevenueCat native bridges actually initializing). Also here:
+real developer accounts (Apple Developer Program, Play Console,
+RevenueCat project, AdMob account) and the store products they need to
+contain (P0-6, P0-11), physical-device QA matrix, and background/audio
 QA (now including the Heist continuous-set-list behavior specifically —
-the audio re-encode itself is done, see P1 above).
+the audio re-encode itself is done, see P1 above). **What used to be
+here and now isn't:** `cap add ios`/`cap add android` and all their
+native config (P0-3/P0-4), and `@capacitor/assets generate` (P0-5) —
+all three turned out not to need macOS at all and are done as of
+2026-08-04.
+
+**No Mac available? M2 is still doable.** `codemagic.yaml` (repo root)
++ [`docs/CI-SETUP.md`](CI-SETUP.md) run the whole compile-sign-upload
+step on a cloud Mac instead of physical Apple hardware — connect a
+Codemagic account, add the signing credentials CI-SETUP.md walks
+through, push, and the pipeline builds + uploads to TestFlight/Play
+without ever touching a real Mac. A rented remote Mac (MacStadium,
+MacinCloud, AWS EC2 Mac instances) is the fallback if something ever
+needs interactive Xcode debugging a CI log can't show.
 
 **M3 — store operations (parallel with M2's tail):**
 Trademark check → listings, screenshots, privacy policy + support page
@@ -567,12 +663,18 @@ weeks calendar time from starting M2, mostly waiting, not working.
       Verified with Playwright: 5 taps on the title in a `--release`
       build leaves the admin chip/bar hidden.
 - [x] Ads: code-level AdMob integration done, not the old stub. (P0-11.)
-- [ ] AdMob App ID/real ad unit IDs wired into native manifests and
-      verified on a real device (consent form, ATT prompt, actual ad
-      fill). Blocked on M2. (P0-11.)
-- [ ] Vehicle art IP exposure resolved or knowingly accepted, not
-      silently shipped. (P0-10.)
-- [ ] `PrivacyInfo.xcprivacy` present and accurate. (P0-12.)
+- [x] AdMob App ID wired into both platforms' native manifests — Google's
+      test App ID, crash-safe, not a placeholder string. (P0-11.)
+- [ ] Real (non-test) AdMob App ID + ad unit IDs, verified on a real
+      device (consent form, ATT prompt, actual ad fill). Needs a real
+      AdMob account. Blocked on M2. (P0-11.)
+- [x] Vehicle art IP exposure resolved: every flagged asset removed from
+      the shipped pool (29 files, 2026-08-02) — knowingly accepted that
+      ~15 replacement designs are still needed for variety, not that any
+      exposure was silently shipped. (P0-10, ASSET-PROVENANCE.md.)
+- [x] `PrivacyInfo.xcprivacy` present and accurate — placed in
+      `ios/App/App/` and registered in the Xcode project's Resources
+      build phase, not just staged in `resources/`. (P0-12.)
 - [x] All Heist/Pursuit/Relaxed/menu/Settings audio ships as AAC, none as
       Opus-in-.m4a; verified via `ffprobe`, not by file extension. (P1,
       done 2026-08-03.)

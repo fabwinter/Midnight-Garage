@@ -1,9 +1,25 @@
 node_modules/
-ios/
-android/
 www/
 .DS_Store
 *.log
 .genwork/
 .env
 .scratch-*
+
+# ios/ and android/ ARE committed (STORE-SHIP-PLAN.md P0-3/P0-4): this app
+# has real hand-maintained native config (Info.plist keys, AndroidManifest
+# meta-data, AppDelegate.swift, PrivacyInfo.xcprivacy's Xcode-project
+# membership) that a fresh `cap add` would not reproduce — only their own
+# regeneratable build artifacts and machine-local files are excluded below.
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/*.iml
