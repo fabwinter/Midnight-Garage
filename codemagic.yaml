@@ -1,0 +1,147 @@
+definitions:
+  ios_signing: &ios_signing
+    # Configure in Codemagic UI → Team settings → Code signing identities,
+    # or via an App Store Connect API key integration (Teams → Integrations
+    # → App Store Connect) — either lets `xcode-project use-profiles` pull
+    # certs/profiles automatically without ever touching Xcode's signing UI.
+    # Reference the integration/group name you actually create there; the
+    # name below is a placeholder, not a Codemagic-reserved name.
+    - app_store_credentials
+
+workflows:
+  ios-release:
+    name: Midnight Garage - iOS Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: app_store_credentials
+    environment:
+      groups:
+        - *ios_signing
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "app.midnightgarage"
+      node: latest
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+
+      - name: Build the web app (release — strips admin mode)
+        script: npm run build:release
+
+      # ios/ is committed to this repo (not gitignored — see .gitignore's
+      # comment) precisely because it carries hand-maintained native config
+      # (Info.plist keys, AppDelegate.swift's AVAudioSession setup,
+      # PrivacyInfo.xcprivacy's Xcode-project membership) that a fresh
+      # `cap add ios` would silently discard. Sync, never re-add.
+      - name: Capacitor sync (copies www/ into ios/App/App/public + updates plugins)
+        script: npx cap sync ios
+
+      - name: CocoaPods install
+        script: |
+          cd ios/App && pod install
+
+      # Pulls signing certificates/provisioning profiles automatically from
+      # the App Store Connect API key integration referenced above — no
+      # manual certificate/profile management, no Xcode signing UI.
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+
+      - name: Increment build number to latest TestFlight build + 1
+        script: |
+          cd ios/App
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$BUNDLE_ID" || echo 0)
+          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      # Uploads to TestFlight automatically. submit_to_app_store additionally
+      # submits for App Review the moment a build finishes — leave that off
+      # until you've actually run a TestFlight pass; flip it on deliberately,
+      # don't let a routine push silently submit to Apple.
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+  android-release:
+    name: Midnight Garage - Android Release
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      groups:
+        - google_play_credentials
+        # Expects GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (Play Console service
+        # account JSON, for publishing) and the app's upload keystore vars
+        # (CM_KEYSTORE, CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS,
+        # CM_KEY_ALIAS_PASSWORD) set as encrypted variables in that group —
+        # see Codemagic's Android code signing docs for the exact setup.
+      node: latest
+      java: 21
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+
+      - name: Build the web app (release — strips admin mode)
+        script: npm run build:release
+
+      # android/ is committed for the same reason ios/ is — see the iOS
+      # workflow's comment above and .gitignore's own note.
+      - name: Capacitor sync (copies www/ into android/app/src/main/assets/public + updates plugins)
+        script: npx cap sync android
+
+      - name: Set up local keystore for signing
+        script: |
+          echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/keystore.jks
+          cat >> "$CM_BUILD_DIR/android/local.properties" <<EOF
+          storeFile=$CM_BUILD_DIR/android/app/keystore.jks
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          keyPassword=$CM_KEY_ALIAS_PASSWORD
+          EOF
+
+      - name: Build Android release AAB
+        script: |
+          cd android
+          ./gradlew bundleRelease
+
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/mapping.txt
+
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        # 'internal' is the safe default — promote to 'alpha'/'beta'/
+        # 'production' manually once a build's been checked, not automatically
+        # from every push. Also: a brand-new personal Play Console account
+        # needs 12 testers for 14 days of closed testing before production
+        # is even available — see STORE-SHIP-PLAN.md §6.
+        track: internal
+        submit_as_draft: true
