@@ -11,9 +11,12 @@ Garage/Remove Ads, rewarded video always optional.
 ## App title (30 char max)
 
 ```
-Midnight Garage
+Midnight Garage: Escape
 ```
-(15/30 chars)
+(23/30 chars — decided 2026-08-04, matches App Store Connect's Name
+field in APP-STORE.md. Play has no separate subtitle field the way
+Apple does; the Short description below already carries genre/mechanic
+language, so it isn't changed to compensate.)
 
 ---
 
