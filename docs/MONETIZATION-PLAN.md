@@ -319,26 +319,29 @@ Ship *after* M2 has retention data, and conservatively:
 
 ### 5.3 Phase M4 — real IAP
 
-**Status: partially shipped as a stub.** `js/iap.js` exists with a
-product catalog and `purchase()`/`restorePurchases()` stubs (resolve
-success after a delay, same pattern as `showRewarded`). `wirePro()` and
-the Shop's new Remove Ads + 3 Wrench-pack buttons all route through one
-`purchaseProduct(sku)` in `js/game.js` — the single place any product's
-entitlement/consumable is actually granted. **Restore Purchases now calls
-a real function** instead of showing a dead toast (honestly reports "no
-purchases found" in the stub, since there's no real store to query yet —
-see the note below, this closes the *architecture* gap, not the
-*backend* gap). **Not shipped:** `starter_bundle` SKU, receipt
-validation/server-side entitlement check, cosmetic-only purchasable
-cars (§9 still holds — nothing purchasable was added to any car pool).
-The real store plugin (RevenueCat/StoreKit/Play Billing) is still
-unwired — needs real store accounts + configured products, which this
-environment cannot create.
-
-Replace the `wirePro()` stub with an actual store integration
-(`@capacitor-community/in-app-purchases` or RevenueCat if the
-subscription in M6 is likely — RevenueCat pays for itself the moment
-subscriptions and cross-platform restore are in play).
+**Status: code-level integration done (2026-08-03), native bring-up still
+blocked.** `js/iap.js` now bridges to `@revenuecat/purchases-capacitor`
+on native builds — `configure()` + `getProducts()` fetch real
+store-localized prices at module load, `purchaseStoreProduct()` backs
+`purchase(sku)`, and RevenueCat's own `restorePurchases()` backs
+`restorePurchases()` (checking each non-consumable's entitlement via
+`customerInfo.entitlements.active`, assuming one entitlement per sku
+named identically to it — see STORE-SHIP-PLAN.md P0-6 for the full
+detail and that assumption's caveat). Web/dev keeps the exact original
+stub behavior. The Shop's Remove Ads + 3 Wrench-pack buttons and Pro
+Garage all still route through one `purchaseProduct(sku)` in
+`js/game.js` — the single place any product's entitlement/consumable is
+actually granted; no caller needed to change for this integration, same
+pattern as `js/ads.js`'s AdMob bridge. **Not shipped:** `starter_bundle`
+SKU, receipt validation/server-side entitlement check (RevenueCat's
+backend is authoritative, but nothing here pushes that through a server
+check before trusting the local `save.pro` flag — a separate, larger
+initiative), cosmetic-only purchasable cars (§9 still holds — nothing
+purchasable was added to any car pool). **Still needed, blocked on M2:**
+a real RevenueCat project with both platforms' apps configured, the 5
+products created in App Store Connect/Play Console and mapped in
+RevenueCat's dashboard, and on-device purchase/restore verification —
+none of this is possible without real developer accounts and a Mac.
 
 Products:
 
@@ -459,11 +462,11 @@ Each commit `npm run verify`-clean and independently shippable:
 2. ✅ Shop overlay + offer sheets + i18n (10 locales), Wrenches earnable from gameplay only
 3. ✅ Heist `alarmBonus` / Pursuit rescue + `assisted` telemetry + bounty guard
 4. ✅ `js/ads.js` interface + web stub + headless test of every rewarded placement
-5. ⬜ Mediation SDK behind the interface (native only, needs a real account); rewarded still stub-only
+5. ✅ AdMob wired behind the interface (`js/ads.js` bridges to `@capacitor-community/admob` on native, web/dev stub unchanged); real AdMob account/App ID/on-device testing still needs M2 (STORE-SHIP-PLAN.md P0-11)
 6. ✅ Interstitial with cap + Better Ads compliance (stub, real overlay + real cadence logic); banner wired but off by default (`BANNER_ENABLED=false`)
-7. 🔶 Real IAP: `purchase()`/`restorePurchases()` stubbed + wired end-to-end (Shop packs, `remove_ads`, `pro_garage` all route through one `purchaseProduct()`); receipts, a real store plugin, and `starter_bundle` still not done
+7. ✅ Real IAP: `js/iap.js` bridges to `@revenuecat/purchases-capacitor` on native (web/dev stub unchanged), Shop packs/`remove_ads`/`pro_garage` all route through one `purchaseProduct()`; receipts/server-side entitlement check, a real RevenueCat project + store products, and `starter_bundle` still not done (STORE-SHIP-PLAN.md P0-6)
 8. ✅ Pro/positioning copy rewrite (10 locales); legacy-owner notice skipped (no real buyers yet, see §2 status note)
-9. ⬜ ATT / UMP / privacy manifests / data-safety — needs native build tooling + legal review this environment can't do
+9. 🔶 ATT / UMP wired at the code level (`js/ads.js`'s consent flow); `PrivacyInfo.xcprivacy` drafted and staged. Native manifest entries (`NSUserTrackingUsageDescription`, `SKAdNetworkItems`, AdMob App ID) and data-safety form filing still need native build tooling this environment can't do
 10. ⬜ *(conditional)* M6 subscription — correctly still not built, per its own section
 
 Steps 1–4 carried no §2 dependency and were built regardless; §2 has

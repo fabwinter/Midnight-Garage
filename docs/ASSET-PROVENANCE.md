@@ -37,8 +37,38 @@ turnaround expected is days, not weeks. Note which of the two applies:
 | `heist-time-is-ticking.m4a` | Heist set list 8 |
 | `heist-new-town-somehow.m4a` | Heist set list 9 |
 | `heist-cherry-run.m4a` | Heist set list 10 |
-| `pursuit-1..4.mp3` | Pursuit attempt pool (still MP3 — pending AAC re-export) |
-| `relaxed-*.mp3` (5) | Relaxed shuffle pool (still MP3 — pending AAC re-export) |
+| `pursuit-1.m4a` | Pursuit attempt pool |
+| `pursuit-2.m4a` | Pursuit attempt pool |
+| `pursuit-3.m4a` | Pursuit attempt pool |
+| `pursuit-4.m4a` | Pursuit attempt pool |
+| `relaxed-velvet-drift.m4a` | Relaxed shuffle pool |
+| `relaxed-velvet-midnight-loop.m4a` | Relaxed shuffle pool |
+| `relaxed-glassroom-stroll.m4a` | Relaxed shuffle pool |
+| `relaxed-velvet-after-midnight.m4a` | Relaxed shuffle pool |
+| `relaxed-velvet-after-hours.m4a` | Relaxed shuffle pool |
+
+2026-08-03: the Relaxed pool's 5 tracks were replaced with new AAC/`.m4a`
+masters supplied by the developer (same rights coverage as the rest of
+this table — owned/licensed by Fabian Winterbine), superseding the old
+MP3 files 1:1 by slot; the old `relaxed-*.mp3` files were deleted, not
+kept alongside. Verified each via `ffprobe -show_entries
+stream=codec_name` (all `aac`, ~130 kbps, 48 kHz stereo) before wiring
+`js/audio.js`'s `TRACK_POOLS.relaxed` to the new filenames, then
+confirmed in a headless Playwright pass that `startAttemptTrack()` in
+Relaxed mode requests the new files with a 200/206 response and no
+console errors (real AAC decode still can't be verified in this
+sandbox's Chromium — see CLAUDE.md's audio-testing note).
+
+Same day, Pursuit's 4 tracks were **re-encoded** (not replaced — same
+underlying recordings, unlike Relaxed) from the original MP3s to AAC via
+`ffmpeg -c:a aac -b:a 128k -ar 48000 -ac 2`, matching the Heist set's
+measured settings. Durations matched the source MP3s to within ~40 ms
+(normal encoder-framing rounding); each output verified via `ffprobe` as
+real `aac` at ~131-132 kbps, 48 kHz stereo — then the same headless
+Playwright check confirmed Pursuit mode's `startAttemptTrack()` requests
+the new `.m4a` files with a 200/206 response and no console errors.
+Original MP3s deleted, not kept alongside. **This closes the P1 audio
+re-encode item — Heist, Relaxed, and Pursuit are all AAC/`.m4a` now.**
 
 Filenames are deliberately neutral and need not match the tracks' actual
 titles; the shipped name is just a path. Track titles are never displayed
@@ -114,6 +144,11 @@ the need to prove a negative across 71 photoreal renders.
    often carries). Third-party text. The car is also a highly recognisable
    rounded rear-engine silhouette whose maker does enforce it, so this
    belongs in group 5 as well.
+   **Still present as of the 2026-07-31 library promotion** — that update
+   overwrote this file with an admin-edited version (recolour/reposition
+   via the in-game Library panel) that rotated the composition 180° but
+   carries the same decal text, now at the opposite end. Not fixed by that
+   edit; still open.
 5. **Recognisable silhouettes with no visible branding.** Lower risk than
    1-4 but not zero, because body shape can itself be protected trade dress
    and several of these marques enforce it: `hero-wedge-green`,
@@ -249,6 +284,113 @@ anything already flagged above. Needs the crest and both instances of text
 removed (or the wing endplates repainted blank) before this one ships.
 Original file wasn't retained in the repo — ask for it again if it's worth
 finishing.
+
+### 2026-08-02: every flagged asset removed from the shipped pool
+
+At the developer's direction, every file named in "Known exposures" above
+(groups 1-4c, and the explicitly-named group 5 silhouettes) was deleted
+from `assets/cars/` and its `SEDAN_PHOTOS` array entry removed —
+24 array entries plus 5 already-orphaned files sharing the same flagged
+models, 29 files total. `verify-levels.mjs` still passes (34 sedans
+remain, comfortably above the colour-family floor), and a live render
+pass confirmed zero console errors and zero failed asset requests
+afterward.
+
+Group 5's own text said "the 12 `*-wedge` library recolours" — re-checked
+visually while removing these and could only confirm **11**: the 10 files
+with `wedge` in the name plus `library-sedans-1785066252701-1-silver-
+yellow-stripe.webp`, which turned out to be an unlabeled recolor of the
+identical body (same hex vents, same door NACA duct — confirmed by
+side-by-side comparison, not assumed). Treat the original "12" as a minor
+count error in that entry, not a 12th file still out there unaccounted
+for — this was a full re-verification, not a re-statement of the old
+number.
+
+**Two things intentionally NOT removed, flagged here for a decision
+rather than acted on unilaterally:**
+
+- **`library-sedans-1785067674835-12-orange-coupe.webp`** and
+  **`-15-green-coupe.webp`** — visually confirmed to share the exact
+  body/silhouette just removed for `hero-coupe-gold` (compared side by
+  side). Group 5's text never named these two specifically by filename,
+  only `hero-coupe-gold` itself, so they were left in place rather than
+  swept in by inference. If the concern that got `hero-coupe-gold`
+  removed applies to its shape generally, it applies to these two as
+  well — worth a decision either way rather than an inconsistency by
+  accident.
+- **`library-sedans-1785067674835-6-police.webp`** — generic police
+  livery. This was always framed as low-risk/"confirm the shield emblem
+  isn't a real department's," not as a flagged exposure, so it wasn't
+  included in this removal pass. Still worth that one confirmation check
+  before considering the vehicle-art risk fully closed out.
+
+### What needs replacing
+
+Every filename below is gone from both `assets/cars/` and the pool.
+Body-type description included so a commissioned or generated
+replacement can be briefed without needing to see the original (which,
+by design, is no longer in the repo to look at):
+
+| Removed file | Body type | Why it was flagged |
+|---|---|---|
+| `traffic-sedan-11.webp` | racing GT coupe | readable third-party wordmarks + a registered racing livery |
+| `library-sedans-1785067674835-4-yellow-cab.webp` | municipal taxi liveried sedan | readable NYC TAXI wordmark + medallion |
+| `library-sedans-1785066252701-0-pink-wedge.webp` | angular mid-engine wedge supercar | manufacturer badge visible on nose |
+| `hero-hyper-carbon.webp` | quad-exhaust hypercar | race number + small emblem |
+| `hero-vintage-white.webp` | rounded rear-engine classic | dealer-decal text + recognisable maker silhouette |
+| `hero-midship-red.webp` | mid-engine supercar, glazed engine cover | recognisable maker silhouette |
+| `hero-racer-orange.webp` | central-driving-position track car, roof snorkel | recognisable maker silhouette |
+| `hero-hyper-teal.webp` | quad-exhaust hypercar | recognisable maker silhouette |
+| `hero-hyper-champagne.webp` | mid-engine hypercar | recognisable maker silhouette |
+| `hero-roadster-blue.webp` | open roadster, four fender bulges | recognisable maker silhouette — registered trade dress body |
+| `hero-coupe-gold.webp` | classic rear-engine coupe | recognisable maker silhouette |
+| `library-sedans-1785066252701-1-silver-yellow-stripe.webp` | angular wedge supercar | same flagged body as the pink-wedge above |
+| `library-sedans-1785067674835-1-aqua-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785067674835-2-yellow-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785067674835-3-silver-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785067674835-8-blue-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785067674835-9-gold-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785067674835-11-green-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785070794205-0-purple-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785070794205-1-bronze-wedge.webp` | angular wedge supercar | same flagged body |
+| `library-sedans-1785070794205-2-pink-pale-wedge.webp` | angular wedge supercar | same flagged body |
+| `traffic-sedan-5.webp` | national-flag racing stripe over a coupe | recognisable maker silhouette + livery |
+| `traffic-sedan-12.webp` | classic gullwing coupe | recognisable maker silhouette |
+| `traffic-sedan-8.webp` | track-focused coupe, lime | recognisable maker silhouette |
+| `traffic-sedan-24.webp` *(already unused)* | municipal taxi liveried sedan | second copy of the NYC TAXI exposure |
+| `traffic-sedan-3.webp` *(already unused)* | GT coupe | chrome model-designation badge |
+| `traffic-sedan-4.webp` *(already unused)* | modern longtail GT | recognisable maker silhouette |
+| `hero-wedge-green.webp` *(already unused)* | angular wedge supercar | same flagged body as the 11 recolors above, the original non-recolor |
+| `hero-offroad-orange.webp` *(already unused)* | boxy off-roader, bonnet-mounted spare | recognisable maker silhouette |
+
+29 files, but far fewer distinct designs than that — two genuine
+many-to-one commissions in there:
+- The **11 wedge-body files** (10 named `*-wedge` plus
+  `library-sedans-1785066252701-1-silver-yellow-stripe.webp`, confirmed
+  the same body above) are recolors of one model — **one replacement
+  design covers all 11.**
+- **`hero-hyper-teal.webp`** and **`hero-hyper-champagne.webp`** are two
+  colors of the same hypercar body (same maker, same quad-exhaust/
+  teardrop-cabin shape) — **one replacement design covers both.**
+- The taxi livery (`library-sedans-1785067674835-4-yellow-cab.webp` and
+  the already-orphaned `traffic-sedan-24.webp`) is one design needed
+  twice over, not two designs.
+
+That leaves 12 remaining files each depicting a genuinely distinct
+silhouette or livery: the racing-GT-with-branded-livery
+(`traffic-sedan-11`), the GTO-badged coupe (`traffic-sedan-3`), the
+vintage rounded rear-engine classic (`hero-vintage-white`), the midship
+supercar (`hero-midship-red`), the central-driving-position racer
+(`hero-racer-orange`), the four-fender-bulge roadster
+(`hero-roadster-blue`), the classic rear-engine coupe (`hero-coupe-gold`),
+the national-flag race-stripe coupe (`traffic-sedan-5`), the gullwing
+coupe (`traffic-sedan-12`), the lime track coupe (`traffic-sedan-8`), the
+modern longtail GT (`traffic-sedan-4`), and the off-roader
+(`hero-offroad-orange`).
+
+**Net: roughly 15 replacement designs cover all 29 removed files** (1
+wedge + 1 hypercar + 1 taxi + 12 one-offs) — not 29, and not a round
+number worth treating as more precise than "about 15."
 
 ## Fonts — cleared
 
