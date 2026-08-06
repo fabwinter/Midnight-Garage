@@ -438,11 +438,45 @@ retouches above (2026-07-31 entry) applied cleanly:
 **Still open, unchanged by this correction:** `start-portrait.webp` /
 `start-landscape.webp` (legible "FERRARI" wordmark, three recognizable
 Lamborghini Huracáns, a scene-level exposure no silhouette argument
-touches), `intro-plate.webp` (a photoreal Ferrari Enzo), and `pro-
-plate.webp` (a Porsche 718 Cayman GT4) are all still flagged and still
-awaiting replacement art — see the image reference sheet shared with the
-developer for the current full list, tagged R1–R11 and L1–L5 by
-confidence tier rather than by filename.
+touches) are still flagged and awaiting replacement art — see the image
+reference sheet shared with the developer for the current full list,
+tagged R1–R11 and L1–L5 by confidence tier rather than by filename.
+`intro-plate.webp` and `pro-plate.webp` were replaced 2026-08-06, see
+below.
+
+### 2026-08-06: `intro-plate.webp` and `pro-plate.webp` replaced with commissioned art
+
+Two new renders supplied by the developer, on the same dark low-poly
+background as the originals: an original-design red coupe (X-shaped
+taillight lattice, not a match for any real marque's signature) for
+`intro-plate.webp`, and a matte-grey coupe with orange wheels for
+`pro-plate.webp`. Both vetted the same way as every other addition to
+this pool — zoomed crops of the rear bumper/plate area on both, looking
+specifically for the kind of embossed plate text the `hero-airtail-*`
+retouches (above) needed. Neither carries one; `pro-plate.webp`'s plate
+recess is genuinely blank, `intro-plate.webp` has no plate at all in
+frame. Neither silhouette reads as a specific real manufacturer.
+
+**Not a drop-in file swap** — `css/game.css`'s `.plate-sheet` rule
+(search "Full-bleed art plates" in that file) pins these images to
+`background-size: 100% auto` and reserves a fixed 30%-of-width band for
+the car via `.plate-spacer{aspect-ratio:1/.30}`, and expects the source
+canvas itself to be pre-extended to 2× its width (2048×4096) with the
+area below the car filled to avoid a seam once real content scrolls
+past the art. The two supplied renders were 2048×2048 squares with the
+car already sitting in almost exactly the right band (car spans roughly
+5–27% of width vs. the original files' 7–28% — close enough that no
+repositioning was needed) but at half the expected canvas height.
+Extended each to 2048×4096 by mirror-tiling the render's own lower
+background region downward (reflect-repeat, so every seam boundary
+matches pixel-for-pixel) rather than flat-filling or attempting to
+regenerate the polygon texture — verified with ruled-line overlays at
+the CSS's own 7/15/20/25/30.5% marks before shipping, and confirmed
+seamless (no visible tiling artifact) at the 50% mirror boundary. Final
+live-render check: both sheets screenshotted in a running instance of
+the app (intro sheet on first load, Pro Garage popup via a direct
+overlay-class toggle) — car correctly banded, content starting at the
+right offset, zero console errors, zero failed asset loads.
 
 ## Fonts — cleared
 
