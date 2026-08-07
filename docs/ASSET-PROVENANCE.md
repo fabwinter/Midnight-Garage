@@ -509,12 +509,16 @@ the untouched landscape rule) — each resolved to the expected background
 image, both new images render uncropped with the "START" button legible
 against the bottom gradient.
 
-**Still open:** `start-landscape.webp` is untouched by this change and
-still carries the old flagged art (legible "FERRARI" wordmark, three
-recognizable Lamborghini Huracáns) noted above. Low practical exposure
-since native builds are portrait-locked (`Info.plist` /
-`AndroidManifest.xml`, see CLAUDE.md), but the file and the CSS rule
-serving it are both still shipping in the codebase. Needs either a
-landscape-ratio replacement commissioned the same way, or a decision to
-drop the landscape media query and let the portrait art serve everywhere
-via `cover` — not yet decided, flagged to the developer.
+**Resolved same day:** developer chose to drop landscape rather than
+commission a third ratio, since native builds are portrait-locked
+(`Info.plist` / `AndroidManifest.xml`) and landscape was effectively
+unreachable already. `start-landscape.webp` (the file carrying the old
+flagged "FERRARI" wordmark / Lamborghini Huracáns exposure) is deleted,
+and `css/game.css`'s `@media (orientation:landscape)` rule is gone —
+`#startOverlay` now sets `start-portrait.webp` unconditionally and
+overrides to `start-tablet.webp` at `min-width:768px`, orientation no
+longer a factor. Re-verified headless at the same phone/tablet-portrait
+widths plus two landscape-aspect widths (844×390, 1194×834) to confirm
+no dead reference to the removed file remains — both landscape cases
+fall back to whichever art matches width, same as any other wide
+viewport.

@@ -746,28 +746,20 @@ input[type=range]::-moz-range-thumb{
 .busted-rescue{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .busted-rescue-lab{color:var(--muted);font-size:12px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.1em}
 
-/* ---------- Start Screen (poster art, plan: 2 orientation-specific hero images) ---------- */
+/* ---------- Start Screen (poster art) ----------
+   Portrait-only: native builds are orientation-locked to portrait
+   (ios/App/App/Info.plist, android .../AndroidManifest.xml), so there's
+   no landscape hero image — width alone picks phone vs. tablet art. */
 #startOverlay{
   padding:0;background-color:#06080c;
   background-size:cover;background-position:center center;background-repeat:no-repeat;
   display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
   backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-image:
+    linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
+    url('../assets/start/start-portrait.webp');
 }
-@media (orientation:landscape){
-  #startOverlay{
-    background-image:
-      linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-landscape.webp');
-  }
-}
-@media (orientation:portrait){
-  #startOverlay{
-    background-image:
-      linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-portrait.webp');
-  }
-}
-@media (orientation:portrait) and (min-width:768px){
+@media (min-width:768px){
   #startOverlay{
     background-image:
       linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
