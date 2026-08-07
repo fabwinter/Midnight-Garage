@@ -483,7 +483,38 @@ right offset, zero console errors, zero failed asset loads.
 `assets/fonts/*.woff2` are OFL-licensed. Ship the licence files alongside
 them (tracked in STORE-SHIP-PLAN P0-2).
 
-## Start-screen stills — provenance unrecorded
+### 2026-08-07: `start-portrait.webp` replaced, new `start-tablet.webp` added
 
-`assets/start/*.webp`. Same rule as the vehicle art: record the source and
-licence before shipping.
+Commissioned art, developer-supplied, after several rejected rounds (see
+chat history — a Lamborghini/Ferrari-badged lineup, then Toyota GR
+Corolla/Supra/86 replicas with a visible grille badge, then a BMW
+twin-kidney grille, each caught and sent back before this version).
+Final scene: original-design car lineup (no real-marque silhouette or
+badge matched on any vehicle after per-car zoomed verification), a
+generic sedan-shaped police cruiser with an illegible fictional door
+shield, and a red hero car with a confirmed-clean rear (no plate, no
+badge). Supplied pre-cropped to two ratios instead of one:
+- `start-portrait.webp` (1530×2720) — phone portrait.
+- `start-tablet.webp` (1536×2048, new file) — tablet portrait.
+
+Both go through `#startOverlay`'s simple `background-size:cover` path
+(unlike the plate-sheet images above — no canvas-extension or banding
+convention applies here). `css/game.css` now picks between them with a
+`(orientation:portrait) and (min-width:768px)` breakpoint layered over
+the existing orientation query, so phones and tablets each get the ratio
+they were rendered for instead of `cover` cropping a mismatched image.
+Verified with a headless render at 390×844 (phone), 834×1194 (tablet),
+and 844×390 (landscape, to confirm the new breakpoint doesn't leak into
+the untouched landscape rule) — each resolved to the expected background
+image, both new images render uncropped with the "START" button legible
+against the bottom gradient.
+
+**Still open:** `start-landscape.webp` is untouched by this change and
+still carries the old flagged art (legible "FERRARI" wordmark, three
+recognizable Lamborghini Huracáns) noted above. Low practical exposure
+since native builds are portrait-locked (`Info.plist` /
+`AndroidManifest.xml`, see CLAUDE.md), but the file and the CSS rule
+serving it are both still shipping in the codebase. Needs either a
+landscape-ratio replacement commissioned the same way, or a decision to
+drop the landscape media query and let the portrait art serve everywhere
+via `cover` — not yet decided, flagged to the developer.
