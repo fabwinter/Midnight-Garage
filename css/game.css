@@ -76,7 +76,14 @@ body::before{
 }
 
 /* ---------- Header ---------- */
-header{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
+/* The six .hbtns buttons need a fixed 246px (they're flex:none, and
+   shrinking them any further would put the tap target under 36px), and
+   .brand .t1 is nowrap, so on a phone the two together overflow the
+   column and silently clip the last buttons off-screen — Shop and
+   Settings were unreachable on every iPhone width. flex-wrap lets the
+   button group drop to its own line instead; margin-left:auto keeps it
+   right-aligned both inline and wrapped. */
+header{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
 .brand{display:flex;flex-direction:column;line-height:1}
 .brand .t1{
   font-family:var(--disp);font-weight:700;font-size:clamp(17px,4.6vw,26px);letter-spacing:.04em;
@@ -90,7 +97,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   4.7%,6.4%{opacity:.35}
 }
 .brand .t2{font-size:9px;letter-spacing:.34em;color:var(--muted);text-transform:uppercase;margin-top:5px;padding-left:2px}
-.hbtns{display:flex;gap:6px}
+.hbtns{display:flex;gap:6px;margin-left:auto}
 .icon-btn{
   width:36px;height:36px;border-radius:11px;border:1px solid var(--line);flex:none;
   background:linear-gradient(180deg,#1c2230,#141925);
