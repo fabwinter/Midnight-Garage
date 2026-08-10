@@ -8,6 +8,7 @@
     "dev": "node tools/serve.mjs",
     "generate": "node tools/generate-levels.mjs",
     "verify": "node tools/verify-levels.mjs",
+    "icons": "node tools/build-icons.mjs",
     "build": "node tools/build-www.mjs",
     "build:release": "node tools/build-www.mjs --release",
     "cap:sync": "npm run build && npx cap sync",

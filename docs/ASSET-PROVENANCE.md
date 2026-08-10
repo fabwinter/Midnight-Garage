@@ -483,6 +483,43 @@ right offset, zero console errors, zero failed asset loads.
 `assets/fonts/*.woff2` are OFL-licensed. Ship the licence files alongside
 them (tracked in STORE-SHIP-PLAN P0-2).
 
+## App icon — cleared, originated in-repo
+
+Every icon asset is generated from one vector source,
+[`tools/build-icons.mjs`](../tools/build-icons.mjs) (`npm run icons`) —
+there is no binary master to lose track of, and re-running it reproduces
+all 26 files. The artwork is original vector geometry drawn against the
+`css/game.css` palette (`--red`, `--amber`, `--night`): a top-down hero car
+nosing toward the lit exit gate, the gate's ▶ marker taken from the game's
+own board (`js/art.js`). No photograph, no traced silhouette, and no real
+marque's design cues — deliberately, given the vehicle-art exposure
+documented above. Nothing to clear with a third party.
+
+### 2026-08-10: icon redrawn, Android adaptive layers fixed
+
+Replaced the original 2026-08-02 icon, whose car read as a plain red
+capsule below ~120px. The rebuild draws the glasshouse as one dark shape
+with the painted roof floating inside it, leaving a wide raked windshield,
+thin side glass and a small rear screen — which is what an overhead car
+actually looks like, and what makes it still read as a car at 29px.
+Verified rendered at 180/120/87/60/40/29 under an iOS corner mask.
+
+Fixed at the same time: `mipmap-anydpi-v26/ic_launcher*.xml` wrapped
+**both** adaptive layers in `<inset android:inset="16.7%">` (the generator
+default that shipped with the Capacitor scaffold), which shrank the
+*background* to the 72dp safe zone as well as the foreground. Any launcher
+mask wider than 72dp — several OEM masks, plus Android's own parallax
+animation — exposed transparent corners. Both layers are now authored at
+the true 108dp adaptive canvas with the car and gate held inside the safe
+zone by `icon()`'s `scale`, and referenced with no `<inset>`. Confirmed by
+compositing the two layers and masking at 72dp, 80dp squircle and 84dp:
+no transparent gap at any of them, and nothing important cropped at the
+tightest. Legacy `ic_launcher`/`ic_launcher_round` stay 48dp as before.
+
+The iOS master is written square and flattened (`channels: 3`) — Apple
+rejects an alpha channel on `AppIcon-512@2x.png` and applies its own
+corner mask, so the rounded-corner variant is the web favicon only.
+
 ### 2026-08-07: `start-portrait.webp` replaced, new `start-tablet.webp` added
 
 Commissioned art, developer-supplied, after several rejected rounds (see
