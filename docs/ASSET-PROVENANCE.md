@@ -559,3 +559,52 @@ widths plus two landscape-aspect widths (844×390, 1194×834) to confirm
 no dead reference to the removed file remains — both landscape cases
 fall back to whichever art matches width, same as any other wide
 viewport.
+
+### 2026-08-11: `start-portrait.webp` and `start-tablet.webp` replaced again — same scene, lineup redesigned after two real findings
+
+Same "Midnight Garage: Escape" underground-garage scene as 2026-08-07, but
+a fresh render of the car lineup — the developer sent five successive
+revisions of this poster over the course of the day, each checked the
+same way (per-car zoomed crops, not a glance at the thumbnail) before
+being sent back or cleared:
+
+1. First revision: two cars (dark green, gold) had a honeycomb single-
+   frame mesh grille plus a hooked/checkmark LED headlight — Audi's
+   current design language, confirmed at the pixel level on both files
+   supplied (a 3392×5056 and a 1536×2752 export). Sent back.
+2. Second revision: the gold car's grille was fixed (mesh gone, smaller
+   plain intake); the dark green car was untouched, same hexagonal mesh
+   grille confirmed again in both files. Sent back with the finding
+   narrowed to the one remaining car.
+3. Developer pushed back rather than iterating blind: pointed out the
+   flagged grille has a panel across its middle "unlike anything else"
+   and that it's "identical to every other car in the image." Re-checked
+   by zooming into six more cars (gold, silver, purple, teal, orange,
+   magenta) instead of re-asserting the finding — every one of them
+   carried the identical checkmark-headlight / split-mesh-grille face,
+   including cars never flagged as Audi-like. **Correction, not a
+   re-confirmation:** a design copied selectively onto the one car it's
+   imitating is a real trade-dress concern; the same geometry used as the
+   invariant base mesh under nine differently-colored recolors of one
+   fictional car is this generator's shared template, not a targeted
+   replica of one real manufacturer's signature — Audi's actual
+   Singleframe grille isn't divided by a body-colored bar the way every
+   car in this lineup is. Finding withdrawn.
+4. Fourth revision ("fixed headlight"): a single, narrowly-targeted edit
+   confirmed via pixel diff against the prior file (one small region
+   changed, everything else byte-for-byte close) — the purple car's
+   hooked DRL replaced with a plain double-bar strip. Not that it was
+   still needed after the withdrawal above, but it's a clean fix.
+5. Final pair, this entry: `IMG_3339` (3392×5056, phone-bucket export,
+   carries the headlight fix forward — verified) and `IMG_3340`
+   (1792×2400, ratio 0.747 — a much closer match to the `min-width:768px`
+   tablet slot's 0.75 target than the 0.671 export used in-between, so
+   less top/bottom loss under `background-size:cover` on an actual
+   iPad-shaped screen). Red hero car's rear re-verified clean in both
+   (no plate, no badge) at every stage above — never regressed.
+
+Wired in the same way as 2026-08-07 (no plate-sheet convention, straight
+`cover`). Verified headless at 390×844 (phone), 768×1024 and 834×1194
+(tablet, both sides of the breakpoint) — correct file selected at each,
+full scene visible uncropped, "START" button legible against the bottom
+gradient at all three.
