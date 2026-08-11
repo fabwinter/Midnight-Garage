@@ -76,7 +76,14 @@ body::before{
 }
 
 /* ---------- Header ---------- */
-header{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
+/* The six .hbtns buttons need a fixed 246px (they're flex:none, and
+   shrinking them any further would put the tap target under 36px), and
+   .brand .t1 is nowrap, so on a phone the two together overflow the
+   column and silently clip the last buttons off-screen — Shop and
+   Settings were unreachable on every iPhone width. flex-wrap lets the
+   button group drop to its own line instead; margin-left:auto keeps it
+   right-aligned both inline and wrapped. */
+header{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
 .brand{display:flex;flex-direction:column;line-height:1}
 .brand .t1{
   font-family:var(--disp);font-weight:700;font-size:clamp(17px,4.6vw,26px);letter-spacing:.04em;
@@ -90,7 +97,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
   4.7%,6.4%{opacity:.35}
 }
 .brand .t2{font-size:9px;letter-spacing:.34em;color:var(--muted);text-transform:uppercase;margin-top:5px;padding-left:2px}
-.hbtns{display:flex;gap:6px}
+.hbtns{display:flex;gap:6px;margin-left:auto}
 .icon-btn{
   width:36px;height:36px;border-radius:11px;border:1px solid var(--line);flex:none;
   background:linear-gradient(180deg,#1c2230,#141925);
@@ -746,25 +753,24 @@ input[type=range]::-moz-range-thumb{
 .busted-rescue{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .busted-rescue-lab{color:var(--muted);font-size:12px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.1em}
 
-/* ---------- Start Screen (poster art, plan: 2 orientation-specific hero images) ---------- */
+/* ---------- Start Screen (poster art) ----------
+   Portrait-only: native builds are orientation-locked to portrait
+   (ios/App/App/Info.plist, android .../AndroidManifest.xml), so there's
+   no landscape hero image — width alone picks phone vs. tablet art. */
 #startOverlay{
   padding:0;background-color:#06080c;
   background-size:cover;background-position:center center;background-repeat:no-repeat;
   display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
   backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-image:
+    linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
+    url('../assets/start/start-portrait.webp');
 }
-@media (orientation:landscape){
+@media (min-width:768px){
   #startOverlay{
     background-image:
       linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-landscape.webp');
-  }
-}
-@media (orientation:portrait){
-  #startOverlay{
-    background-image:
-      linear-gradient(to top, rgba(6,8,12,.92), rgba(6,8,12,.15) 45%, rgba(6,8,12,0) 65%),
-      url('../assets/start/start-portrait.webp');
+      url('../assets/start/start-tablet.webp');
   }
 }
 .start-cta{

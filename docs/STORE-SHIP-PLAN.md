@@ -539,6 +539,7 @@ rejection.
 |---|---|
 | Developer Program account active | $99/yr, needs D-U-N-S if company |
 | App record, bundle id `app.midnightgarage` | matches capacitor.config.json — **and is permanent once set, cannot change after first submission** |
+| App Store Connect Name + Subtitle | decided 2026-08-04: "Midnight Garage: Escape" / "Traffic jam logic puzzle" — see APP-STORE.md. Independent of the bundle ID above; changeable anytime post-launch, unlike the bundle ID |
 | Agreements, tax, banking complete | blocks paid IAP silently if skipped |
 | IAP product `pro_garage` (non-consumable) approved | submit WITH the binary first time; code-level integration done, real RevenueCat project + App Store Connect product still needed — P0-6 |
 | Restore purchases functional | 3.1.1 — code-level integration done (`js/iap.js` calls RevenueCat's real `restorePurchases()`), on-device verification still needed — P0-6 |
@@ -560,6 +561,7 @@ rejection.
 | Item | Notes |
 |---|---|
 | Play Console account | **if a NEW personal account: 12 testers for 14 days closed-testing requirement before production — this is the schedule long-pole; start closed testing the moment a build exists** (org accounts exempt) |
+| App title | decided 2026-08-04: "Midnight Garage: Escape" — see PLAY-STORE.md, same decision as Apple's Name field |
 | AAB build, Play App Signing enrolled | AAB mandatory |
 | targetSdk 35 (plan 36 by ~Aug 2026) | P0-3 |
 | Upload keystore backed up somewhere safe outside this repo | generated on first `android/` signing setup — **lose it and you can never update the app under the same listing**; Play App Signing means Google can help recover the *signing* key but not this *upload* key |

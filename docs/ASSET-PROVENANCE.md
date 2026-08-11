@@ -392,12 +392,219 @@ modern longtail GT (`traffic-sedan-4`), and the off-roader
 wedge + 1 hypercar + 1 taxi + 12 one-offs) — not 29, and not a round
 number worth treating as more precise than "about 15."
 
+### 2026-08-04: a second Ferrari/Lambo sweep of the *remaining* pool — one real finding, one over-call corrected
+
+Prompted by the developer asking specifically about any Ferrari/
+Lamborghini look-alikes still left in `assets/cars/` after the removal
+above. Two files were initially flagged by silhouette alone
+(`hero-airtail-*` × 5 as "Ferrari 488/458 Spider", `hero-canopy-green`
+as "Lamborghini") — the developer pushed back, correctly. Re-examined at
+pixel level rather than re-asserting the first read:
+
+- **The `hero-airtail-*` body is not a Ferrari 488/458.** Round
+  headlights rule it out outright (the 488/458 Spider's are angular);
+  it also carries a fixed rear wing the real car doesn't have. Silhouette
+  match was a thumbnail-scale pattern-match, not a verified one — kept as
+  a design, no replacement needed.
+- **`hero-canopy-green` is not conclusively Lamborghini either** —
+  proportions differ and (see below) there's no badge, contrary to what
+  was first claimed.
+- **The one thing that *did* hold up:** a ~10×10px yellow shield badge on
+  the steering-wheel hub, found via pixel-level crop-and-zoom (not
+  assumed) on 4 of the 5 `hero-airtail-*` colorways (blue, pink,
+  purple-yellow, stripe — **not** red, confirmed absent there after a
+  targeted check, not skipped) and on `hero-convertible-brown`. `hero-
+  canopy-green`'s dash was re-checked at the same zoom specifically for
+  this correction and is genuinely clean — the original badge claim on
+  that file was wrong.
+
+**Fixed by retouch, not replacement** — these badges are real marks but
+tiny and isolated, so the same in-place-patch approach as the truck
+retouches above (2026-07-31 entry) applied cleanly:
+- `hero-airtail-blue.webp`, `-purple-yellow.webp`, `-stripe.webp`: flat
+  fill sampled from a ring around the badge (dark, fairly uniform hub
+  material — a ring average matched cleanly).
+- `hero-airtail-pink.webp`, `hero-convertible-brown.webp`: the ring
+  method picked up dark spoke shadows and left a visible grey smudge on
+  the lighter cream hub — redone as a clone-stamp from a same-material
+  patch directly above the badge instead. Both re-verified clean after.
+- All five verified at three scales (badge-tight crop, full-car crop,
+  and a live headless render through 10 board resets) before the real
+  files were overwritten — zero console errors, zero failed asset loads.
+- `hero-airtail-red.webp` needed no edit — confirmed by direct pixel
+  inspection that no badge is visible on that colorway at all, not an
+  oversight.
+
+**Still open, unchanged by this correction:** `start-portrait.webp` /
+`start-landscape.webp` (legible "FERRARI" wordmark, three recognizable
+Lamborghini Huracáns, a scene-level exposure no silhouette argument
+touches) are still flagged and awaiting replacement art — see the image
+reference sheet shared with the developer for the current full list,
+tagged R1–R11 and L1–L5 by confidence tier rather than by filename.
+`intro-plate.webp` and `pro-plate.webp` were replaced 2026-08-06, see
+below.
+
+### 2026-08-06: `intro-plate.webp` and `pro-plate.webp` replaced with commissioned art
+
+Two new renders supplied by the developer, on the same dark low-poly
+background as the originals: an original-design red coupe (X-shaped
+taillight lattice, not a match for any real marque's signature) for
+`intro-plate.webp`, and a matte-grey coupe with orange wheels for
+`pro-plate.webp`. Both vetted the same way as every other addition to
+this pool — zoomed crops of the rear bumper/plate area on both, looking
+specifically for the kind of embossed plate text the `hero-airtail-*`
+retouches (above) needed. Neither carries one; `pro-plate.webp`'s plate
+recess is genuinely blank, `intro-plate.webp` has no plate at all in
+frame. Neither silhouette reads as a specific real manufacturer.
+
+**Not a drop-in file swap** — `css/game.css`'s `.plate-sheet` rule
+(search "Full-bleed art plates" in that file) pins these images to
+`background-size: 100% auto` and reserves a fixed 30%-of-width band for
+the car via `.plate-spacer{aspect-ratio:1/.30}`, and expects the source
+canvas itself to be pre-extended to 2× its width (2048×4096) with the
+area below the car filled to avoid a seam once real content scrolls
+past the art. The two supplied renders were 2048×2048 squares with the
+car already sitting in almost exactly the right band (car spans roughly
+5–27% of width vs. the original files' 7–28% — close enough that no
+repositioning was needed) but at half the expected canvas height.
+Extended each to 2048×4096 by mirror-tiling the render's own lower
+background region downward (reflect-repeat, so every seam boundary
+matches pixel-for-pixel) rather than flat-filling or attempting to
+regenerate the polygon texture — verified with ruled-line overlays at
+the CSS's own 7/15/20/25/30.5% marks before shipping, and confirmed
+seamless (no visible tiling artifact) at the 50% mirror boundary. Final
+live-render check: both sheets screenshotted in a running instance of
+the app (intro sheet on first load, Pro Garage popup via a direct
+overlay-class toggle) — car correctly banded, content starting at the
+right offset, zero console errors, zero failed asset loads.
+
 ## Fonts — cleared
 
 `assets/fonts/*.woff2` are OFL-licensed. Ship the licence files alongside
 them (tracked in STORE-SHIP-PLAN P0-2).
 
-## Start-screen stills — provenance unrecorded
+## App icon — cleared, originated in-repo
 
-`assets/start/*.webp`. Same rule as the vehicle art: record the source and
-licence before shipping.
+Every icon asset is generated from one vector source,
+[`tools/build-icons.mjs`](../tools/build-icons.mjs) (`npm run icons`) —
+there is no binary master to lose track of, and re-running it reproduces
+all 26 files. The artwork is original vector geometry drawn against the
+`css/game.css` palette (`--red`, `--amber`, `--night`): a top-down hero car
+nosing toward the lit exit gate, the gate's ▶ marker taken from the game's
+own board (`js/art.js`). No photograph, no traced silhouette, and no real
+marque's design cues — deliberately, given the vehicle-art exposure
+documented above. Nothing to clear with a third party.
+
+### 2026-08-10: icon redrawn, Android adaptive layers fixed
+
+Replaced the original 2026-08-02 icon, whose car read as a plain red
+capsule below ~120px. The rebuild draws the glasshouse as one dark shape
+with the painted roof floating inside it, leaving a wide raked windshield,
+thin side glass and a small rear screen — which is what an overhead car
+actually looks like, and what makes it still read as a car at 29px.
+Verified rendered at 180/120/87/60/40/29 under an iOS corner mask.
+
+Fixed at the same time: `mipmap-anydpi-v26/ic_launcher*.xml` wrapped
+**both** adaptive layers in `<inset android:inset="16.7%">` (the generator
+default that shipped with the Capacitor scaffold), which shrank the
+*background* to the 72dp safe zone as well as the foreground. Any launcher
+mask wider than 72dp — several OEM masks, plus Android's own parallax
+animation — exposed transparent corners. Both layers are now authored at
+the true 108dp adaptive canvas with the car and gate held inside the safe
+zone by `icon()`'s `scale`, and referenced with no `<inset>`. Confirmed by
+compositing the two layers and masking at 72dp, 80dp squircle and 84dp:
+no transparent gap at any of them, and nothing important cropped at the
+tightest. Legacy `ic_launcher`/`ic_launcher_round` stay 48dp as before.
+
+The iOS master is written square and flattened (`channels: 3`) — Apple
+rejects an alpha channel on `AppIcon-512@2x.png` and applies its own
+corner mask, so the rounded-corner variant is the web favicon only.
+
+### 2026-08-07: `start-portrait.webp` replaced, new `start-tablet.webp` added
+
+Commissioned art, developer-supplied, after several rejected rounds (see
+chat history — a Lamborghini/Ferrari-badged lineup, then Toyota GR
+Corolla/Supra/86 replicas with a visible grille badge, then a BMW
+twin-kidney grille, each caught and sent back before this version).
+Final scene: original-design car lineup (no real-marque silhouette or
+badge matched on any vehicle after per-car zoomed verification), a
+generic sedan-shaped police cruiser with an illegible fictional door
+shield, and a red hero car with a confirmed-clean rear (no plate, no
+badge). Supplied pre-cropped to two ratios instead of one:
+- `start-portrait.webp` (1530×2720) — phone portrait.
+- `start-tablet.webp` (1536×2048, new file) — tablet portrait.
+
+Both go through `#startOverlay`'s simple `background-size:cover` path
+(unlike the plate-sheet images above — no canvas-extension or banding
+convention applies here). `css/game.css` now picks between them with a
+`(orientation:portrait) and (min-width:768px)` breakpoint layered over
+the existing orientation query, so phones and tablets each get the ratio
+they were rendered for instead of `cover` cropping a mismatched image.
+Verified with a headless render at 390×844 (phone), 834×1194 (tablet),
+and 844×390 (landscape, to confirm the new breakpoint doesn't leak into
+the untouched landscape rule) — each resolved to the expected background
+image, both new images render uncropped with the "START" button legible
+against the bottom gradient.
+
+**Resolved same day:** developer chose to drop landscape rather than
+commission a third ratio, since native builds are portrait-locked
+(`Info.plist` / `AndroidManifest.xml`) and landscape was effectively
+unreachable already. `start-landscape.webp` (the file carrying the old
+flagged "FERRARI" wordmark / Lamborghini Huracáns exposure) is deleted,
+and `css/game.css`'s `@media (orientation:landscape)` rule is gone —
+`#startOverlay` now sets `start-portrait.webp` unconditionally and
+overrides to `start-tablet.webp` at `min-width:768px`, orientation no
+longer a factor. Re-verified headless at the same phone/tablet-portrait
+widths plus two landscape-aspect widths (844×390, 1194×834) to confirm
+no dead reference to the removed file remains — both landscape cases
+fall back to whichever art matches width, same as any other wide
+viewport.
+
+### 2026-08-11: `start-portrait.webp` and `start-tablet.webp` replaced again — same scene, lineup redesigned after two real findings
+
+Same "Midnight Garage: Escape" underground-garage scene as 2026-08-07, but
+a fresh render of the car lineup — the developer sent five successive
+revisions of this poster over the course of the day, each checked the
+same way (per-car zoomed crops, not a glance at the thumbnail) before
+being sent back or cleared:
+
+1. First revision: two cars (dark green, gold) had a honeycomb single-
+   frame mesh grille plus a hooked/checkmark LED headlight — Audi's
+   current design language, confirmed at the pixel level on both files
+   supplied (a 3392×5056 and a 1536×2752 export). Sent back.
+2. Second revision: the gold car's grille was fixed (mesh gone, smaller
+   plain intake); the dark green car was untouched, same hexagonal mesh
+   grille confirmed again in both files. Sent back with the finding
+   narrowed to the one remaining car.
+3. Developer pushed back rather than iterating blind: pointed out the
+   flagged grille has a panel across its middle "unlike anything else"
+   and that it's "identical to every other car in the image." Re-checked
+   by zooming into six more cars (gold, silver, purple, teal, orange,
+   magenta) instead of re-asserting the finding — every one of them
+   carried the identical checkmark-headlight / split-mesh-grille face,
+   including cars never flagged as Audi-like. **Correction, not a
+   re-confirmation:** a design copied selectively onto the one car it's
+   imitating is a real trade-dress concern; the same geometry used as the
+   invariant base mesh under nine differently-colored recolors of one
+   fictional car is this generator's shared template, not a targeted
+   replica of one real manufacturer's signature — Audi's actual
+   Singleframe grille isn't divided by a body-colored bar the way every
+   car in this lineup is. Finding withdrawn.
+4. Fourth revision ("fixed headlight"): a single, narrowly-targeted edit
+   confirmed via pixel diff against the prior file (one small region
+   changed, everything else byte-for-byte close) — the purple car's
+   hooked DRL replaced with a plain double-bar strip. Not that it was
+   still needed after the withdrawal above, but it's a clean fix.
+5. Final pair, this entry: `IMG_3339` (3392×5056, phone-bucket export,
+   carries the headlight fix forward — verified) and `IMG_3340`
+   (1792×2400, ratio 0.747 — a much closer match to the `min-width:768px`
+   tablet slot's 0.75 target than the 0.671 export used in-between, so
+   less top/bottom loss under `background-size:cover` on an actual
+   iPad-shaped screen). Red hero car's rear re-verified clean in both
+   (no plate, no badge) at every stage above — never regressed.
+
+Wired in the same way as 2026-08-07 (no plate-sheet convention, straight
+`cover`). Verified headless at 390×844 (phone), 768×1024 and 834×1194
+(tablet, both sides of the breakpoint) — correct file selected at each,
+full scene visible uncropped, "START" button legible against the bottom
+gradient at all three.

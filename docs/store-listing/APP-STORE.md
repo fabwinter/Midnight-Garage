@@ -22,6 +22,31 @@ Two things this depends on that aren't finished yet:
 
 ---
 
+## App Name (30 char max)
+
+```
+Midnight Garage: Escape
+```
+(23/30 chars — decided 2026-08-04: "Escape" is the genre word for this
+category — escape-room/traffic-escape players search on it directly,
+and it moves the app out of the crowded "Midnight + cars" naming space
+shared with unrelated racing/driving-sim apps. "Midnight Garage" alone
+carries no genre signal. This is the App Store Connect "Name" field —
+distinct from `CFBundleDisplayName` in `ios/App/App/Info.plist`, which
+stays the shorter "Midnight Garage" for the home-screen icon label,
+where a longer string would just truncate.)
+
+## Subtitle (30 char max)
+
+```
+Traffic jam logic puzzle
+```
+(24/30 chars — the second-heaviest-weighted App Store search field;
+pairs the mechanic ("traffic jam") with the genre ("logic puzzle") so
+between Name + Subtitle both the setting and the genre are covered.)
+
+---
+
 ## Promotional Text (170 char max)
 
 ```
@@ -103,10 +128,18 @@ screenshots-driven feature call-outs later)
 ## Keywords (100 char max, comma-separated, no spaces after commas)
 
 ```
-puzzle,slide,traffic,parking,escape,heist,brainteaser,logic,daily,offline
+slide,parking,heist,brainteaser,daily,offline,jam,unblock,sliding,rushhour
 ```
-(78/100 chars — "car" and "garage" deliberately excluded since they're
-already in the app name and Apple's search doesn't need them repeated)
+(74/100 chars — updated 2026-08-04 for the new Name/Subtitle: "car" and
+"garage" stay excluded since they're in the app name; "escape,"
+"traffic," "logic," and "puzzle" are now also excluded since they moved
+into the Name ("Midnight Garage: Escape") and Subtitle ("Traffic jam
+logic puzzle") above — Apple indexes both fields for search already, so
+repeating those words here would waste budget instead of surfacing new
+ones. Freed-up space filled with genre-standard terms this exact puzzle
+type gets searched under: "rushhour" (the sliding-block genre's
+namesake physical puzzle), "unblock" (the other common genre name), and
+"jam"/"sliding" as mechanic synonyms.)
 
 ---
 

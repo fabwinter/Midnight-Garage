@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Both layers are authored at the full 108dp adaptive canvas by
+     tools/build-icons.mjs, with the car and the gate already held inside
+     the 72dp safe zone. They are referenced directly: an <inset> here
+     would shrink the background to the safe zone too, leaving transparent
+     corners under any mask wider than 72dp. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background>
-        <inset android:drawable="@mipmap/ic_launcher_background" android:inset="16.7%" />
-    </background>
-    <foreground>
-        <inset android:drawable="@mipmap/ic_launcher_foreground" android:inset="16.7%" />
-    </foreground>
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>
