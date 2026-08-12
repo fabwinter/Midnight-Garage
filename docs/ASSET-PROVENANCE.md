@@ -27,7 +27,9 @@ turnaround expected is days, not weeks. Note which of the two applies:
 | File | Used for |
 |---|---|
 | `velvet-glove.m4a` | Start-screen theme, Settings "Theme" button, Heist set list track 1 |
-| `clean-getaway.m4a` | Settings / Garage / Daily / Bounty menu music |
+| `clean-getaway.m4a` | Settings / Garage / Daily / Levels menu music |
+| `bounty-almost-see-daylight.m4a` | Bounty tab music (own loop, not `clean-getaway.m4a` — see 2026-08-12 entry) |
+| `bounty-almost-see-daylight-2.m4a` | Bounty attempt track (`TRACK_POOLS.bounty`) |
 | `heist-silver-getaway.m4a` | Heist set list 2 |
 | `heist-glovebox-prayer.m4a` | Heist set list 3 |
 | `heist-midnight-joyride.m4a` | Heist set list 4 |
@@ -76,6 +78,50 @@ in-game, so retitling a song has no code impact.
 
 **Ship AAC, never Opus** — see CLAUDE.md. Verify with
 `ffprobe -show_entries stream=codec_name`; it must say `aac`.
+
+### 2026-08-12: Bounty gets its own tab music and attempt track, split out of the shared pools
+
+Two new developer-supplied tracks (same rights coverage as the rest of
+this table), both confirmed real AAC via `ffprobe` before wiring
+(48 kHz stereo): `bounty-almost-see-daylight.m4a` (22s — a short,
+deliberate loop, confirmed with the developer since every other track in
+the game runs 85-180s) and `bounty-almost-see-daylight-2.m4a` (128s).
+
+Before this, opening the Bounty tab played the same shared
+`clean-getaway.m4a` as every other tab, and a Bounty attempt just played
+whichever of the Heist/Pursuit pools matched the mark's forced pacing
+(`loadBountyLevel` never puts `'bounty'` in `save.settings.mode` — that
+field is always the pacing itself, `'heist'` or `'pursuit'`). Genuinely
+new code, not just new files:
+- `js/audio.js`: new `TRACK_POOLS.bounty` (one track so far — the
+  existing `pool.length === 1` branch in `pickTrack` already handles
+  that, no special-casing needed) and a new `bountyAudio` element/
+  `playBountyMusic()`/`stopBountyMusic()` pair, shaped like
+  `settingsAudio`/`playSettingsMusic()` but `loop = true` since the tab
+  track is short enough to visibly run out otherwise (`settingsAudio`
+  plays once at 85s and is fine not looping; 22s wouldn't be).
+- `js/game.js`: `bountyBtn` now calls `playBountyMusic()` instead of
+  `playSettingsMusic()`; the overlay close paths (X, click-outside,
+  Escape) and `bountyPlayBtn` now call `stopBountyMusic()` for
+  `bountyOverlay` specifically, split out of the shared
+  `stopSettingsMusic()` array those all used to share with Levels/
+  Garage/Settings. Both `startAttemptTrack(save.settings.mode)` call
+  sites (level load, alarm/pursuit rescue) now branch to `'bounty'` when
+  `mode.type === 'bounty'`, since `save.settings.mode` alone can't
+  distinguish "a Heist-paced bounty" from an ordinary Heist campaign
+  attempt. `loadBountyLevel` also unconditionally warms the bounty pool
+  (`setGameMode('bounty')`) rather than only whichever pacing pool the
+  mark happens to match, so the attempt track is already buffering by
+  the time the player taps Play.
+
+Verified headless: wrapped the `Audio` constructor before app code loads
+to observe every element actually created and played (the module doesn't
+expose its Audio elements otherwise). Confirmed opening the Bounty tab
+creates and plays `bounty-almost-see-daylight.m4a` with `loop === true`;
+starting the job creates and plays `bounty-almost-see-daylight-2.m4a`
+(warmed once, then the real playing element, matching the existing
+warm-then-play pattern); closing the tab (X button) pauses it cleanly
+after its fade-out. Zero console errors throughout.
 
 ## Vehicle art — NOT cleared, action required
 
