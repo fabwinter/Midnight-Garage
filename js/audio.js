@@ -1,8 +1,8 @@
 /* Audio (plan items 0.4/0.5/0.8): WebAudio SFX from the prototype plus
-   licensed music tracks (menu, settings, per-mode attempt track), each
-   behind independent volume sliders. The native shell configures the
-   audio session to respect the silent switch and mix with user music
-   (see capacitor notes in README). */
+   licensed music tracks (menu, settings, bounty tab, per-mode attempt
+   track), each behind independent volume sliders. The native shell
+   configures the audio session to respect the silent switch and mix with
+   user music (see capacitor notes in README). */
 
 let AC = null;
 let sfxVol = 1;
@@ -21,6 +21,7 @@ let duckAttempt = false;   // true while menu/tab music has priority over the at
    HEIST_SET_LIST. `const` isn't hoisted, so this has to precede it. */
 const VELVET_GLOVE = 'assets/audio/velvet-glove.m4a';
 const CLEAN_GETAWAY = 'assets/audio/clean-getaway.m4a';
+const BOUNTY_TAB_THEME = 'assets/audio/bounty-almost-see-daylight.m4a';
 
 /* Heist is a single continuous set list, not a per-attempt track, and it is
    played in this exact order rather than shuffled — hence the array order
@@ -71,6 +72,16 @@ const TRACK_POOLS = {
     'assets/audio/relaxed-glassroom-stroll.m4a',
     'assets/audio/relaxed-velvet-after-midnight.m4a',
     'assets/audio/relaxed-velvet-after-hours.m4a',
+  ],
+  // Tonight's Mark's own attempt track, independent of the mark's forced
+  // heist/pursuit pacing — save.settings.mode never holds 'bounty' (see
+  // loadBountyLevel's pacing lock in game.js), so this pool is only ever
+  // reached by passing 'bounty' to startAttemptTrack() directly, not
+  // through save.settings.mode. pickTrack's pool.length===1 branch covers
+  // a single-entry pool with no special-casing needed; add more the same
+  // way as any other pool.
+  bounty: [
+    'assets/audio/bounty-almost-see-daylight-2.m4a',
   ],
 };
 /* Modes whose music is one continuous session-long stream rather than a
@@ -197,6 +208,7 @@ function playWithRetry(audio, targetVol, fadeMs, isStale, onPlaying){
 // HEIST_SET_LIST, which needs the former as its opening track).
 let menuAudio = null;
 let settingsAudio = null;
+let bountyAudio = null;
 
 /* The Settings "Play" button is a deliberate, full-length listen to the
    theme — distinct from menuAudio's ambient pre-intro loop of the same
@@ -226,6 +238,7 @@ export function setMusicVolume(v){
   musicVol = v;
   if(menuAudio) menuAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(settingsAudio) settingsAudio.volume = Math.max(0, Math.min(1, v * 0.7));
+  if(bountyAudio && !bountyAudio.paused) bountyAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(themeAudio && themePlaying) themeAudio.volume = Math.max(0, Math.min(1, v * 0.7));
   if(attemptAudio && !duckAttempt){
     attemptAudio.volume = Math.max(0, Math.min(1, v));
@@ -483,6 +496,40 @@ export function stopSettingsMusic(){
     fadeOut(settingsAudio, 400).then(() => {
       settingsAudio.pause();
       settingsAudio.currentTime = 0;
+    });
+  }
+  // A no-op while the theme song is playing — see resumeAttemptTrack.
+  resumeAttemptTrack();
+}
+
+/* Tonight's Mark's own tab theme — unlike settingsAudio (CLEAN_GETAWAY,
+   plays once through at 85s), BOUNTY_TAB_THEME is a short 22s loop by
+   design, so this loops rather than letting it run out while the player
+   is still reading the bounty sheet. Otherwise the same shape as
+   playSettingsMusic/stopSettingsMusic: ducks the attempt track, never
+   competes with the theme song. */
+export function playBountyMusic(){
+  if(themePlaying) return;   // theme song has exclusive foreground — see toggleThemePlayer
+  if(!bountyAudio){
+    bountyAudio = new Audio(BOUNTY_TAB_THEME);
+    bountyAudio.preload = 'auto';
+    bountyAudio.loop = true;
+    bountyAudio.volume = 0;
+  }
+  if(bountyAudio.paused){
+    stopMenuMusic();
+    duckAttemptTrack();
+    bountyAudio.currentTime = 0;
+    bountyAudio.play().catch(() => {});
+    fadeIn(bountyAudio, musicVol * 0.7, 600);
+  }
+}
+
+export function stopBountyMusic(){
+  if(bountyAudio && !bountyAudio.paused){
+    fadeOut(bountyAudio, 400).then(() => {
+      bountyAudio.pause();
+      bountyAudio.currentTime = 0;
     });
   }
   // A no-op while the theme song is playing — see resumeAttemptTrack.

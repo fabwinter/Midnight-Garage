@@ -8,7 +8,7 @@ import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { LEGACY_CAMPAIGN_KEYS_V1 } from './legacy-campaign-keys-v1.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener, isContinuousMode } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, playBountyMusic, stopBountyMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener, isContinuousMode } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -809,7 +809,7 @@ function applyRescue(kind){
     pursuitTimeLeft += PURSUIT_RESCUE_SECONDS;
     startPursuitTimer();
   }
-  startAttemptTrack(save.settings.mode);
+  startAttemptTrack(mode.type === 'bounty' ? 'bounty' : save.settings.mode);
   updateModeHud();
   updateHud();
   toast(t('rescue.applied'));
@@ -1167,6 +1167,12 @@ function loadBountyLevel(dateStr){
     save.settings.mode = pacing;
     setGameMode(pacing);
   }
+  // save.settings.mode/pacing above is what the HUD/mode-lock reads — the
+  // attempt track itself comes from TRACK_POOLS.bounty regardless, so warm
+  // that pool too rather than only whichever of heist/pursuit the pacing
+  // happens to be (setGameMode's gameMode field isn't otherwise read; this
+  // is purely for warmPool's prefetch).
+  setGameMode('bounty');
   // Must land after save.settings.mode/pacing are settled but before
   // updateModeSelectUI() below — that's what it reads mode.type off of to
   // lock the mode-select for the whole attempt, pacing switch or not (a
@@ -1253,7 +1259,12 @@ function startBoard(){
   // before the player ever reaches the picker. introPlayBtn sets pastIntro
   // and calls startBoard() again right as the player confirms, which is
   // the actual "level start" moment that matters here.
-  if(pastIntro) startAttemptTrack(save.settings.mode);
+  // Tonight's Mark plays its own attempt track (see TRACK_POOLS.bounty in
+  // audio.js) regardless of the mark's forced heist/pursuit pacing —
+  // save.settings.mode is that pacing, never 'bounty' itself (see
+  // loadBountyLevel), so this has to branch on mode.type rather than pass
+  // save.settings.mode straight through the way every other mode does.
+  if(pastIntro) startAttemptTrack(mode.type === 'bounty' ? 'bounty' : save.settings.mode);
   else stopAttemptTrack(); // still pre-intro
   if(hitches.length && !save.hitchSeen){
     save.hitchSeen = true;
@@ -2612,7 +2623,7 @@ function wire(){
     buildLevelList(); showOverlay('levelsOverlay');
   });
   $('dailyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openDaily(); });
-  $('bountyBtn').addEventListener('click', () => { sfx('ui'); playSettingsMusic(); openBounty(); });
+  $('bountyBtn').addEventListener('click', () => { sfx('ui'); playBountyMusic(); openBounty(); });
   $('settingsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay');
     updateThemeButtonUI();   // re-sync in case the theme ended/kept playing while Settings was closed
@@ -2629,13 +2640,15 @@ function wire(){
     // usual hide, same as every other overlay here.
     if(o.id === 'dailyOverlay'){ closeDailyOverlay(); return; }
     o.classList.remove('show');
-    if(['settingsOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+    if(o.id === 'bountyOverlay') stopBountyMusic();
+    else if(['settingsOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
   }));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
     if(e.target === o && !['winOverlay', 'carRevealOverlay', 'bustedOverlay', 'startOverlay', 'introOverlay'].includes(o.id)){
       if(o.id === 'dailyOverlay'){ closeDailyOverlay(); return; }
       o.classList.remove('show');
-      if(['settingsOverlay', 'bountyOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
+      if(o.id === 'bountyOverlay') stopBountyMusic();
+      else if(['settingsOverlay', 'garageOverlay', 'levelsOverlay'].includes(o.id)) stopSettingsMusic();
     }
   }));
   $('undoBtn').addEventListener('click', undo);
@@ -2731,7 +2744,7 @@ function wire(){
     sfx('ui'); stopSettingsMusic(); hideOverlay('dailyOverlay'); loadDailyLevel(todayStr());
   });
   $('bountyPlayBtn').addEventListener('click', () => {
-    sfx('ui'); stopSettingsMusic(); hideOverlay('bountyOverlay'); loadBountyLevel(todayStr());
+    sfx('ui'); stopBountyMusic(); hideOverlay('bountyOverlay'); loadBountyLevel(todayStr());
   });
   $('calPrev').addEventListener('click', () => { calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; } renderCalendar(); });
   $('calNext').addEventListener('click', () => { calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; } renderCalendar(); });
@@ -2742,6 +2755,7 @@ function wire(){
     if(e.key === 'Escape'){
       ['levelsOverlay', 'dailyOverlay', 'bountyOverlay', 'settingsOverlay', 'proOverlay', 'garageOverlay', 'sandboxOverlay'].forEach(hideOverlay);
       stopSettingsMusic();
+      stopBountyMusic();
     }
   });
   window.addEventListener('resize', layout);
