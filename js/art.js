@@ -116,7 +116,6 @@ const SEDAN_PHOTOS = [
   { img: 'assets/cars/library-sedans-1785067674835-12-orange-coupe.webp', fixed: true, color: 'Orange coupe' },
   { img: 'assets/cars/library-sedans-1785067674835-13-red-hatch.webp', fixed: true, color: 'Red mini' },
   { img: 'assets/cars/library-sedans-1785067674835-14-green-hatch.webp', fixed: true, color: 'Green mini' },
-  { img: 'assets/cars/library-sedans-1785067674835-15-green-coupe.webp', fixed: true, color: 'Green coupe' },
   { img: 'assets/cars/hero-canopy-green.webp', fixed: true, color: 'green' },
   { img: 'assets/cars/hero-airtail-blue.webp', fixed: true, color: 'blue' },
   { img: 'assets/cars/hero-airtail-stripe.webp', fixed: true, color: 'white-green-stripe' },

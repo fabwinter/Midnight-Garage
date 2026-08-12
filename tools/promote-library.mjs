@@ -26,6 +26,13 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import sharp from 'sharp';
+
+// Same knee-of-the-curve settings as tools/optimize-art.mjs, and the same
+// oversize cap — every path here writes directly to a *.webp filename
+// (never a .png that optimize-art.mjs's `*.png` scan would later catch),
+// so encoding it correctly here is the only place it happens at all.
+const QUALITY = 82, EFFORT = 6, MAX_W = 1200, MAX_H = 400;
 
 const args = process.argv.slice(2);
 const file = args.find(a => !a.startsWith('--'));
@@ -68,15 +75,33 @@ function jsStringLiteral(s){
   return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+/* Encodes to real WebP at the same quality/size the rest of assets/cars/
+   ships at — every filename here already ends in .webp (see the two call
+   sites below), so writing the raw PNG bytes straight through, the way
+   this used to work, silently ships a PNG under a .webp name forever:
+   optimize-art.mjs only discovers files by a literal *.png extension, so
+   it can never find or fix one of these after the fact. Bug, not a style
+   choice — see docs/ASSET-PROVENANCE.md's 2026-08-12 entry, which also
+   lists the files this already happened to before this fix landed. */
+async function encodeWebp(buf){
+  let img = sharp(buf);
+  const meta = await img.metadata();
+  if(meta.width > MAX_W || meta.height > MAX_H){
+    img = img.resize(MAX_W, MAX_H, { fit: 'inside', withoutEnlargement: true });
+  }
+  return img.webp({ quality: QUALITY, effort: EFFORT }).toBuffer();
+}
+
 /* Uploads land in the library as data: URLs (see js/library.js's
-   renderToCanvas + toDataURL) — decode one back into a real PNG file. If
-   an entry's img is already a plain path (e.g. re-exporting a library that
-   already went through a previous promotion, before Clear library was
-   pressed), there's nothing to write; it's presumably already committed. */
-function decodeDataUrlToFile(dataUrl, filename){
+   renderToCanvas + toDataURL) — decode and re-encode one back into a real
+   WebP file. If an entry's img is already a plain path (e.g. re-exporting
+   a library that already went through a previous promotion, before Clear
+   library was pressed), there's nothing to write; it's presumably already
+   committed. */
+async function decodeDataUrlToFile(dataUrl, filename){
   const m = /^data:image\/png;base64,(.+)$/.exec(dataUrl);
   if(!m) return null;
-  if(!DRY_RUN) writeFileSync(join(ASSETS_DIR, filename), Buffer.from(m[1], 'base64'));
+  if(!DRY_RUN) writeFileSync(join(ASSETS_DIR, filename), await encodeWebp(Buffer.from(m[1], 'base64')));
   return 'assets/cars/' + filename;
 }
 
@@ -92,7 +117,7 @@ const stamp = Date.now();
 // only the PNG bytes on disk change.
 const editedInPlace = new Set();
 
-function promoteCategory(category, arrayName){
+async function promoteCategory(category, arrayName){
   const entries = lib[category] || [];
   if(!entries.length) return;
   const re = new RegExp(`(const ${arrayName} = \\[)([\\s\\S]*?)(\\n\\];)`);
@@ -101,7 +126,7 @@ function promoteCategory(category, arrayName){
     return;
   }
   let additions = '';
-  entries.forEach((entry, i) => {
+  for(const [i, entry] of entries.entries()){
     // An admin "Edit" (as opposed to "Duplicate") on an already-committed
     // asset carries editOf: the original file path it's meant to replace,
     // set by js/game.js's editBaseAsset/libEditAsset. Overwrite that same
@@ -114,23 +139,23 @@ function promoteCategory(category, arrayName){
       const m = /^data:image\/png;base64,(.+)$/.exec(entry.img);
       if(!m){
         console.error(`✗ ${category}[${i}] (${entry.color}): img isn't a data URL — skipped (already promoted?)`);
-        return;
+        continue;
       }
       if(!/^assets\/cars\/[^/]+\.webp$/.test(entry.editOf)){
         console.error(`✗ ${category}[${i}] (${entry.color}): editOf '${entry.editOf}' isn't a plain assets/cars/*.webp path — skipped`);
-        return;
+        continue;
       }
-      if(!DRY_RUN) writeFileSync(join(ROOT, entry.editOf), Buffer.from(m[1], 'base64'));
+      if(!DRY_RUN) writeFileSync(join(ROOT, entry.editOf), await encodeWebp(Buffer.from(m[1], 'base64')));
       editedInPlace.add(entry.editOf);
       written.push(entry.editOf);
       console.log(`✓ ${arrayName}: overwrote ${entry.editOf} in place (${entry.color})`);
-      return;
+      continue;
     }
     const filename = `library-${category}-${stamp}-${i}-${slugify(entry.color)}.webp`;
-    const path = decodeDataUrlToFile(entry.img, filename);
+    const path = await decodeDataUrlToFile(entry.img, filename);
     if(!path){
       console.error(`✗ ${category}[${i}] (${entry.color}): img isn't a data URL — skipped (already promoted?)`);
-      return;
+      continue;
     }
     const color = jsStringLiteral(entry.color);
     const fields = entry.fixed
@@ -139,13 +164,13 @@ function promoteCategory(category, arrayName){
     additions += `  ${fields},\n`;
     written.push(path);
     console.log(`✓ ${arrayName}: ${path} (${entry.color})`);
-  });
+  }
   if(additions) artSrc = artSrc.replace(re, (_, open, body, close) => `${open}${body}\n${additions.trimEnd()}${close}`);
 }
 
-promoteCategory('sedans', 'SEDAN_PHOTOS');
-promoteCategory('trucks', 'TRUCK_PHOTOS');
-promoteCategory('trailers', 'TRAILER_PHOTOS');
+await promoteCategory('sedans', 'SEDAN_PHOTOS');
+await promoteCategory('trucks', 'TRUCK_PHOTOS');
+await promoteCategory('trailers', 'TRAILER_PHOTOS');
 
 (lib.disabledBase || []).forEach(imgPath => {
   // The "disable original + reupload under the same tag" pattern puts a
@@ -167,12 +192,12 @@ promoteCategory('trailers', 'TRAILER_PHOTOS');
 });
 
 let heroCount = 0;
-Object.entries(lib.heroPhotos || {}).forEach(([carId, dataUrl]) => {
+for(const [carId, dataUrl] of Object.entries(lib.heroPhotos || {})){
   const filename = `hero-library-${carId}-${stamp}.webp`;
-  const path = decodeDataUrlToFile(dataUrl, filename);
+  const path = await decodeDataUrlToFile(dataUrl, filename);
   if(!path){
     console.error(`✗ hero photo for '${carId}': img isn't a data URL — skipped (already promoted?)`);
-    return;
+    continue;
   }
   const re = new RegExp(`(id: '${escapeRegExp(carId)}'[^\\n]*?photo: )(null|'[^']*')(,)`);
   if(re.test(collectionSrc)){
@@ -183,7 +208,7 @@ Object.entries(lib.heroPhotos || {}).forEach(([carId, dataUrl]) => {
   } else {
     console.error(`✗ couldn't find car '${carId}' in collection.js — nothing written for its photo`);
   }
-});
+}
 
 if(!written.length){
   console.log('\nNothing to promote.');

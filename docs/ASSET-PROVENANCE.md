@@ -524,6 +524,80 @@ the app (intro sheet on first load, Pro Garage popup via a direct
 overlay-class toggle) — car correctly banded, content starting at the
 right offset, zero console errors, zero failed asset loads.
 
+### 2026-08-12: Admin Library export promoted (`tools/promote-library.mjs`), and a real bug fixed in the promotion pipeline itself
+
+Developer exported the in-game Admin Asset Library and asked for it to be
+promoted. 4 sedan entries, all in-place edits (`editOf` set — same file
+overwritten, no new array entry): `traffic-sedan-new-lightblue.webp`,
+`hero-canopy-green.webp`, and the two files already tracked here as
+`-13-red-hatch.webp`/`-14-green-hatch.webp` (originally uploaded as
+`-red-mini`/`-green-mini`, see the `RENAMED_STEMS` note in js/library.js).
+Plus one base entry disabled with no replacement
+(`-15-green-coupe.webp`), whose `SEDAN_PHOTOS` line `promote-library.mjs`
+removed.
+
+**Vetted each new image before promoting, same as every other car asset
+in this doc:**
+- `traffic-sedan-new-lightblue.webp` — generic sedan silhouette, no
+  badge visible. Clean.
+- `hero-canopy-green.webp` — same wedge/mid-engine design as the
+  already-shipped file it replaces (diffed non-trivially different, so a
+  real re-render, not a duplicate upload — but same silhouette, same
+  clean dashboard with no badge already confirmed in this doc's
+  2026-08-04 entry). No new concern.
+- `-13-red-hatch.webp` / `-14-green-hatch.webp` — **still Mini
+  Cooper-shaped** (round headlight, chrome roof-rail trim, short stubby
+  proportions) — diffed against the currently-shipped files and it's the
+  same silhouette already there, just re-touched lighting/paint, not a
+  new regression. This is the exact exposure `RENAMED_STEMS` already
+  flags as "hygiene, not an IP fix — the art itself is still unresolved"
+  (see js/library.js). Still open. Promoting this update doesn't make it
+  worse, but it doesn't fix it either — flagged to the developer, not
+  silently shipped as if it were cleared.
+
+**Real bug found and fixed, not just files promoted:** `tools/
+promote-library.mjs` decoded an admin's PNG upload (`canvas.toDataURL
+('image/png')` is the only format `js/library.js` ever produces) and
+wrote those raw PNG bytes straight to a `.webp`-named path — on both the
+new-entry path and the in-place `editOf` path. `tools/optimize-art.mjs`
+(the tool whose own header calls itself "the thing to run after
+promote-library.mjs") only ever discovers files by a literal `*.png`
+extension in `assets/cars/`, so a promoted file that's PNG bytes under a
+`.webp` name was invisible to it forever — nothing in the pipeline could
+ever catch or fix it after the fact.
+
+This had already happened silently, more than once: scanning every file
+in `assets/cars/` by magic bytes (not extension) turned up 9 already-
+shipped files that were genuine PNGs mislabeled `.webp` —
+`library-sedans-*-13-red-hatch`, `-14-green-hatch`, `-7-orange-suv`,
+`traffic-truck-new-white`, and 5 `truck-*` files. Re-encoded all 9 to
+real WebP in place (same `sharp .webp({quality:82,effort:6})` settings
+`optimize-art.mjs` uses) — 2.82 MB → 316 KB combined, ~89% smaller, with
+no visible quality loss at any size the game renders (spot-checked
+`truck-tanker-steel.webp` directly). `promote-library.mjs` itself now
+encodes through the same `sharp` pipeline on both write paths (new
+`encodeWebp()` helper, plus the same oversize cap `optimize-art.mjs`
+applies) rather than writing decoded bytes straight through, so this
+class of bug can't recur on the next promotion.
+
+**Verified:** dry-run output byte-identical to before the fix (encoding
+only happens on a real write); every promoted/re-encoded file confirmed
+real WebP by magic bytes; all 4 promoted images decode correctly in a
+real browser at their expected 800×400; a 30-level headless playthrough
+of the live app hit `hero-canopy-green.webp` mid-rotation with no console
+errors or failed requests. `node tools/verify-levels.mjs` still shows
+only the pre-existing, unrelated `daily 2026-08-18` failure (isolated via
+`git stash` earlier and unaffected by anything here).
+
+**Still to do, not done here:** the orphaned
+`library-sedans-1785067674835-15-green-coupe.webp` file itself (its
+`SEDAN_PHOTOS` line is gone, but `promote-library.mjs` never deletes the
+underlying asset) is left on disk rather than deleted — matching the
+tool's own conservative behavior, and because removing shipped art bytes
+outright felt like a bigger call than this task asked for. Worth a
+cleanup pass if the file is confirmed genuinely unreferenced anywhere
+else.
+
 ## Fonts — cleared
 
 `assets/fonts/*.woff2` are OFL-licensed. Ship the licence files alongside
