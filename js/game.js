@@ -8,7 +8,7 @@ import { LEVELS, CHAPTERS, CHAPTER_SIZE } from './levels.data.js';
 import { LEGACY_CAMPAIGN_KEYS_V1 } from './legacy-campaign-keys-v1.js';
 import { dailyLevel, dailyNumber, DAILY_EPOCH } from './generate.js';
 import { load, store, todayStr } from './storage.js';
-import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, playBountyMusic, stopBountyMusic, toggleThemePlayer, isThemePlaying, setThemeStateListener, isContinuousMode } from './audio.js';
+import { sfx, setSfxVolume, setMusicVolume, setGameMode, startAttemptTrack, stopAttemptTrack, duckAttemptTrack, resumeAttemptTrack, startMenuMusic, stopMenuMusic, playSettingsMusic, stopSettingsMusic, playBountyMusic, stopBountyMusic, isContinuousMode } from './audio.js';
 import { haptic, setHapticsEnabled } from './haptics.js';
 import { initAnalytics, track, flush } from './analytics.js';
 import { initI18n, t } from './i18n.js';
@@ -2514,7 +2514,6 @@ function wirePro(){
 
 /* ================== STATIC STRINGS ================== */
 function applyStrings(){
-  $('brandSub').textContent = t('sub');
   $('htTitle').textContent = t('hitch.tutorial.title');
   $('htTowLabel').textContent = t('hitch.tutorial.tow');
   $('htTrailerLabel').textContent = t('hitch.tutorial.trailer');
@@ -2565,8 +2564,8 @@ function applyStrings(){
   updateModeSelectUI();
   $('labAutoAdvance').textContent = t('settings.autoadvance');
   $('labReminder').textContent = t('settings.reminder');
-  $('labTheme').textContent = t('theme.label');
-  updateThemeButtonUI();
+  $('labGoPro').textContent = t('pro.title');
+  $('settingsGoProBtn').textContent = t('btn.unlock');
   $('labRestore').textContent = t('btn.restore');
   $('proTitle').textContent = t('pro.title');
   $('proPitch').textContent = t('pro.pitch');
@@ -2607,16 +2606,8 @@ function applyStrings(){
   $('introPlayLabel').textContent = t('intro.play');
 }
 
-function updateThemeButtonUI(){
-  const isPlaying = isThemePlaying();
-  $('themePlayIcon').hidden = isPlaying;
-  $('themePauseIcon').hidden = !isPlaying;
-  $('themePlayBtn').setAttribute('aria-label', t(isPlaying ? 'theme.pause' : 'theme.play'));
-}
-
 /* ================== GLOBAL WIRING ================== */
 function wire(){
-  setThemeStateListener(updateThemeButtonUI);
   $('levelsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic();
     tabChapter = mode.type === 'impound' ? IMPOUND_TAB : chapterOf(cur);
@@ -2626,10 +2617,13 @@ function wire(){
   $('bountyBtn').addEventListener('click', () => { sfx('ui'); playBountyMusic(); openBounty(); });
   $('settingsBtn').addEventListener('click', () => {
     sfx('ui'); playSettingsMusic(); showOverlay('settingsOverlay');
-    updateThemeButtonUI();   // re-sync in case the theme ended/kept playing while Settings was closed
-    updateModeSelectUI();    // re-sync the bounty mode-lock too, same reason
+    updateModeSelectUI();    // re-sync the bounty mode-lock, same reason applySettings does
+    $('settingsGoProBtn').hidden = !!save.pro;
   });
-  $('themePlayBtn').addEventListener('click', () => { sfx('ui'); toggleThemePlayer(); });
+  $('settingsGoProBtn').addEventListener('click', () => {
+    sfx('ui'); stopSettingsMusic(); hideOverlay('settingsOverlay');
+    showOverlay('proOverlay'); track('iap_view', { source: 'settings' });
+  });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => {
     const o = e.target.closest('.overlay');
     sfx('ui');
@@ -4473,6 +4467,14 @@ function migrateCampaignReorder(){
    moment the player touches the screen, not just on the Play button. */
 document.addEventListener('pointerdown', () => startMenuMusic(), { once: true });
 document.addEventListener('keydown', () => startMenuMusic(), { once: true });
+
+/* Belt-and-suspenders against pinch-zoom alongside the viewport meta's
+   user-scalable=no/maximum-scale=1 and css/game.css's touch-action:
+   manipulation: WebKit's two-finger pinch dispatches its own proprietary
+   gesturestart/gesturechange/gestureend events (Safari-only, not part of
+   the standard Touch/Pointer event model), which the viewport meta and
+   touch-action alone don't reliably suppress on every iOS version. */
+document.addEventListener('gesturestart', e => e.preventDefault());
 
 /* ================== BOOT ================== */
 (async function boot(){

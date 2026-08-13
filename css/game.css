@@ -35,9 +35,13 @@
   --disp:'Chakra Petch', 'Avenir Next Condensed', 'Arial Narrow', system-ui, sans-serif;
   --body:'Inter', -apple-system, system-ui, 'Segoe UI', sans-serif;
 }
+/* touch-action:manipulation drops the double-tap-to-zoom delay/gesture at
+   the browser level — belt-and-suspenders alongside the viewport meta's
+   user-scalable=no/maximum-scale=1, and the part of "no zoom" that meta
+   tag alone doesn't cover on every engine. */
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none !important}
-html,body{height:100%}
+html,body{height:100%;touch-action:manipulation}
 body{
   margin:0;
   font-family:var(--body);
@@ -85,18 +89,23 @@ body::before{
    right-aligned both inline and wrapped. */
 header{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
 .brand{display:flex;flex-direction:column;line-height:1}
+/* Same title treatment as the start-screen poster (white lead-in + a
+   bold accent-color close), condensed onto the one line the header has
+   room for — the poster itself has no DOM title to share a class with,
+   it's baked into start-portrait.webp/start-tablet.webp, so this
+   recreates the look rather than reusing it directly. */
 .brand .t1{
-  font-family:var(--disp);font-weight:700;font-size:clamp(17px,4.6vw,26px);letter-spacing:.04em;
+  font-family:var(--disp);font-weight:700;font-size:clamp(13px,3.6vw,20px);letter-spacing:.02em;
   color:var(--ink);
   text-shadow:0 0 18px rgba(255,180,84,.35), 0 0 2px rgba(255,180,84,.6);
   white-space:nowrap;
 }
-.brand .t1 .hr-red{color:var(--red);text-shadow:0 0 16px rgba(255,59,78,.55);animation:neonflick 7s linear 1}
-@keyframes neonflick{
-  0%,4.4%,5.4%,7%,100%{opacity:1}
-  4.7%,6.4%{opacity:.35}
+.brand .t1 .t1-accent{
+  font-weight:800;
+  background:linear-gradient(180deg, var(--amber), var(--amber-dim));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:none;
 }
-.brand .t2{font-size:9px;letter-spacing:.34em;color:var(--muted);text-transform:uppercase;margin-top:5px;padding-left:2px}
 .hbtns{display:flex;gap:6px;margin-left:auto}
 .icon-btn{
   width:36px;height:36px;border-radius:11px;border:1px solid var(--line);flex:none;
@@ -281,8 +290,6 @@ header{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content
 }
 .gridlines{position:absolute;inset:0;pointer-events:none}
 .gridlines line{stroke:rgba(255,255,255,.05);stroke-width:1}
-.mg-lamp-bulb{animation:lamppulse 4.2s ease-in-out infinite}
-@keyframes lamppulse{0%,100%{opacity:.85}50%{opacity:1}}
 .mg-signal-bulb{animation:signalpulse 3s ease-in-out infinite}
 @keyframes signalpulse{0%,100%{opacity:.9}50%{opacity:1}}
 .exit-lane{
@@ -662,9 +669,6 @@ input[type=range]::-moz-range-thumb{
 .mode-btn.cur{border-color:var(--amber);color:var(--ink);box-shadow:0 0 12px -4px var(--amber)}
 .mode-btn:disabled{opacity:.4;cursor:not-allowed}
 .mode-desc{color:var(--muted);font-size:12px;margin:0 0 4px;padding:0 2px}
-/* Theme play/pause: a solid triangle/bars icon needs a fill, unlike the
-   stroke-only outline icons .icon-btn svg is styled for elsewhere. */
-.theme-play-btn svg{fill:currentColor;stroke:none}
 
 /* Full-bleed art plates (intro sheet + Pro sheet): the supplied background
    plate IS the popup — car at the top, its polygon texture running behind
@@ -848,7 +852,6 @@ input[type=range]::-moz-range-thumb{
 }
 @media (max-height:720px){
   .wrap{gap:9px}
-  .brand .t1{font-size:21px}
 }
 
 /* ---------- Admin mode + sandbox designer ---------- */
