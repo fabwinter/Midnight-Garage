@@ -673,8 +673,16 @@ export function wallSVG(i){
 }
 
 /* ---------- board set-dressing (injected into the gridlines SVG) ----------
-   Cheap DOM-era lighting: lamp pools, posts, manhole, painted exit dashes.
-   Replaced by real point lights in the R1 WebGL layer; the geometry stays. */
+   Cheap DOM-era lighting: light pools, manhole, painted exit dashes, exit
+   signal. Replaced by real point lights in the R1 WebGL layer; the
+   geometry stays. Street-lamp posts (a pole + bulb standing in the lane)
+   used to render here too — dropped 2026-08: this is an indoor garage
+   board, and a post standing in a driving lane rendered UNDER the cars
+   that drive over it (dressingSVG paints into the background layer,
+   vehicles are separate DOM elements stacked on top), which reads as a
+   streetlight buried in the floor rather than a fixture above the scene.
+   The overhead gdpool glow ellipses below are the garage's ceiling
+   lighting, not street lamps, and stay. */
 
 export function dressingSVG(CELL, EXIT_ROW, accent){
   const s = CELL * 6;
@@ -683,15 +691,10 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
   for(let x = CELL * 0.12; x < s - CELL * 0.7; x += CELL * 0.54){
     dashes += `<rect x="${x}" y="${y - CELL * 0.03}" width="${CELL * 0.34}" height="${CELL * 0.06}" rx="${CELL * 0.03}" fill="${accent}" opacity=".28"/>`;
   }
-  const lamp = (x, yy, flip) => `
-    <rect x="${x - CELL * 0.03}" y="${flip ? yy - CELL * 0.34 : yy}" width="${CELL * 0.06}" height="${CELL * 0.34}" fill="#2b3345"/>
-    <rect x="${x - CELL * 0.09}" y="${(flip ? yy - CELL * 0.34 : yy + CELL * 0.28)}" width="${CELL * 0.18}" height="${CELL * 0.09}" rx="${CELL * 0.03}" fill="#1c2230"/>
-    <circle cx="${x}" cy="${flip ? yy - CELL * 0.34 : yy}" r="${CELL * 0.07}" fill="#cfe0ff" opacity=".95" class="mg-lamp-bulb"/>
-    <circle cx="${x}" cy="${flip ? yy - CELL * 0.34 : yy}" r="${CELL * 0.2}" fill="#9db8e8" opacity=".45" filter="url(#gdsoft)" class="mg-lamp-bulb"/>`;
   /* Decorative only — steady green, ambiance not gameplay state. A live
      red/green signal keyed to the exit lane is the R1 WebGL renderer's
      job (solve-proximity lighting, AAA-PLAN.md §3.2); this cheap DOM pass
-     just needs the streetlight vocabulary on the board. */
+     just needs the signal-light vocabulary on the board. */
   const signal = (x, yy) => `
     <rect x="${x - CELL * 0.02}" y="${yy}" width="${CELL * 0.04}" height="${CELL * 0.16}" fill="#39435a"/>
     <rect x="${x - CELL * 0.065}" y="${yy - CELL * 0.19}" width="${CELL * 0.13}" height="${CELL * 0.2}" rx="${CELL * 0.03}" fill="#151b28" stroke="#39435a" stroke-width="${Math.max(1, CELL * 0.014)}"/>
@@ -713,8 +716,6 @@ export function dressingSVG(CELL, EXIT_ROW, accent){
   <circle cx="${CELL * 3.52}" cy="${CELL * 4.34}" r="${CELL * 0.10}" fill="none" stroke="#242d3e" stroke-width="1.2" opacity=".7"/>
   <path d="M ${CELL * 0.5} ${CELL * 4.62} l 0 ${-CELL * 0.26} l ${-CELL * 0.08} ${CELL * 0.08} m ${CELL * 0.08} ${-CELL * 0.08} l ${CELL * 0.08} ${CELL * 0.08}"
         stroke="#ffffff" stroke-opacity=".06" stroke-width="${CELL * 0.05}" fill="none" stroke-linecap="round"/>
-  ${lamp(CELL * 2.52, CELL * 0.06, false)}
-  ${lamp(CELL * 4.72, CELL * 5.94, true)}
   ${signal(CELL * 0.14, CELL * 2)}`;
 }
 

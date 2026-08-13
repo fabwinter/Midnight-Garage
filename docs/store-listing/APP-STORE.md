@@ -146,7 +146,7 @@ namesake physical puzzle), "unblock" (the other common genre name), and
 ## Copyright line
 
 ```
-[FILL IN — format: "2026 <your legal name or company name>"]
+2026 Fabian Winterbine
 ```
 
 ---
@@ -174,8 +174,7 @@ In-app purchases present: "Pro Garage" (non-consumable, unlocks chapters
 in Settings and re-grants Pro Garage/Remove Ads on a fresh install.
 
 Ads: banner (bottom of the start screen only, never during a level) and
-interstitial (capped frequency, never mid-level) via [FILL IN: ad network
-once P0-11 is finalized, e.g. Google AdMob]. Rewarded video is optional
+interstitial (capped frequency, never mid-level) via Google AdMob. Rewarded video is optional
 and only ever offers extra Wrenches or hints — it is never required to
 progress. All three ad types are disabled entirely once Pro Garage or
 Remove Ads is purchased.
