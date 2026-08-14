@@ -85,10 +85,19 @@ workflows:
       # --certificate-key takes the key's actual string content, not a
       # file path — no "@file:"-style prefix support in this CLI version,
       # despite that being documented for some other flags/tools.
+      #
+      # `openssl base64 -d -A`, not plain `base64 --decode`: this runs on
+      # mac_mini_m2, and macOS's built-in base64 doesn't handle a single
+      # unwrapped base64 line the same way GNU coreutils' does (which is
+      # what android-release's CM_KEYSTORE decode below gets away with,
+      # since that runs on linux_x2) — it silently produced binary garbage
+      # instead of the original PEM text. openssl's base64 implementation
+      # is identical cross-platform; -A treats the input as one unwrapped
+      # blob rather than expecting it split into fixed-width lines.
       # See docs/CI-SETUP.md for how to generate and set that variable.
       - name: Fetch signing files
         script: |
-          DECODED_KEY=$(echo $CERTIFICATE_PRIVATE_KEY | base64 --decode)
+          DECODED_KEY=$(echo "$CERTIFICATE_PRIVATE_KEY" | openssl base64 -d -A)
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --certificate-key "$DECODED_KEY" \
