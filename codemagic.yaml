@@ -29,8 +29,15 @@ workflows:
           include: true
           source: true
     scripts:
+      # --ignore-scripts: sharp (pulled in by the @capacitor/assets dev
+      # dependency, used only by the local `npm run icons` tool — never
+      # invoked in this pipeline) is the one package in the lockfile with
+      # an install script; it fetches a prebuilt native binary from GitHub
+      # releases at install time, which Codemagic's build network blocks.
+      # Skipping install scripts avoids that fetch entirely — nothing this
+      # pipeline runs needs a compiled native addon.
       - name: Install npm dependencies
-        script: npm ci
+        script: npm ci --ignore-scripts
 
       - name: Build the web app (release — strips admin mode)
         script: npm run build:release
@@ -102,7 +109,7 @@ workflows:
           source: true
     scripts:
       - name: Install npm dependencies
-        script: npm ci
+        script: npm ci --ignore-scripts
 
       - name: Build the web app (release — strips admin mode)
         script: npm run build:release
