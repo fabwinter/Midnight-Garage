@@ -52,9 +52,12 @@ stale command name.
    then paste that base64 output — a single unbroken line, no
    `-----BEGIN`/`-----END` markers — into a `CERTIFICATE_PRIVATE_KEY`
    secret variable in that group. `codemagic.yaml`'s "Fetch signing
-   files" step decodes it back to a real PEM file before passing it to
-   `--certificate-key`. Base64 here (unlike some other tools/guides that
-   say to paste the raw PEM) is deliberate: a raw multi-line PEM's exact
+   files" step decodes it and passes the decoded string straight to
+   `--certificate-key` (which takes the key's literal content, not a file
+   path — despite `@file:`-style prefixes being documented for some other
+   flags/tools, this CLI's version of `--certificate-key` doesn't support
+   one). Base64 here (unlike some other tools/guides that say to paste
+   the raw PEM) is deliberate: a raw multi-line PEM's exact
    line breaks are easy to lose pasting into an env var field, especially
    on mobile, and a mangled value fails with a plain argparse "not valid"
    error rather than anything obviously about formatting. Any freshly
