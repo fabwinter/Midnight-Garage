@@ -58,6 +58,15 @@ workflows:
         script: |
           cd ios/App && pod install
 
+      # Must run before "Fetch signing files": when that step creates a
+      # brand-new certificate, it needs an initialized keychain to persist
+      # the private key into the moment it's generated. Without this step
+      # first, fetch-signing-files fails with "Cannot save Signing
+      # Certificates without certificate private key" — the cert gets
+      # generated but has nowhere safe to store its key.
+      - name: Set up keychain to be used for code signing
+        script: keychain initialize
+
       # `xcode-project use-profiles` below only *applies* profiles that are
       # already sitting on the build machine — it doesn't fetch them. These
       # two steps are what actually pull (or create, if none exist yet for
