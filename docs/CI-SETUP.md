@@ -27,9 +27,16 @@ stale command name.
    App Store Connect API), upload it to Codemagic, name the integration
    to match `codemagic.yaml`'s `app_store_connect: app_store_credentials`
    reference (or edit the yaml to match whatever you name it). This lets
-   `xcode-project use-profiles` pull certificates and provisioning
-   profiles automatically — no manual certificate/profile management, no
-   Xcode signing UI, ever.
+   `app-store-connect fetch-signing-files` pull (or create, with
+   `--create`, if none exist yet) a distribution certificate and
+   provisioning profile for `$BUNDLE_ID`, `keychain add-certificates`
+   install the certificate on the build machine, and `xcode-project
+   use-profiles` apply the fetched profile to the Xcode project — no
+   manual certificate/profile management, no Xcode signing UI, ever. All
+   three steps are required; `use-profiles` alone only applies profiles
+   already on disk, it doesn't fetch them (an earlier version of this
+   pipeline had only that last step and failed archiving with "requires a
+   provisioning profile" as a result).
 3. **Android signing — upload keystore**: generate a keystore once
    (`keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA
    -keysize 2048 -validity 10000 -alias <alias>` — this can run on any
