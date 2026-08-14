@@ -23,25 +23,36 @@ stale command name.
    GitHub repo. Free tier should cover this app's build cadence.
 2. **iOS signing — App Store Connect API key integration** (Codemagic
    dashboard → Team settings → Integrations → App Store Connect):
-   generate an API key in App Store Connect (Users and Access → Keys →
-   App Store Connect API), upload it to Codemagic, name the integration
-   to match `codemagic.yaml`'s `app_store_connect: app_store_credentials`
-   reference (or edit the yaml to match whatever you name it). This lets
-   `keychain initialize` set up a build keychain, `app-store-connect
-   fetch-signing-files` pull (or create, with `--create`, if none exist
-   yet) a distribution certificate and provisioning profile for
-   `$BUNDLE_ID` and persist the new certificate's private key into that
-   keychain, `keychain add-certificates` install it on the build machine,
-   and `xcode-project use-profiles` apply the fetched profile to the
-   Xcode project — no manual certificate/profile management, no Xcode
-   signing UI, ever. All four steps are required, in that order:
-   `fetch-signing-files` without `keychain initialize` first fails with
-   "Cannot save Signing Certificates without certificate private key"
-   (nowhere to persist the key it just generated), and `use-profiles`
-   without the two before it only applies profiles already on disk, it
-   doesn't fetch them (an earlier version of this pipeline had only that
-   last step and failed archiving with "requires a provisioning profile"
-   as a result).
+   generate an API key **with the Admin role** (lower roles like App
+   Manager can't create certificates via the API) in App Store Connect
+   (Users and Access → Integrations → App Store Connect API), upload it
+   to Codemagic, name the integration to match `codemagic.yaml`'s
+   `app_store_connect: app_store_credentials` reference (or edit the yaml
+   to match whatever you name it). This lets `keychain initialize` set up
+   a build keychain, `app-store-connect fetch-signing-files` pull (or
+   create, with `--create`, if none exist yet) a distribution certificate
+   and provisioning profile for `$BUNDLE_ID`, `keychain add-certificates`
+   install it on the build machine, and `xcode-project use-profiles`
+   apply the fetched profile to the Xcode project — no manual
+   certificate/profile management, no Xcode signing UI, ever.
+
+   **`--create` also needs a `CERTIFICATE_PRIVATE_KEY` environment
+   variable set** in the `app_store_credentials` group — fetch-signing-
+   files uses it to generate the CSR for the new certificate; without it,
+   the certificate gets created on Apple's side but there's no key to
+   save it with locally, failing with "Cannot save Signing Certificates
+   without certificate private key." This is easy to misdiagnose as a
+   keychain-setup or API-key-role problem (both plausible-looking causes
+   that turned out to be red herrings during initial setup) — the actual
+   fix is generating a private key yourself and adding it as an env var:
+   ```
+   openssl genrsa -traditional -out ios_distribution_private_key.pem 2048
+   ```
+   then paste the full contents (including the `-----BEGIN RSA PRIVATE
+   KEY-----`/`-----END RSA PRIVATE KEY-----` lines, not base64-encoded)
+   into a `CERTIFICATE_PRIVATE_KEY` secret variable in that group. Any
+   freshly generated RSA key works — it doesn't need to already exist
+   anywhere in Apple's portal.
 3. **Android signing — upload keystore**: generate a keystore once
    (`keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA
    -keysize 2048 -validity 10000 -alias <alias>` — this can run on any
