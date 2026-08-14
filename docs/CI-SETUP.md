@@ -47,12 +47,19 @@ stale command name.
    fix is generating a private key yourself and adding it as an env var:
    ```
    openssl genrsa -traditional -out ios_distribution_private_key.pem 2048
+   base64 -w0 ios_distribution_private_key.pem
    ```
-   then paste the full contents (including the `-----BEGIN RSA PRIVATE
-   KEY-----`/`-----END RSA PRIVATE KEY-----` lines, not base64-encoded)
-   into a `CERTIFICATE_PRIVATE_KEY` secret variable in that group. Any
-   freshly generated RSA key works — it doesn't need to already exist
-   anywhere in Apple's portal.
+   then paste that base64 output — a single unbroken line, no
+   `-----BEGIN`/`-----END` markers — into a `CERTIFICATE_PRIVATE_KEY`
+   secret variable in that group. `codemagic.yaml`'s "Fetch signing
+   files" step decodes it back to a real PEM file before passing it to
+   `--certificate-key`. Base64 here (unlike some other tools/guides that
+   say to paste the raw PEM) is deliberate: a raw multi-line PEM's exact
+   line breaks are easy to lose pasting into an env var field, especially
+   on mobile, and a mangled value fails with a plain argparse "not valid"
+   error rather than anything obviously about formatting. Any freshly
+   generated RSA key works — it doesn't need to already exist anywhere in
+   Apple's portal.
 3. **Android signing — upload keystore**: generate a keystore once
    (`keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA
    -keysize 2048 -validity 10000 -alias <alias>` — this can run on any

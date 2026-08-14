@@ -72,20 +72,27 @@ workflows:
       # why an earlier version of this pipeline failed archiving with
       # "requires a provisioning profile" — use-profiles had nothing to work with.
       #
-      # --create requires a CERTIFICATE_PRIVATE_KEY env var (set in the
-      # app_store_credentials group, NOT committed anywhere) — fetch-signing-
-      # files uses it to generate the CSR for the new certificate, and
-      # --certificate-key defaults to reading that env var automatically if
-      # not passed explicitly. Without it, this step creates the certificate
-      # on Apple's side successfully but has no key to save it with locally,
+      # --create requires a private key to generate the CSR for the new
+      # certificate. Without it, this step creates the certificate on
+      # Apple's side successfully but has no key to save it with locally,
       # and fails with "Cannot save Signing Certificates without certificate
       # private key" — a keychain-initialize/API-key-role problem this is
       # NOT; both were red herrings the first two times this error showed up.
+      #
+      # CERTIFICATE_PRIVATE_KEY (set in the app_store_credentials group, NOT
+      # committed anywhere) is base64 — same convention as CM_KEYSTORE in
+      # the android-release workflow below — decoded to a real file here
+      # rather than passed as a raw multi-line PEM env var, since a PEM's
+      # exact line breaks are easy to lose when pasting into an env var
+      # field (particularly on mobile), and --certificate-key rejects a
+      # value that doesn't parse as a valid key with a plain argparse error.
       # See docs/CI-SETUP.md for how to generate and set that variable.
       - name: Fetch signing files
         script: |
+          echo $CERTIFICATE_PRIVATE_KEY | base64 --decode > /tmp/ios_distribution_private_key.pem
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key "@file:/tmp/ios_distribution_private_key.pem" \
             --create
 
       - name: Set up signing certificate
