@@ -81,18 +81,21 @@ workflows:
       #
       # CERTIFICATE_PRIVATE_KEY (set in the app_store_credentials group, NOT
       # committed anywhere) is base64 — same convention as CM_KEYSTORE in
-      # the android-release workflow below — decoded to a real file here
-      # rather than passed as a raw multi-line PEM env var, since a PEM's
-      # exact line breaks are easy to lose when pasting into an env var
-      # field (particularly on mobile), and --certificate-key rejects a
-      # value that doesn't parse as a valid key with a plain argparse error.
+      # the android-release workflow below — decoded here rather than
+      # passed as a raw multi-line PEM env var, since a PEM's exact line
+      # breaks are easy to lose when pasting into an env var field
+      # (particularly on mobile), and --certificate-key rejects a value
+      # that doesn't parse as a valid key with a plain argparse error.
+      # --certificate-key takes the key's actual string content, not a
+      # file path — no "@file:"-style prefix support in this CLI version,
+      # despite that being documented for some other flags/tools.
       # See docs/CI-SETUP.md for how to generate and set that variable.
       - name: Fetch signing files
         script: |
-          echo $CERTIFICATE_PRIVATE_KEY | base64 --decode > /tmp/ios_distribution_private_key.pem
+          DECODED_KEY=$(echo $CERTIFICATE_PRIVATE_KEY | base64 --decode)
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --certificate-key "@file:/tmp/ios_distribution_private_key.pem" \
+            --certificate-key "$DECODED_KEY" \
             --create
 
       - name: Set up signing certificate
