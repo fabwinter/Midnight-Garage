@@ -54,12 +54,8 @@ workflows:
         script: |
           cd ios/App && pod install
 
-      # Must run before "Fetch signing files": when that step creates a
-      # brand-new certificate, it needs an initialized keychain to persist
-      # the private key into the moment it's generated. Without this step
-      # first, fetch-signing-files fails with "Cannot save Signing
-      # Certificates without certificate private key" — the cert gets
-      # generated but has nowhere safe to store its key.
+      # Must run before "Fetch signing files" so there's an initialized
+      # keychain ready to receive whatever certificate that step produces.
       - name: Set up keychain to be used for code signing
         script: keychain initialize
 
@@ -71,10 +67,28 @@ workflows:
       # install the certificate into the build keychain. Skipping them is
       # why an earlier version of this pipeline failed archiving with
       # "requires a provisioning profile" — use-profiles had nothing to work with.
+      #
+      # --create requires a private key to generate the CSR for the new
+      # certificate. Without it, this step creates the certificate on
+      # Apple's side successfully but has no key to save it with locally,
+      # and fails with "Cannot save Signing Certificates without certificate
+      # private key" — a keychain-initialize/API-key-role problem this is
+      # NOT; both were red herrings the first two times this error showed up.
+      #
+      # CERTIFICATE_PRIVATE_KEY (set in the app_store_credentials group, NOT
+      # committed anywhere) is base64 — same convention as CM_KEYSTORE in
+      # the android-release workflow below — decoded to a real file here
+      # rather than passed as a raw multi-line PEM env var, since a PEM's
+      # exact line breaks are easy to lose when pasting into an env var
+      # field (particularly on mobile), and --certificate-key rejects a
+      # value that doesn't parse as a valid key with a plain argparse error.
+      # See docs/CI-SETUP.md for how to generate and set that variable.
       - name: Fetch signing files
         script: |
+          echo $CERTIFICATE_PRIVATE_KEY | base64 --decode > /tmp/ios_distribution_private_key.pem
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key "@file:/tmp/ios_distribution_private_key.pem" \
             --create
 
       - name: Set up signing certificate
