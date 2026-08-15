@@ -290,8 +290,6 @@ header{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content
 }
 .gridlines{position:absolute;inset:0;pointer-events:none}
 .gridlines line{stroke:rgba(255,255,255,.05);stroke-width:1}
-.mg-signal-bulb{animation:signalpulse 3s ease-in-out infinite}
-@keyframes signalpulse{0%,100%{opacity:.9}50%{opacity:1}}
 .exit-lane{
   position:absolute;left:0;right:0;
   top:calc(var(--cell)*2);height:var(--cell);
