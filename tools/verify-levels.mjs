@@ -10,8 +10,8 @@ import { solve, N, EXIT_ROW, levelKey } from '../js/solver.js';
 import { dailyLevel } from '../js/generate.js';
 import { bountyFor, BOUNTY_EPOCH } from '../js/bounty.js';
 import { todayStr } from '../js/storage.js';
-import { bucketSequence, familyFromTag, familyFromHex, familiesUsedBy, boundedExclude, bucketizeByFamily, combinedPhotos } from '../js/art.js';
-import { carIdForLevel, carIdForBountyTier, skinFor } from '../js/collection.js';
+import { bucketSequence, familyFromTag, familyFromHex, familiesUsedBy, boundedExclude, bucketizeByFamily, combinedPhotos, basePhotos, FAMILY_HEX } from '../js/art.js';
+import { carIdForLevel, carIdForBountyTier, skinFor, CARS, POOL_SIZE } from '../js/collection.js';
 
 let fail = 0;
 const bad = (msg) => { console.error('✗ ' + msg); fail++; };
@@ -283,5 +283,95 @@ IMPOUND_LOT.forEach((lv, i) => {
   checkColourPlan('impound slot', i, CLASSIC_RED, sedan, truck);
 });
 
+// Job-car reward cadence (docs/HEIST-PLAN.md §3b): every job car must
+// actually be the hero of some level, or its unlock condition can never
+// fire. This is exactly what a stale chapter clamp broke silently before
+// (Math.min(3, ...) left over from a 4-chapter campaign, orphaning every
+// car past chapter 4 once the campaign grew to 10) — a car can exist in
+// the roster, look correctly tiered, and still be unreachable forever.
+const JOB_CARS_CHECK = CARS.filter(c => c.chapter !== undefined);
+{
+  const reachable = new Set();
+  for(let i = 0; i < LEVELS.length; i++) reachable.add(carIdForLevel(i));
+  JOB_CARS_CHECK.forEach(c => {
+    if(!reachable.has(c.id)) bad(`job car "${c.id}" (${c.name}) is never the hero of any of the ${LEVELS.length} campaign levels — its unlock can never fire`);
+  });
+}
+
+// Every job car should unlock exactly CHAPTER_SIZE/POOL_SIZE levels after
+// the previous one, across the whole campaign — the flat cadence that
+// lets rarity (not spacing) carry the escalation from common to
+// legendary. Simulated by walking a synthetic save through a full
+// sequential clear rather than re-deriving the block arithmetic here,
+// same reasoning as jobUnlockCheck() itself: this proves the ACTUAL
+// unlock behaviour, not just that the intended formula was typed
+// correctly somewhere.
+{
+  const save = { jobClears: {} };
+  const unlockLevel = {};
+  for(let i = 0; i < LEVELS.length; i++){
+    save.jobClears[i] = true;
+    JOB_CARS_CHECK.forEach(c => { if(unlockLevel[c.id] === undefined && c.unlock(save)) unlockLevel[c.id] = i + 1; });
+  }
+  const levels = JOB_CARS_CHECK.map(c => unlockLevel[c.id]).filter(l => l !== undefined).sort((a, b) => a - b);
+  if(levels.length !== JOB_CARS_CHECK.length) bad(`only ${levels.length}/${JOB_CARS_CHECK.length} job cars ever unlock across a full sequential playthrough of all ${LEVELS.length} levels`);
+  const expectedGap = CHAPTER_SIZE / POOL_SIZE;
+  for(let i = 1; i < levels.length; i++){
+    const gap = levels[i] - levels[i - 1];
+    if(gap !== expectedGap) bad(`unlock milestone gap between level ${levels[i - 1]} and ${levels[i]} is ${gap}, expected ${expectedGap}`);
+  }
+}
+
+// Relaxed must never earn cars ("no job, no reward" — see
+// heroCarIdForAttempt/jobUnlockCheck's comments). A Relaxed clear writes
+// save.stars but never save.jobClears, so a synthetic save with every
+// level 3-starred but jobClears empty must unlock nothing. This is the
+// most likely way to break the cadence rework above: reaching for the
+// obvious cleared-set when rewriting the unlock condition means reaching
+// for save.stars, and swapping it in silently lets Relaxed earn cars
+// again — it did once, which is why jobClears exists at all (see the
+// grandfather clause in js/game.js's save loader).
+{
+  const relaxedOnlySave = { jobClears: {}, stars: Object.fromEntries(LEVELS.map((_, i) => [i, 3])) };
+  JOB_CARS_CHECK.forEach(c => {
+    if(c.unlock(relaxedOnlySave)) bad(`job car "${c.id}" unlocks from Relaxed-only progress (stars populated, jobClears empty) — Relaxed must never earn cars`);
+  });
+}
+
+// Every FAMILY_HEX value must round-trip through familyFromHex() as its
+// own key — this table is handed straight back out as a hero's
+// skin.base (js/collection.js), which then gets re-classified via
+// familyFromHex() for traffic exclusion. A value that doesn't round-trip
+// silently excludes the wrong family — caught once already (brown's
+// original '#8a5a34' classified as orange under familyFromHex's own
+// hue/saturation split despite looking like a plausible brown).
+for(const [fam, hex] of Object.entries(FAMILY_HEX)){
+  const back = familyFromHex(hex);
+  if(back !== fam) bad(`FAMILY_HEX.${fam} (${hex}) round-trips through familyFromHex() as "${back}", not "${fam}"`);
+}
+
+// Every car with bespoke art (skin.photo) whose photo is ALSO in ordinary
+// traffic rotation must have a skin.base that classifies into the SAME
+// family as that photo's own traffic `color` tag — otherwise the wrong
+// family gets excluded when this car is the hero, and its own photo can
+// appear as both the hero and background traffic on one level. The two
+// classifiers (familyFromTag for traffic's tag, familyFromHex for a
+// hero's base hex) are independent code paths over independent data, so
+// nothing else guarantees they agree for a given photo.
+{
+  const sedanTagOf = new Map(basePhotos('sedans').map(e => [e.img, e.color]));
+  const truckTagOf = new Map(basePhotos('trucks').map(e => [e.img, e.color]));
+  CARS.forEach(car => {
+    if(!car.photo) return;
+    const tag = sedanTagOf.get(car.photo) ?? truckTagOf.get(car.photo);
+    if(tag === undefined) return; // this photo isn't also in traffic rotation — nothing to cross-check
+    const tagFamily = familyFromTag(tag);
+    const baseFamily = familyFromHex(car.skin.base);
+    if(tagFamily !== baseFamily){
+      bad(`car "${car.id}" skin.base (${car.skin.base}, family "${baseFamily}") doesn't match its own photo's traffic family ("${tagFamily}") — the same photo could show up as both this car's hero art and ordinary traffic on one level`);
+    }
+  });
+}
+
 if(fail){ console.error(`${fail} check(s) failed`); process.exit(1); }
-console.log(`✓ ${LEVELS.length} levels verified (par == optimal, invariants hold), 14 dailies deterministic, ${BOUNTY_ROTATION.length} bounty boards verified, ${IMPOUND_LOT.length} impound boards verified`);
+console.log(`✓ ${LEVELS.length} levels verified (par == optimal, invariants hold), 14 dailies deterministic, ${BOUNTY_ROTATION.length} bounty boards verified, ${IMPOUND_LOT.length} impound boards verified, ${JOB_CARS_CHECK.length} job cars reachable with a flat 10-level cadence`);

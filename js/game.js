@@ -4462,6 +4462,27 @@ function migrateCampaignReorder(){
   save.migratedCampaign500 = true;
 }
 
+/* The job-car unlock rework (block-of-10 reward cadence + full 10-chapter
+   reach — see docs/HEIST-PLAN.md §3b) changes which level unlocks which
+   car for every save with campaign progress. Without this guard, a save
+   that already owned some cars under the old "first sight" rule would
+   re-evaluate against the new rule the moment this code ships and could
+   newly qualify for a pile of chapter 5-10 cars that were previously
+   unreachable — pendingReveals() would then queue every one of them as a
+   reveal popup on the very next win-sheet, a 20+ card chain nobody asked
+   for. Pre-launch, there's no real save history to preserve continuity
+   for — this is a one-time dev/test guard, not a durable migration path,
+   so it deliberately does the simplest thing: backfill carsSeen with
+   whatever the new rule already grants, so those cars just quietly show
+   up in the garage next time instead of interrupting play. Runs once per
+   save (migratedJobRewardV2 guards it), same pattern as
+   migrateCampaignReorder() above. */
+function migrateJobRewardCadenceV2(){
+  if(save.migratedJobRewardV2) return;
+  save.carsSeen = [...new Set([...(save.carsSeen || []), ...ownedCarIds(save)])];
+  save.migratedJobRewardV2 = true;
+}
+
 /* Browsers block audio.play() until a user gesture; retry menu music
    on the first tap/click/key anywhere so Velvet Glove starts the
    moment the player touches the screen, not just on the Play button. */
@@ -4519,6 +4540,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
       save.entitlements.pro = true;
     }
     migrateCampaignReorder();
+    migrateJobRewardCadenceV2();
   }
   await loadDaily();
   await initAnalytics();

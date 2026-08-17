@@ -95,13 +95,34 @@ the level is what makes it yours. Player choice moves to *which owned car
 you practice in* (Relaxed/Daily/Impound/Sandbox aren't "jobs," so they
 keep the free equip), not *which car a mission uses*.
 
-- **20 job cars, five per campaign chapter** (`js/collection.js`'s
-  `JOB_CARS`), round-robin-assigned across that chapter's 50 levels
-  (`carIdForLevel()`) so each car is the hero in ~10 missions before the
-  pool repeats. Unlocked the moment you clear any one of its missions —
-  chapter-gating (the existing Pro paywall on chapters 3-4, plus
-  `save.unlocked` progress within a chapter) already does the rarity work
-  for higher tiers, so no extra meta-condition was needed on top.
+- **50 job cars, five per campaign chapter** (`js/collection.js`'s
+  `JOB_CARS`, one set of five for each of the 10 chapters — grew from 20/4
+  chapters when the campaign expanded to 500 levels/10 chapters), assigned
+  across that chapter's 50 levels by `carIdForLevel()` in contiguous
+  ten-level blocks: car N fronts levels 10N+1..10N+10, not a repeating
+  five-level cycle.
+  *(Updated — the original "unlocked the moment you clear any one of its
+  missions" design had two compounding bugs, both invisible until actually
+  simulating a full playthrough: `carIdForLevel()`'s chapter lookup was
+  clamped to the original 4-chapter count, so cars past chapter 4 were
+  never the hero of any level and could never unlock at all — 30 of 50
+  went permanently dead the moment the campaign grew past 4 chapters,
+  caught only by adding a reachability check to
+  `tools/verify-levels.mjs`. And "unlock on first sight" meant a chapter's
+  five cars all arrived in its first five levels, then nothing for the
+  other 45 — simulating a full clear showed every earnable car gone by
+  level 155, 69% of the campaign paying out nothing. Reworked to the
+  ten-level-block scheme above, unlocked on clearing the block's LAST
+  level rather than its first — one milestone every 10 levels for all 500,
+  and you drive a car for its full run before it's handed to you, matching
+  "clear a level and the mark you drove becomes yours" rather than
+  granting it before you've driven it once. `tier` is now hand-assigned
+  into an explicit pyramid (10 common / 15 uncommon / 15 rare / 10
+  legendary, by chapter band 1-2/3-5/6-8/9-10) instead of implied by
+  chapter-gating alone — the original scheme had legendary as the single
+  most common tier (23 of 54 cars) purely as an accident of how many cars
+  happened to be tiered that way at authoring time, nothing enforced the
+  curve.)*
 - **4 bounty marks unchanged** (`BOUNTY_CARS`) — one per rarity tier,
   unlocked by clearing a "Tonight's Mark" under its nightly reward
   condition. Now also the hero shown *while playing* a bounty of that tier
@@ -111,16 +132,29 @@ keep the free equip), not *which car a mission uses*.
   campaign → `carIdForLevel(cur)`, bounty → `carIdForBountyTier(mode.tier)`,
   everything else (Daily/Impound/Sandbox) → `save.equippedCar`. Independent
   of the Heist/Pursuit/Relaxed pacing toggle, which is an orthogonal axis.
-- **Art seam, not art yet**: every job car keeps `skin.photo: null` for now
-  and renders via the existing hue-rotated-traffic-photo fallback — the
-  same rendering H0's 12 reskins always used, so nothing regresses while
-  real art lands. Real art drops in car-by-car by setting `skin.photo` to
-  a bespoke PNG built to `classic.png`'s conventions (800×400, transparent,
-  top-down, front at the right edge, baked headlights) — `js/art.js` then
-  switches that car to the bespoke render *and* the beam/glow overlay that
-  was previously classic-only. This also fixed the standing bug where
-  every non-default skin rendered with no headlights at all: the beam
-  overlay's condition had silently excluded every skinned car since H0.
+- **Art seam, now with real art**: a car's own `photo` field (top-level,
+  sibling to `skin`) points at a bespoke image built to `classic.webp`'s
+  conventions (800×400, transparent, top-down, front at the right edge,
+  baked headlights) — set, `js/art.js` renders that car's actual photo
+  plus the beam/glow overlay that was previously classic-only; left
+  `null`, it falls back to the recolored-traffic-photo render every job
+  car used at H0. 33 of the 50 job cars now have real art, reusing
+  existing `assets/cars/` bodies (the file's own traffic `color` tag
+  decides the paint family so the SAME photo excludes correctly whether
+  it's this car's hero art or ordinary traffic on some other level); the
+  remaining 17 plus all 4 bounty marks are upload gaps.
+  *(Fixed alongside this: `skinFor()` returned `car.skin` verbatim, which
+  never actually contained the photo — `photo` lives one level up, on the
+  car itself. Completely invisible until now because every car shipped
+  with `photo: null`, so `skin.photo` was always undefined regardless of
+  what `car.photo` said; the first cars to ever get real art would have
+  silently kept rendering the fallback. Also unrelated to this file:
+  `skin.dark`/`skin.glass` are set on every car but read nowhere in the
+  codebase — vestigial from an earlier procedural-body render, left alone
+  rather than cleaned up as out of scope here.)* This also fixed the
+  standing bug where every non-default skin rendered with no headlights
+  at all: the beam overlay's condition had silently excluded every
+  skinned car since H0.
 - **Garage screen** now groups tiles by chapter + a "Bounty Marks" section
   instead of one flat list, and equipping a locked-by-job tile mid-mission
   shows a toast (`garage.equip.job`) rather than silently doing nothing —

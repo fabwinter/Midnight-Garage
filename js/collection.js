@@ -13,12 +13,19 @@
    `heroCarIdFor()` in js/game.js for where that split is enforced.
 
    Two pools:
-   - Job cars (20): five per campaign chapter, round-robin assigned across
-     that chapter's 50 levels by `carIdForLevel()`, so each car is the hero
-     in ~10 missions. Unlocked the first time you clear one of its
-     missions — see `jobUnlockCheck()`. Chapter-gating (Pro paywall on
-     chapters 3-4, `save.unlocked` progress within a chapter) already does
-     the rarity work for higher tiers; no extra meta-condition needed.
+   - Job cars (50): five per campaign chapter (10 chapters), round-robin
+     assigned across that chapter's 50 levels by `carIdForLevel()` in
+     contiguous ten-level blocks — car N is the hero of levels
+     10N+1..10N+10 within its chapter, not scattered across it. Unlocked
+     on clearing the LAST level of its block, not the first sight of it
+     (see `jobUnlockCheck()`) — you drive a car for its full ten-mission
+     run before it's yours, one milestone every 10 levels for all 500,
+     rather than every car in a chapter arriving in its first five levels
+     and nothing after. `tier` is hand-assigned into an explicit pyramid
+     (10 common / 15 uncommon / 15 rare / 10 legendary, chapters 1-2 /
+     3-5 / 6-8 / 9-10) — chapter position alone no longer implies rarity,
+     it's the actual source of truth for the curve. See docs/HEIST-PLAN.md
+     §3b for the full reasoning and the reward-curve bug this replaced.
    - Bounty marks (4): one per rarity tier, shown as the hero on every
      "Tonight's Mark" of that tier (`carIdForBountyTier()`). Unlocked by
      clearing a bounty under its nightly reward condition — unchanged from
@@ -29,22 +36,39 @@ import { getLibrary } from './library.js';
 
 export const DEFAULT_CAR = 'classic';
 export const POOL_SIZE = 5;
+// Each car fronts one contiguous block of levels within its chapter
+// (levels 1-10 -> slot 0, 11-20 -> slot 1, ...) rather than cycling every
+// five levels — a block is long enough to actually drive the car before
+// it's handed to you, see jobUnlockCheck's comment below. Declared here,
+// not next to carIdForLevel further down, because JOB_CARS.forEach calls
+// jobUnlockCheck(car) at module load — which calls carIdForLevel()
+// synchronously to find each car's unlock level — before this file
+// reaches carIdForLevel's own definition; a `const` declared down there
+// would be in its temporal dead zone at that point.
+const BLOCK_SIZE = CHAPTER_SIZE / POOL_SIZE;
 
 /* skin.photo: seam for bespoke per-car art (top-down, front-right, own
    headlights — see classic.png's conventions). Until a car has one, its
    hero render falls back to the recolored-sedan-photo treatment every
    other car already used (see js/art.js) — nothing breaks while art
    lands car by car. */
-/* Derives its scan directly from carIdForLevel() rather than
-   re-deriving chapter/slot arithmetic independently — the two used to be
-   two separate sources of truth for "which car is level i," and they
-   drifted the moment carIdForLevel() grew its level-1-is-always-red
-   override: this scan kept counting level 1 toward First Job's unlock
-   even though level 1 never actually shows First Job as the hero,
-   letting you earn a car in the garage you never once drove. Routing
-   through carIdForLevel() means any future override (here or elsewhere)
-   can't cause that class of bug again — the unlock condition is always
-   "you cleared a level that actually showed you this car."
+/* Finds car's own unlock level by scanning carIdForLevel() rather than
+   re-deriving block arithmetic independently — the two used to be two
+   separate sources of truth for "which car is level i," and they drifted
+   once before (see the level-1-is-always-red override, which an earlier
+   version of this scan didn't know about, letting you earn First Job's
+   car without ever having driven it). Routing through carIdForLevel()
+   means any future change to the round-robin (block size, chapter count)
+   can't cause that class of bug again — this always finds whatever level
+   ACTUALLY shows the car as hero last, not wherever the math says it
+   should.
+
+   Unlocks on clearing that level — the LAST level the car fronts, not
+   the first — so you drive a car for its full ten-mission block before
+   it's yours, matching "clear a level and the mark you drove becomes
+   yours to keep." (Earlier version unlocked on first sight, which handed
+   out the car before you'd driven it and front-loaded every chapter's
+   five cars into its first five levels — see docs/HEIST-PLAN.md §3b.)
 
    Reads save.jobClears, not save.stars: stars tracks puzzle completion
    under every pacing (Heist/Pursuit/Relaxed alike), but Relaxed never
@@ -52,175 +76,176 @@ export const POOL_SIZE = 5;
    js/game.js — Relaxed has no "job" framing, just your own driving), so
    clearing a level there can't be what unlocks its car. jobClears only
    gets a level added when it was actually cleared under Heist or Pursuit
-   — see winSequence. */
+   — see winSequence. Swapping this to save.stars would silently let
+   Relaxed earn cars again — it did once, which is why jobClears exists
+   at all (see the grandfather clause in js/game.js's save loader). */
 function jobUnlockCheck(car){
   const from = car.chapter * CHAPTER_SIZE;
-  return save => {
-    for(let i = from; i < from + CHAPTER_SIZE; i++){
-      if(carIdForLevel(i) === car.id && save.jobClears?.[i]) return true;
-    }
-    return false;
-  };
+  let unlockLevel = -1;
+  for(let i = from; i < from + CHAPTER_SIZE; i++){
+    if(carIdForLevel(i) === car.id) unlockLevel = i;
+  }
+  return save => unlockLevel >= 0 && !!save.jobClears?.[unlockLevel];
 }
 
 /* Job cars, five per chapter, in chapter order — chapter/slot are derived
    from array position below (see the assignment loop), not hand-typed, so
    reordering a chapter's five entries can't drift out of sync with it. */
 const JOB_CARS = [
-  // --- Night Shift (ch. 1) — everyday metal, all common/uncommon -------
+  // --- Night Shift (ch. 1) — economy hatch & sedan, all common ---------
   {
-    id: 'first-job', name: 'First Job', tier: 'common', photo: null,
-    skin: { base: '#ffb454', dark: '#c47a10', glass: '#3c2a0c', trim: 'none' },
+    id: 'first-job', name: 'First Job', tier: 'common', photo: 'assets/cars/traffic-sedan-13.webp',
+    skin: { base: '#e9e9e3', dark: '#c47a10', glass: '#3c2a0c', trim: 'none' },
   },
   {
-    id: 'understudy', name: 'The Understudy', tier: 'common', photo: null,
-    skin: { base: '#37c8ab', dark: '#177a67', glass: '#0e2f2b', trim: 'none' },
+    id: 'understudy', name: 'The Understudy', tier: 'common', photo: 'assets/cars/traffic-sedan-25.webp',
+    skin: { base: '#ff4d4d', dark: '#177a67', glass: '#0e2f2b', trim: 'none' },
   },
   {
-    id: 'night-regular', name: 'Night Regular', tier: 'common', photo: null,
-    skin: { base: '#ff8a5c', dark: '#c9502a', glass: '#3d1c10', trim: 'none' },
+    id: 'night-regular', name: 'Night Regular', tier: 'common', photo: 'assets/cars/library-sedans-1785067674835-13-red-hatch.webp',
+    skin: { base: '#ff4d4d', dark: '#c9502a', glass: '#3d1c10', trim: 'none' },
   },
   {
-    id: 'paid-in-full', name: 'Paid in Full', tier: 'common', photo: null,
-    skin: { base: '#ffd84d', dark: '#d1a213', glass: '#3b3106', trim: 'chrome' },
+    id: 'paid-in-full', name: 'Paid in Full', tier: 'common', photo: 'assets/cars/library-sedans-1785067674835-14-green-hatch.webp',
+    skin: { base: '#5fbf4a', dark: '#d1a213', glass: '#3b3106', trim: 'chrome' },
   },
   {
-    id: 'under-radar', name: 'Under the Radar', tier: 'uncommon', photo: null,
-    skin: { base: '#8fa2bd', dark: '#57687f', glass: '#1e2530', trim: 'none' },
+    id: 'under-radar', name: 'Under the Radar', tier: 'common', photo: 'assets/cars/traffic-sedan-new-lightblue.webp',
+    skin: { base: '#4a7dff', dark: '#57687f', glass: '#1e2530', trim: 'none' },
   },
-  // --- Neon District (ch. 2) — tuner scene, uncommon leaning rare ------
+  // --- Neon District (ch. 2) — economy, first personality, common ------
   {
-    id: 'neon-ghost', name: 'Neon Ghost', tier: 'uncommon', photo: null,
-    skin: { base: '#4fd2f0', dark: '#1f8fb0', glass: '#0f2c37', trim: 'none' },
-  },
-  {
-    id: 'steady-hand', name: 'The Steady Hand', tier: 'uncommon', photo: null,
-    skin: { base: '#b07cff', dark: '#6f3ad0', glass: '#291743', trim: 'none' },
+    id: 'neon-ghost', name: 'Neon Ghost', tier: 'common', photo: 'assets/cars/traffic-sedan-28.webp',
+    skin: { base: '#8c7762', dark: '#1f8fb0', glass: '#0f2c37', trim: 'none' },
   },
   {
-    id: 'street-tuner', name: 'Street Tuner', tier: 'uncommon', photo: null,
+    id: 'steady-hand', name: 'The Steady Hand', tier: 'common', photo: 'assets/cars/library-sedans-1785067674835-7-orange-suv.webp',
+    skin: { base: '#ff9a3d', dark: '#6f3ad0', glass: '#291743', trim: 'none' },
+  },
+  {
+    id: 'street-tuner', name: 'Street Tuner', tier: 'common', photo: null,
     skin: { base: '#9be03f', dark: '#5f8f1e', glass: '#1c2b0c', trim: 'none' },
   },
   {
-    id: 'lowrider', name: 'The Low Rider', tier: 'uncommon', photo: null,
+    id: 'lowrider', name: 'The Low Rider', tier: 'common', photo: null,
     skin: { base: '#c23a5e', dark: '#701f36', glass: '#2b0f18', trim: 'chrome' },
   },
   {
-    id: 'clean-sweep', name: 'Clean Sweep', tier: 'rare', photo: null,
+    id: 'clean-sweep', name: 'Clean Sweep', tier: 'common', photo: null,
     skin: { base: '#f26fb1', dark: '#bb3679', glass: '#3a1229', trim: 'chrome' },
   },
-  // --- Harbor Freight (ch. 3) — classics and muscle, mostly rare -------
+  // --- Harbor Freight (ch. 3) — tuner scene, uncommon -------------------
   {
-    id: 'harbor-queen', name: 'Harbor Queen', tier: 'rare', photo: null,
-    skin: { base: '#1f9c82', dark: '#0d4a3e', glass: '#062420', trim: 'chrome' },
+    id: 'harbor-queen', name: 'Harbor Queen', tier: 'uncommon', photo: 'assets/cars/hero-fluro-cyan.webp',
+    skin: { base: '#2fb5b0', dark: '#0d4a3e', glass: '#062420', trim: 'chrome' },
   },
   {
-    id: 'insomniac', name: 'The Insomniac', tier: 'rare', photo: null,
-    skin: { base: '#6f3ad0', dark: '#3d1c80', glass: '#1f0f40', trim: 'chrome' },
+    id: 'insomniac', name: 'The Insomniac', tier: 'uncommon', photo: 'assets/cars/hero-fluro-pink.webp',
+    skin: { base: '#e85fa8', dark: '#3d1c80', glass: '#1f0f40', trim: 'chrome' },
   },
   {
-    id: 'dockside-classic', name: 'Dockside Classic', tier: 'rare', photo: null,
-    skin: { base: '#3a5a8f', dark: '#1e3357', glass: '#0e1a2b', trim: 'chrome' },
+    id: 'dockside-classic', name: 'Dockside Classic', tier: 'uncommon', photo: 'assets/cars/hero-fluro-green.webp',
+    skin: { base: '#5fbf4a', dark: '#1e3357', glass: '#0e1a2b', trim: 'chrome' },
   },
   {
-    id: 'crate-fresh', name: 'Crate Fresh', tier: 'uncommon', photo: null,
-    skin: { base: '#e7ebf0', dark: '#a6adba', glass: '#232a33', trim: 'chrome' },
+    id: 'crate-fresh', name: 'Crate Fresh', tier: 'uncommon', photo: 'assets/cars/hero-fluro-yellow.webp',
+    skin: { base: '#f5d442', dark: '#a6adba', glass: '#232a33', trim: 'chrome' },
   },
   {
-    id: 'american-steel', name: 'American Steel', tier: 'rare', photo: null,
-    skin: { base: '#d1502a', dark: '#873217', glass: '#2b140a', trim: 'none' },
+    id: 'american-steel', name: 'American Steel', tier: 'uncommon', photo: 'assets/cars/hero-fluro-orange.webp',
+    skin: { base: '#ff9a3d', dark: '#873217', glass: '#2b140a', trim: 'none' },
   },
-  // --- Gridlock (ch. 4) — endgame exotics, rare leaning legendary ------
+  // --- Gridlock (ch. 4) — coupes & roadsters, uncommon ------------------
   {
-    id: 'midnight-phantom', name: 'Midnight Phantom', tier: 'legendary', photo: null,
-    skin: { base: '#2a2f3a', dark: '#101319', glass: '#0e2f2b', trim: 'plaque' },
-  },
-  {
-    id: 'vintage-icon', name: 'The Vintage Icon', tier: 'rare', photo: null,
-    skin: { base: '#3b2270', dark: '#1f1140', glass: '#150b2b', trim: 'plaque' },
+    id: 'midnight-phantom', name: 'Midnight Phantom', tier: 'uncommon', photo: 'assets/cars/library-sedans-1785067674835-12-orange-coupe.webp',
+    skin: { base: '#ff9a3d', dark: '#101319', glass: '#0e2f2b', trim: 'chrome' },
   },
   {
-    id: 'grand-tourer', name: 'Grand Tourer', tier: 'legendary', photo: null,
-    skin: { base: '#1f5c3f', dark: '#0e3322', glass: '#0a1f16', trim: 'plaque' },
+    id: 'vintage-icon', name: 'The Vintage Icon', tier: 'uncommon', photo: 'assets/cars/library-sedans-1785067674835-15-green-coupe.webp',
+    skin: { base: '#5fbf4a', dark: '#1f1140', glass: '#150b2b', trim: 'chrome' },
   },
   {
-    id: 'apex-predator', name: 'Apex Predator', tier: 'legendary', photo: null,
-    skin: { base: '#1a1d24', dark: '#0a0c10', glass: '#3a2f08', trim: 'plaque' },
+    id: 'grand-tourer', name: 'Grand Tourer', tier: 'uncommon', photo: 'assets/cars/hero-convertible-brown.webp',
+    skin: { base: '#8c7762', dark: '#0e3322', glass: '#0a1f16', trim: 'chrome' },
   },
   {
-    id: 'midnight-runner', name: 'Midnight Runner', tier: 'rare', photo: null,
-    skin: { base: '#465b7a', dark: '#26374f', glass: '#101825', trim: 'plaque' },
-  },
-  // --- Overpass (ch. 5) — rare leaning legendary, continuing Gridlock's climb
-  {
-    id: 'overpass-shadow', name: 'Overpass Shadow', tier: 'rare', photo: null,
-    skin: { base: '#33414f', dark: '#161d24', glass: '#0b1116', trim: 'plaque' },
+    id: 'apex-predator', name: 'Apex Predator', tier: 'uncommon', photo: 'assets/cars/hero-spyder-blue.webp',
+    skin: { base: '#4a7dff', dark: '#0a0c10', glass: '#3a2f08', trim: 'chrome' },
   },
   {
-    id: 'toll-runner', name: 'Toll Runner', tier: 'rare', photo: null,
-    skin: { base: '#c99a2e', dark: '#8a6912', glass: '#2c2107', trim: 'plaque' },
+    id: 'midnight-runner', name: 'Midnight Runner', tier: 'uncommon', photo: 'assets/cars/traffic-sedan-7.webp',
+    skin: { base: '#e9e9e3', dark: '#26374f', glass: '#101825', trim: 'chrome' },
+  },
+  // --- Overpass (ch. 5) — classics, uncommon -----------------------------
+  {
+    id: 'overpass-shadow', name: 'Overpass Shadow', tier: 'uncommon', photo: 'assets/cars/hero-classic-blue-stripe.webp',
+    skin: { base: '#4a7dff', dark: '#161d24', glass: '#0b1116', trim: 'chrome' },
   },
   {
-    id: 'high-lane', name: 'High Lane', tier: 'rare', photo: null,
-    skin: { base: '#2f7fbf', dark: '#164a72', glass: '#0c1f2e', trim: 'plaque' },
+    id: 'toll-runner', name: 'Toll Runner', tier: 'uncommon', photo: 'assets/cars/hero-classic-cream.webp',
+    skin: { base: '#e9e9e3', dark: '#8a6912', glass: '#2c2107', trim: 'chrome' },
   },
   {
-    id: 'concrete-ghost', name: 'Concrete Ghost', tier: 'legendary', photo: null,
-    skin: { base: '#8f96a3', dark: '#4d525c', glass: '#1c1f24', trim: 'chrome' },
+    id: 'high-lane', name: 'High Lane', tier: 'uncommon', photo: 'assets/cars/hero-classic-white-green.webp',
+    skin: { base: '#e9e9e3', dark: '#164a72', glass: '#0c1f2e', trim: 'chrome' },
   },
   {
-    id: 'merge-artist', name: 'The Merge Artist', tier: 'rare', photo: null,
-    skin: { base: '#b04a2e', dark: '#6e2c1a', glass: '#25100a', trim: 'plaque' },
-  },
-  // --- Freight Yard (ch. 6) — hitch country, rare leaning legendary -----
-  {
-    id: 'yardmaster', name: 'The Yardmaster', tier: 'legendary', photo: null,
-    skin: { base: '#4a3520', dark: '#241a10', glass: '#120d08', trim: 'chrome' },
+    id: 'concrete-ghost', name: 'Concrete Ghost', tier: 'uncommon', photo: 'assets/cars/hero-sedan-bronze.webp',
+    skin: { base: '#8c7762', dark: '#4d525c', glass: '#1c1f24', trim: 'chrome' },
   },
   {
-    id: 'coupling-run', name: 'Coupling Run', tier: 'rare', photo: null,
-    skin: { base: '#d1782e', dark: '#8a4a18', glass: '#2c1a09', trim: 'chrome' },
+    id: 'merge-artist', name: 'The Merge Artist', tier: 'uncommon', photo: 'assets/cars/hero-sedan-green.webp',
+    skin: { base: '#5fbf4a', dark: '#6e2c1a', glass: '#25100a', trim: 'chrome' },
+  },
+  // --- Freight Yard (ch. 6) — hitch country, muscle, rare ---------------
+  {
+    id: 'yardmaster', name: 'The Yardmaster', tier: 'rare', photo: 'assets/cars/hero-muscle.webp',
+    skin: { base: '#8a929c', dark: '#241a10', glass: '#120d08', trim: 'chrome' },
   },
   {
-    id: 'switchyard', name: 'Switchyard', tier: 'rare', photo: null,
-    skin: { base: '#2e6b5c', dark: '#163b32', glass: '#0a1c17', trim: 'plaque' },
+    id: 'coupling-run', name: 'Coupling Run', tier: 'rare', photo: 'assets/cars/hero-muscle-grey-stripe.webp',
+    skin: { base: '#8a929c', dark: '#8a4a18', glass: '#2c1a09', trim: 'chrome' },
   },
   {
-    id: 'container-king', name: 'Container King', tier: 'legendary', photo: null,
+    id: 'switchyard', name: 'Switchyard', tier: 'rare', photo: 'assets/cars/hero-muscle-sage.webp',
+    skin: { base: '#5fbf4a', dark: '#163b32', glass: '#0a1c17', trim: 'plaque' },
+  },
+  {
+    id: 'container-king', name: 'Container King', tier: 'rare', photo: null,
     skin: { base: '#c23838', dark: '#701f1f', glass: '#2b0f0f', trim: 'plaque' },
   },
   {
     id: 'last-hitch', name: 'The Last Hitch', tier: 'rare', photo: null,
     skin: { base: '#5c4a8f', dark: '#332757', glass: '#160f2b', trim: 'plaque' },
   },
-  // --- Customs (ch. 7) — mostly legendary ------------------------------
+  // --- Customs (ch. 7) — GT & wide-body, rare ---------------------------
   {
-    id: 'contraband', name: 'Contraband', tier: 'legendary', photo: null,
-    skin: { base: '#1f2933', dark: '#0d1318', glass: '#3a2f08', trim: 'plaque' },
+    id: 'contraband', name: 'Contraband', tier: 'rare', photo: 'assets/cars/hero-airtail-blue.webp',
+    skin: { base: '#4a7dff', dark: '#0d1318', glass: '#3a2f08', trim: 'plaque' },
   },
   {
-    id: 'inspection-lane', name: 'Inspection Lane', tier: 'rare', photo: null,
-    skin: { base: '#e0c23a', dark: '#a3891c', glass: '#2f290a', trim: 'chrome' },
+    id: 'inspection-lane', name: 'Inspection Lane', tier: 'rare', photo: 'assets/cars/hero-airtail-purple-yellow.webp',
+    skin: { base: '#9a5bd6', dark: '#a3891c', glass: '#2f290a', trim: 'chrome' },
   },
   {
-    id: 'clearance-run', name: 'Clearance Run', tier: 'legendary', photo: null,
-    skin: { base: '#2e7d5c', dark: '#154532', glass: '#0a1f17', trim: 'plaque' },
+    id: 'clearance-run', name: 'Clearance Run', tier: 'rare', photo: 'assets/cars/hero-airtail-stripe.webp',
+    skin: { base: '#e9e9e3', dark: '#154532', glass: '#0a1f17', trim: 'plaque' },
   },
   {
-    id: 'red-stamp', name: 'Red Stamp', tier: 'legendary', photo: null,
-    skin: { base: '#a8283a', dark: '#5c141f', glass: '#240a0f', trim: 'chrome' },
+    id: 'red-stamp', name: 'Red Stamp', tier: 'rare', photo: 'assets/cars/hero-airtail-red.webp',
+    skin: { base: '#ff4d4d', dark: '#5c141f', glass: '#240a0f', trim: 'chrome' },
   },
   {
-    id: 'sealed-manifest', name: 'Sealed Manifest', tier: 'rare', photo: null,
-    skin: { base: '#4a5568', dark: '#252c38', glass: '#0e1218', trim: 'plaque' },
+    id: 'sealed-manifest', name: 'Sealed Manifest', tier: 'rare', photo: 'assets/cars/hero-airtail-pink.webp',
+    skin: { base: '#e85fa8', dark: '#252c38', glass: '#0e1218', trim: 'plaque' },
   },
-  // --- Rush Hour (ch. 8) — dense traffic, legendary --------------------
+  // --- Rush Hour (ch. 8) — GT, racer, off-road, rare ---------------------
   {
-    id: 'gridlocked', name: 'Gridlocked', tier: 'legendary', photo: null,
+    id: 'gridlocked', name: 'Gridlocked', tier: 'rare', photo: null,
     skin: { base: '#d4471f', dark: '#82290f', glass: '#2b1006', trim: 'plaque' },
   },
   {
-    id: 'lane-splitter', name: 'Lane Splitter', tier: 'legendary', photo: null,
+    id: 'lane-splitter', name: 'Lane Splitter', tier: 'rare', photo: null,
     skin: { base: '#e0e5ea', dark: '#9aa2ad', glass: '#20242b', trim: 'chrome' },
   },
   {
@@ -228,35 +253,35 @@ const JOB_CARS = [
     skin: { base: '#f0a83a', dark: '#a86e17', glass: '#2e2107', trim: 'chrome' },
   },
   {
-    id: 'rat-run', name: 'The Rat Run', tier: 'legendary', photo: null,
+    id: 'rat-run', name: 'The Rat Run', tier: 'rare', photo: null,
     skin: { base: '#3a4a2e', dark: '#1c2716', glass: '#0e1409', trim: 'plaque' },
   },
   {
-    id: 'clean-getaway', name: 'Clean Getaway', tier: 'legendary', photo: null,
+    id: 'clean-getaway', name: 'Clean Getaway', tier: 'rare', photo: null,
     skin: { base: '#2e3a5c', dark: '#151d33', glass: '#0a0f1c', trim: 'plaque' },
   },
-  // --- The Syndicate (ch. 9) — imported hard boards become the norm ----
+  // --- The Syndicate (ch. 9) — exotics, legendary -----------------------
   {
-    id: 'made-man', name: 'Made Man', tier: 'legendary', photo: null,
-    skin: { base: '#1a1a1e', dark: '#0a0a0c', glass: '#241f08', trim: 'plaque' },
+    id: 'made-man', name: 'Made Man', tier: 'legendary', photo: 'assets/cars/hero-red-exotic.webp',
+    skin: { base: '#ff4d4d', dark: '#0a0a0c', glass: '#241f08', trim: 'plaque' },
   },
   {
-    id: 'front-company', name: 'Front Company', tier: 'legendary', photo: null,
-    skin: { base: '#5c5248', dark: '#302a24', glass: '#141210', trim: 'chrome' },
+    id: 'front-company', name: 'Front Company', tier: 'legendary', photo: 'assets/cars/hero-sports-cyan.webp',
+    skin: { base: '#2fb5b0', dark: '#302a24', glass: '#141210', trim: 'chrome' },
   },
   {
-    id: 'silent-partner', name: 'Silent Partner', tier: 'legendary', photo: null,
-    skin: { base: '#2e4a5c', dark: '#152633', glass: '#0a1319', trim: 'plaque' },
+    id: 'silent-partner', name: 'Silent Partner', tier: 'legendary', photo: 'assets/cars/hero-canopy-green.webp',
+    skin: { base: '#5fbf4a', dark: '#152633', glass: '#0a1319', trim: 'plaque' },
   },
   {
-    id: 'ledger-clean', name: 'Ledger Clean', tier: 'rare', photo: null,
+    id: 'ledger-clean', name: 'Ledger Clean', tier: 'legendary', photo: null,
     skin: { base: '#c9c2b0', dark: '#8f8875', glass: '#28251e', trim: 'chrome' },
   },
   {
     id: 'the-fixer', name: 'The Fixer', tier: 'legendary', photo: null,
     skin: { base: '#7a1f2e', dark: '#420f18', glass: '#1c0709', trim: 'plaque' },
   },
-  // --- Vault Row (ch. 10) — the campaign's true endgame, all legendary -
+  // --- Vault Row (ch. 10) — hyper & one-off, the campaign's endgame, all legendary
   {
     id: 'vault-runner', name: 'Vault Runner', tier: 'legendary', photo: null,
     skin: { base: '#0e0e10', dark: '#050506', glass: '#3a2f08', trim: 'plaque' },
@@ -332,8 +357,7 @@ const BOUNTY_CARS = [
 export const CARS = [...JOB_CARS, ...BOUNTY_CARS];
 
 /* Which car is the hero for a given campaign level (0-based LEVELS index).
-   Round-robins the level's chapter pool, five cars deep — same car is the
-   mark for 10 missions before the pool repeats. */
+   Round-robins the level's chapter pool, one ten-level block per car. */
 export function carIdForLevel(idx){
   // Level 1 is everyone's first look at the game, in every mode (Heist/
   // Pursuit/Relaxed just change pacing, not which level this is) — it
@@ -343,8 +367,16 @@ export function carIdForLevel(idx){
   // (chapter 0 slot 0) correctly does NOT unlock off level 1 — you only
   // get a car in the garage once you've actually driven and freed it.
   if(idx === 0) return DEFAULT_CAR;
-  const chapter = Math.min(3, Math.floor(idx / CHAPTER_SIZE));
-  const slot = idx % CHAPTER_SIZE % POOL_SIZE;
+  // Clamped against how many chapters actually have a populated car
+  // pool (JOB_CARS.length / POOL_SIZE), not a hardcoded chapter count —
+  // a stale literal here is exactly what silently orphaned every car
+  // past chapter 4 when the campaign grew from 4 chapters to 10 (see
+  // docs/HEIST-PLAN.md §3b). Re-serves the last chapter's pool if the
+  // campaign ever outgrows the car roster again, rather than that
+  // happening silently.
+  const chapterCount = Math.floor(JOB_CARS.length / POOL_SIZE);
+  const chapter = Math.min(chapterCount - 1, Math.floor(idx / CHAPTER_SIZE));
+  const slot = Math.floor((idx % CHAPTER_SIZE) / BLOCK_SIZE);
   const pool = JOB_CARS.filter(c => c.chapter === chapter);
   return pool[slot]?.id ?? DEFAULT_CAR;
 }
@@ -371,13 +403,21 @@ export function carById(id){
   return CARS.find(c => c.id === id) || null;
 }
 
-/* An admin-assigned photo (Sandbox → Library → Hero Art) always wins over
-   whatever's hardcoded here, including replacing a bespoke skin.photo — so
+/* Merges each car's top-level `photo` (its own bespoke art, if any — see
+   the JOB_CARS/BOUNTY_CARS entries above) into the `skin` object
+   vehicleSVG actually reads `skin.photo` off of. Returning car.skin
+   verbatim here was a real, fully latent bug: every car shipped with
+   photo: null until this file's cars got their first real art, so
+   `skin.photo` was always undefined regardless of what `car.photo` said,
+   and no job car's bespoke render could ever have fired.
+
+   An admin-assigned photo (Sandbox → Library → Hero Art) always wins over
+   whatever's hardcoded here, including replacing a bespoke car.photo — so
    reassigning a job car's art from the library takes effect immediately,
    the same "no code change needed" promise the rest of the library makes. */
 export function skinFor(carId){
   const car = carById(carId);
   if(!car) return null;   // null → caller falls back to PALETTE[0] (classic)
   const override = getLibrary().heroPhotos[carId];
-  return override ? { ...car.skin, photo: override } : car.skin;
+  return { ...car.skin, photo: override ?? car.photo };
 }

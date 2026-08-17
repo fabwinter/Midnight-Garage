@@ -235,10 +235,19 @@ export const COLOR_FAMILIES = ['red','orange','yellow','green','teal','blue','pu
 // family the round-robin assigns them, instead of drifting with board
 // position, so they participate in the same exclusion as every fixed
 // photo instead of being invisible to it.
-const FAMILY_HEX = {
+// Every value here must round-trip through familyFromHex() as its own
+// key (verified by tools/verify-levels.mjs) — this table is also handed
+// straight back to callers as a hero's skin.base (js/collection.js's job
+// cars), which then gets re-classified via familyFromHex() for traffic
+// exclusion. A value that doesn't round-trip silently excludes the WRONG
+// family, which is exactly how a hero and a traffic piece can end up
+// showing the identical photo on one board — caught when brown's original
+// '#8a5a34' (sat .62) landed in orange's sat<.35 vs >=.35 split instead
+// of brown's, despite looking like a plausible brown at a glance.
+export const FAMILY_HEX = {
   red: '#ff4d4d', orange: '#ff9a3d', yellow: '#f5d442', green: '#5fbf4a',
   teal: '#2fb5b0', blue: '#4a7dff', purple: '#9a5bd6', pink: '#e85fa8',
-  brown: '#8a5a34', white: '#e9e9e3', black: '#26262a', grey: '#8a929c',
+  brown: '#8c7762', white: '#e9e9e3', black: '#26262a', grey: '#8a929c',
 };
 
 // Checked token-by-token, first hit wins — every existing tag is either a
