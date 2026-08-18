@@ -171,28 +171,9 @@ keep the free equip), not *which car a mission uses*.
   corners rather than its baked lamps: locating the lamps themselves was
   attempted twice (absolute brightness, then a per-car brightness
   percentile) and abandoned — both pick up the whole panel on white and
-  cream bodies.
-- **The art itself is now normalized to the 97% rule**
-  (`tools/normalize-car-art.mjs`, `--check` reports without writing). That
-  rule was documented but never enforced, which is what let the assets
-  drift in the first place; it's now executable, so a future upload can be
-  checked rather than trusted. 22 of 54 files were off spec and were
-  re-cropped, rescaled and re-centred; the other 32 were already correct
-  and left byte-identical rather than churned through a lossy re-encode.
-  Car nose positions tightened from 87.9%–99.9% to 94%–98.5%.
-  *(The residual spread is correct, not leftover drift: the spec caps
-  boxy/wide vehicles at 97% HEIGHT rather than length so nothing is ever
-  stretched, so a wide car legitimately stops short of 97% width — the
-  five airtails and classic.webp all sit there. That's exactly why the
-  measured-anchor system above stays load-bearing rather than being
-  replaced by normalization; the two compose.)*
-  WebP quality 85 was chosen by measurement: against a q95 reference it
-  differs by a mean of 1.0/255 per channel — invisible at the ~130px a car
-  actually renders at — while keeping the asset set at 2.2MB against 2.1MB
-  before, so the whole pass is roughly size-neutral. q92 cost +25% total
-  size for a difference measuring 0.4/255. `classic.webp` sat 0.5% off
-  spec and was deliberately left alone: it's the most-seen asset in the
-  game and re-encoding it for half a percent is pure loss.
+  cream bodies. **The underlying data problem is still open**: several
+  shipped assets aren't normalized to the documented 97% rule, and
+  re-exporting them to spec would let one geometry serve everything.
   *(Fixed alongside this: `skinFor()` returned `car.skin` verbatim, which
   never actually contained the photo — `photo` lives one level up, on the
   car itself. Completely invisible until now because every car shipped
