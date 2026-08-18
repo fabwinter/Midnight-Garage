@@ -338,6 +338,34 @@ const JOB_CARS_CHECK = CARS.filter(c => c.chapter !== undefined);
   });
 }
 
+// Hero art is sports cars only — these bodies exist in assets/cars/ for
+// traffic and must never become a player car. Matched on filename
+// fragments because that's what a human reviewing an assignment sees.
+// This exists because traffic-sedan-25 IS a police livery despite its
+// neutral filename, so it slipped in as a chapter-1 reward and a grep for
+// "police" didn't catch it — a game whose fail state is "the police
+// arrive" must not hand the player a squad car. The rust-weathered body
+// is the broken-down car, and the plain sedans/hatch/SUV read as a
+// demotion from the red sports car level 1 opens with.
+const NEVER_A_HERO = [
+  ['police', 'police livery'],
+  ['traffic-sedan-25', 'police livery (neutral filename)'],
+  ['rust-weathered', 'the broken-down-car body'],
+  ['traffic-sedan-28', 'rust-weathered body'],
+  ['orange-suv', 'an SUV, not a sports car'],
+  ['red-hatch', 'an economy hatchback'],
+  ['green-hatch', 'an economy hatchback'],
+  ['traffic-sedan-13', 'a plain sedan'],
+  ['new-lightblue', 'a plain sedan'],
+  ['hero-sedan-bronze', 'a four-door sedan'],
+  ['hero-sedan-green', 'a four-door sedan'],
+];
+CARS.forEach(car => {
+  if(!car.photo) return;
+  const hit = NEVER_A_HERO.find(([frag]) => car.photo.includes(frag));
+  if(hit) bad(`car "${car.id}" uses ${car.photo.split('/').pop()} as hero art — ${hit[1]}; hero art is sports cars only (see js/collection.js)`);
+});
+
 // Every FAMILY_HEX value must round-trip through familyFromHex() as its
 // own key — this table is handed straight back out as a hero's
 // skin.base (js/collection.js), which then gets re-classified via
