@@ -138,7 +138,7 @@ if (gradle === null) {
   }
   if (!versionName || !versionName.trim()) {
     fail('android/app/build.gradle "versionName" is missing or empty.');
-  } else if (!/^\d+(\.\d+){1,3}/.test(versionName)) {
+  } else if (!/^\d+(\.\d+){1,3}$/.test(versionName)) {
     warn(`android/app/build.gradle "versionName" ("${versionName}") doesn't look like a dot-separated version number — double check it's intentional.`);
   }
 
@@ -180,20 +180,24 @@ if (pbxproj === null) {
   if (!marketingVersions.length || marketingVersions.some((v) => !v)) {
     fail('ios project is missing MARKETING_VERSION (the App Store "version number").');
   }
-  if (!buildVersions.length || buildVersions.some((v) => !v || !/^\d+$/.test(v))) {
-    fail('ios project is missing a valid, all-numeric CURRENT_PROJECT_VERSION (the build number).');
+  if (!buildVersions.length || buildVersions.some((v) => !v || !/^\d+(\.\d+)*$/.test(v))) {
+    fail('ios project is missing a valid CURRENT_PROJECT_VERSION (the build number — Xcode accepts an integer or dot-separated integers, e.g. "3" or "1.0.3").');
   }
 
   // Privacy manifest must exist AND be registered as a resource in the
   // Xcode project — a file merely sitting in the folder isn't packaged
   // into the .ipa unless Xcode's Resources build phase references it.
+  // Xcode names a PBXBuildFile entry's comment "<filename> in <phase>",
+  // so look for that exact pairing rather than the two substrings
+  // appearing anywhere in the file (which could both be true even if
+  // some *other* file is the one actually in the Resources phase).
   const manifestPath = 'ios/App/App/PrivacyInfo.xcprivacy';
   if (!existsSync(rel(manifestPath))) {
     fail(`Missing iOS privacy manifest: ${manifestPath}. Apple requires PrivacyInfo.xcprivacy declaring any "required reason" API usage and tracking data.`);
-  } else if (!pbxproj || !pbxproj.includes('PrivacyInfo.xcprivacy')) {
+  } else if (!pbxproj.includes('PrivacyInfo.xcprivacy')) {
     fail(`${manifestPath} exists but is not referenced in project.pbxproj — it won't be packaged into the build. Add it via Xcode (Add Files to "App", check the App target) or re-add its PBXBuildFile/PBXFileReference/Resources-phase entries.`);
-  } else if (!pbxproj.includes('in Resources')) {
-    fail(`${manifestPath} is referenced in project.pbxproj but not wired into a "Resources" build phase — it won't be packaged into the build.`);
+  } else if (!/PrivacyInfo\.xcprivacy in Resources/.test(pbxproj)) {
+    fail(`${manifestPath} is referenced in project.pbxproj but not wired into a "Resources" build phase — it won't be packaged into the build. Add it via Xcode (Add Files to "App", check the App target's Resources build phase).`);
   }
 
   const infoPlist = read('ios/App/App/Info.plist');
