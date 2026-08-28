@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    name: Build, verify, preflight, secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Verify levels (500 campaign + bounty + impound + daily regression)
+        run: npm run verify
+
+      - name: Release preflight checks
+        run: npm run preflight
+
+      - name: Secret pattern scan
+        run: |
+          set -u
+          # Scans tracked, non-generated files for patterns that look like
+          # committed credentials. Reports only file:line — never the
+          # matched value itself — so nothing sensitive reaches CI logs
+          # even if a real secret is found.
+          PATTERNS='-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----
+          AKIA[0-9A-Z]{16}
+          xox[baprs]-[0-9A-Za-z-]{10,}
+          ghp_[0-9A-Za-z]{36}
+          gh[oprsu]_[0-9A-Za-z]{36}
+          AIza[0-9A-Za-z_-]{35}
+          sk_live_[0-9A-Za-z]{16,}
+          -----BEGIN CERTIFICATE-----'
+
+          FOUND=0
+          while IFS= read -r pattern; do
+            [ -z "$pattern" ] && continue
+            matches=$(git grep -InE -e "$pattern" -- . \
+              ':!*.lock' ':!package-lock.json' ':!node_modules' ':!www' \
+              ':!android/**/build/**' ':!ios/**/Pods/**' \
+              || true)
+            if [ -n "$matches" ]; then
+              FOUND=1
+              echo "Potential secret pattern match(es) found (values redacted):"
+              echo "$matches" | cut -d: -f1,2
+              echo "---"
+            fi
+          done <<< "$PATTERNS"
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo "::error::Potential committed secret(s) detected — see file:line above. Remove and rotate before merging."
+            exit 1
+          fi
+          echo "No secret-pattern matches found."
+
+      - name: Reminder — no signing artifacts should ever be committed
+        run: |
+          echo "This job intentionally does not build/sign native iOS or Android"
+          echo "release artifacts (no Xcode/Android SDK on this runner) — that"
+          echo "happens in codemagic.yaml against real signing secrets stored"
+          echo "outside this repo. See docs/CI-SETUP.md and"
+          echo "docs/STORE_SUBMISSION_CHECKLIST.md. Never commit a keystore,"
+          echo "provisioning profile, or .p12/.pem certificate to this repo."

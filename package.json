@@ -8,6 +8,7 @@
     "dev": "node tools/serve.mjs",
     "generate": "node tools/generate-levels.mjs",
     "verify": "node tools/verify-levels.mjs",
+    "preflight": "node tools/preflight-release.js",
     "icons": "node tools/build-icons.mjs",
     "build": "node tools/build-www.mjs",
     "build:release": "node tools/build-www.mjs --release",

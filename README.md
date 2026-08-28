@@ -168,3 +168,38 @@ One-time **Pro Garage** IAP: chapters 3–10 (400 levels), unlimited hints,
 future cosmetics. Free tier: chapters 1–2 (100 levels) + 3 hint tokens/day.
 No interstitials, ever. The web build sandbox-unlocks at the buy button —
 that's the StoreKit hook point for the native shell.
+
+## Release readiness
+
+Before submitting a build to the App Store or Google Play:
+
+```bash
+npm ci
+npm run build       # or npm run build:release for a real submission (strips admin mode)
+npm run verify       # re-solves all 661 campaign/bounty/impound boards + 14 days of daily determinism
+npm run preflight    # tools/preflight-release.js — placeholder IDs, app-ID mismatches, missing
+                      # iOS privacy manifest, invalid versions, dev endpoints, missing release docs
+```
+
+- [docs/STORE_SUBMISSION_CHECKLIST.md](docs/STORE_SUBMISSION_CHECKLIST.md) —
+  the ordered, tagged (account/legal/device/console/done) checklist to
+  work through end-to-end.
+- [docs/STORE_LISTING_TEMPLATE.md](docs/STORE_LISTING_TEMPLATE.md) —
+  reusable Apple/Google listing-copy structure, asset requirements,
+  review-notes template, disclosure checklist (the filled-in current
+  copy lives in `docs/store-listing/`).
+- [docs/PRIVACY_POLICY_TEMPLATE.md](docs/PRIVACY_POLICY_TEMPLATE.md) /
+  [docs/ACCOUNT_DELETION.md](docs/ACCOUNT_DELETION.md) — privacy-policy
+  template + data-processing inventory, and the account-deletion
+  guidance (the app currently has no accounts to delete).
+- [docs/RELEASE_TEST_PLAN.md](docs/RELEASE_TEST_PLAN.md) — the
+  physical-device test pass to run before/alongside TestFlight and Play
+  internal testing.
+- [docs/STORE-SHIP-PLAN.md](docs/STORE-SHIP-PLAN.md) and
+  [docs/CI-SETUP.md](docs/CI-SETUP.md) — the deeper history/rationale
+  behind the current native config and CI/signing setup.
+
+`.github/workflows/ci.yml` runs `npm ci`, the build, `npm run verify`,
+`npm run preflight`, and a redacted secret-pattern scan on every push/PR;
+`codemagic.yaml` is the separate, credential-bearing pipeline that
+actually compiles, signs, and uploads native builds.
